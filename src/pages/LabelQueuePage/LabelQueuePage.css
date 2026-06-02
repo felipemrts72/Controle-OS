@@ -1,0 +1,4 @@
+.label-queue-page__list {
+  display: grid;
+  gap: 12px;
+}

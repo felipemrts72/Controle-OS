@@ -1,0 +1,4 @@
+.dashboard-page__list {
+  display: grid;
+  gap: 12px;
+}

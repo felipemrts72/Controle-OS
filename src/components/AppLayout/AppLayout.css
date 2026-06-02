@@ -1,0 +1,19 @@
+.app-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.app-layout__main {
+  min-width: 0;
+}
+
+.app-layout__content {
+  padding: 22px;
+}
+
+@media (max-width: 900px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+}

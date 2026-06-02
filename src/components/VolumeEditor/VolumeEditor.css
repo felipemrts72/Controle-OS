@@ -1,0 +1,17 @@
+.volume-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.volume-editor__row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 130px 90px 120px 1fr auto auto;
+}
+
+@media (max-width: 760px) {
+  .volume-editor__row {
+    grid-template-columns: 1fr;
+  }
+}

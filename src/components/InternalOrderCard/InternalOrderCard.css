@@ -1,0 +1,26 @@
+.internal-order-card {
+  align-items: center;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1.2fr 0.9fr 0.8fr 1fr auto;
+  padding: 16px;
+}
+
+.internal-order-card:hover {
+  border-color: var(--color-primary);
+}
+
+.internal-order-card__customer {
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
+}
+
+@media (max-width: 900px) {
+  .internal-order-card {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,9 @@
+.sector-board {
+  display: grid;
+  gap: 14px;
+}
+
+.sector-board__empty {
+  color: #cbd5e1;
+  font-size: 30px;
+}

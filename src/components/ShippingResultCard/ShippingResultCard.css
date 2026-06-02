@@ -1,0 +1,31 @@
+.shipping-result {
+  display: grid;
+  gap: 12px;
+}
+
+.shipping-result__alert {
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  color: #b91c1c;
+  margin: 0;
+  padding: 10px;
+}
+
+.shipping-result__row {
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 0.8fr 0.8fr auto auto;
+  padding-bottom: 10px;
+}
+
+.shipping-result__button {
+  justify-self: end;
+}
+
+@media (max-width: 900px) {
+  .shipping-result__row {
+    grid-template-columns: 1fr;
+  }
+}

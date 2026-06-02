@@ -1,0 +1,8 @@
+.internal-order-form {
+  display: grid;
+  gap: 18px;
+}
+
+.internal-order-form__button {
+  justify-self: start;
+}

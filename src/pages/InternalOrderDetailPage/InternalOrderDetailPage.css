@@ -1,0 +1,18 @@
+.internal-order-detail-page__subtitle {
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+}
+
+.internal-order-detail-page__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.internal-order-detail-page__section-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}

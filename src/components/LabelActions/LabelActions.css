@@ -1,0 +1,11 @@
+.label-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.label-actions .button {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}

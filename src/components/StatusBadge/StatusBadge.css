@@ -1,0 +1,40 @@
+.status-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.status-badge_pending,
+.status-badge_waiting_tasks {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.status-badge_in_progress,
+.status-badge_released_for_label,
+.status-badge_label_generated,
+.status-badge_manufactured {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+}
+
+.status-badge_ready_for_label,
+.status-badge_ready,
+.status-badge_ready_without_label,
+.status-badge_resale {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge_partially_shipped,
+.status-badge_material_prima {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.status-badge_shipped {
+  background: #0f2f66;
+  color: var(--color-white);
+}

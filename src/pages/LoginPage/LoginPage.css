@@ -1,0 +1,30 @@
+.login-page {
+  align-items: center;
+  display: grid;
+  min-height: 100vh;
+  padding: 20px;
+  place-items: center;
+}
+
+.login-page__form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+  padding: 28px;
+  width: 100%;
+}
+
+.login-page__title {
+  color: var(--color-primary-dark);
+  font-size: 24px;
+  margin: 0;
+}
+
+.login-page__message {
+  color: #b91c1c;
+  margin: 0;
+}

@@ -1,0 +1,110 @@
+import bcrypt from 'bcrypt';
+import { query, transaction } from '../database/pool.js';
+import { httpError } from '../utils/httpError.js';
+import { logAudit } from '../services/auditService.js';
+
+export async function listUsers(_req, res, next) {
+  try {
+    const result = await query('SELECT id, name, username, role, is_active, created_at FROM users ORDER BY name');
+    res.json(result.rows);
+  } catch (error) { next(error); }
+}
+
+export async function createUser(req, res, next) {
+  try {
+    const hash = await bcrypt.hash(req.body.password, 10);
+    const result = await query(
+      `INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, $4)
+       RETURNING id, name, username, role, is_active`,
+      [req.body.name, req.body.username, hash, req.body.role],
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function listSectors(_req, res, next) {
+  try {
+    const result = await query('SELECT * FROM sectors ORDER BY name');
+    res.json(result.rows);
+  } catch (error) { next(error); }
+}
+
+export async function createSector(req, res, next) {
+  try {
+    const result = await query('INSERT INTO sectors (name, slug) VALUES ($1, $2) RETURNING *', [req.body.name, req.body.slug]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function updateSector(req, res, next) {
+  try {
+    const result = await query('UPDATE sectors SET name = $1, slug = $2, is_active = $3, updated_at = NOW() WHERE id = $4 RETURNING *', [req.body.name, req.body.slug, req.body.is_active, req.params.id]);
+    if (!result.rows[0]) throw httpError(404, 'Setor não encontrado.');
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function deactivateSector(req, res, next) {
+  try {
+    const result = await query('UPDATE sectors SET is_active = FALSE, updated_at = NOW() WHERE id = $1 RETURNING *', [req.params.id]);
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function listProducts(req, res, next) {
+  try {
+    const result = await query('SELECT * FROM products ORDER BY name');
+    res.json(result.rows);
+  } catch (error) { next(error); }
+}
+
+export async function searchProducts(req, res, next) {
+  try {
+    const types = String(req.query.type || 'manufactured,resale').split(',');
+    const result = await query('SELECT * FROM products WHERE type = ANY($1) AND is_active = TRUE ORDER BY name', [types]);
+    res.json(result.rows);
+  } catch (error) { next(error); }
+}
+
+export async function getProduct(req, res, next) {
+  try {
+    const product = await query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    if (!product.rows[0]) throw httpError(404, 'Produto não encontrado.');
+    const components = await query(
+      `SELECT pc.*, s.name AS sector_name FROM product_components pc
+       LEFT JOIN sectors s ON s.id = pc.sector_id WHERE product_id = $1 ORDER BY pc.created_at`,
+      [req.params.id],
+    );
+    res.json({ ...product.rows[0], components: components.rows });
+  } catch (error) { next(error); }
+}
+
+export async function saveProduct(req, res, next) {
+  try {
+    const result = await transaction(async (client) => {
+      const product = req.params.id
+        ? await client.query(
+          `UPDATE products SET name = $1, type = $2, default_volume_quantity = $3, default_total_weight_kg = $4, is_active = $5, updated_at = NOW()
+           WHERE id = $6 RETURNING *`,
+          [req.body.name, req.body.type, req.body.default_volume_quantity, req.body.default_total_weight_kg, req.body.is_active ?? true, req.params.id],
+        )
+        : await client.query(
+          `INSERT INTO products (name, type, default_volume_quantity, default_total_weight_kg)
+           VALUES ($1, $2, $3, $4) RETURNING *`,
+          [req.body.name, req.body.type, req.body.default_volume_quantity, req.body.default_total_weight_kg],
+        );
+      if (!product.rows[0]) throw httpError(404, 'Produto não encontrado.');
+      await client.query('DELETE FROM product_components WHERE product_id = $1', [product.rows[0].id]);
+      for (const component of req.body.components || []) {
+        await client.query(
+          `INSERT INTO product_components (product_id, component_name, sector_id, quantity, is_required)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [product.rows[0].id, component.component_name, component.sector_id, component.quantity || 1, component.is_required ?? true],
+        );
+      }
+      await logAudit(client, { entityType: 'product', entityId: product.rows[0].id, action: req.params.id ? 'update' : 'create', newValue: req.body, userId: req.user?.id });
+      return product.rows[0];
+    });
+    res.status(req.params.id ? 200 : 201).json(result);
+  } catch (error) { next(error); }
+}

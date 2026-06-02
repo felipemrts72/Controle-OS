@@ -1,0 +1,8 @@
+.product-form {
+  display: grid;
+  gap: 22px;
+}
+
+.product-form__button {
+  justify-self: start;
+}

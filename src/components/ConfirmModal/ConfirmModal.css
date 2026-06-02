@@ -1,0 +1,35 @@
+.confirm-modal {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 20;
+}
+
+.confirm-modal__content {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  max-width: 480px;
+  padding: 22px;
+  width: 100%;
+}
+
+.confirm-modal__title {
+  margin: 0 0 10px;
+}
+
+.confirm-modal__body {
+  color: var(--color-text-muted);
+}
+
+.confirm-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}

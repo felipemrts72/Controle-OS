@@ -1,0 +1,18 @@
+.shipping-lookup {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.shipping-lookup__form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+}
+
+@media (max-width: 640px) {
+  .shipping-lookup__form {
+    grid-template-columns: 1fr;
+  }
+}
