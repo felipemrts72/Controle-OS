@@ -5,7 +5,13 @@ import { logAudit } from '../services/auditService.js';
 
 export async function listUsers(_req, res, next) {
   try {
-    const result = await query('SELECT id, name, username, role, is_active, created_at FROM users ORDER BY name');
+    const result = await query(
+      `SELECT u.id, u.name, u.username, u.role, u.is_active, u.approval_status, u.approved_by,
+        u.approved_at, u.created_at, approver.name AS approved_by_name
+       FROM users u
+       LEFT JOIN users approver ON approver.id = u.approved_by
+       ORDER BY u.created_at DESC, u.name`,
+    );
     res.json(result.rows);
   } catch (error) { next(error); }
 }
@@ -14,11 +20,72 @@ export async function createUser(req, res, next) {
   try {
     const hash = await bcrypt.hash(req.body.password, 10);
     const result = await query(
-      `INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, $4)
-       RETURNING id, name, username, role, is_active`,
+      `INSERT INTO users (name, username, password_hash, role, is_active, approval_status)
+       VALUES ($1, $2, $3, $4, TRUE, 'approved')
+       RETURNING id, name, username, role, is_active, approval_status`,
       [req.body.name, req.body.username, hash, req.body.role],
     );
     res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') return next(httpError(409, 'Usuário já cadastrado.'));
+    next(error);
+  }
+}
+
+export async function approveUser(req, res, next) {
+  try {
+    const result = await query(
+      `UPDATE users
+       SET approval_status = 'approved', is_active = TRUE, approved_by = $1, approved_at = NOW(), updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, username, role, is_active, approval_status, approved_by, approved_at, created_at`,
+      [req.user.id, req.params.id],
+    );
+    if (!result.rows[0]) throw httpError(404, 'Usuário não encontrado.');
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function rejectUser(req, res, next) {
+  try {
+    const result = await query(
+      `UPDATE users
+       SET approval_status = 'rejected', is_active = FALSE, approved_by = $1, approved_at = NOW(), updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, username, role, is_active, approval_status, approved_by, approved_at, created_at`,
+      [req.user.id, req.params.id],
+    );
+    if (!result.rows[0]) throw httpError(404, 'Usuário não encontrado.');
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function updateUserRole(req, res, next) {
+  try {
+    const roles = ['admin', 'manager', 'shipping', 'viewer'];
+    if (!roles.includes(req.body.role)) throw httpError(400, 'Perfil inválido.');
+
+    const result = await query(
+      `UPDATE users SET role = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, username, role, is_active, approval_status, approved_by, approved_at, created_at`,
+      [req.body.role, req.params.id],
+    );
+    if (!result.rows[0]) throw httpError(404, 'Usuário não encontrado.');
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+}
+
+export async function toggleUserActive(req, res, next) {
+  try {
+    const result = await query(
+      `UPDATE users SET is_active = NOT is_active, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, name, username, role, is_active, approval_status, approved_by, approved_at, created_at`,
+      [req.params.id],
+    );
+    if (!result.rows[0]) throw httpError(404, 'Usuário não encontrado.');
+    res.json(result.rows[0]);
   } catch (error) { next(error); }
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, setSession } from '../../services/api.js';
 import './LoginPage.css';
 
@@ -33,6 +33,7 @@ export function LoginPage() {
         </label>
         {message && <p className="login-page__message">{message}</p>}
         <button className="button button_primary" type="submit">Entrar</button>
+        <Link className="button" to="/registrar">Solicitar cadastro</Link>
       </form>
     </main>
   );

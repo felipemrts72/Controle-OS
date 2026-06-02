@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Boxes, ClipboardList, LayoutDashboard, Package, QrCode, Tags, Tv } from 'lucide-react';
+import { Boxes, ClipboardList, LayoutDashboard, Package, QrCode, Tags, Tv, Users } from 'lucide-react';
+import { getStoredUser } from '../../services/api.js';
 import './Sidebar.css';
 
 const links = [
@@ -10,14 +11,18 @@ const links = [
   { to: '/fila-etiquetas', label: 'Fila de Etiquetas', icon: Tags },
   { to: '/expedicao', label: 'Expedição', icon: QrCode },
   { to: '/tv/torno', label: 'TV Torno', icon: Tv },
+  { to: '/usuarios', label: 'Usuários', icon: Users, adminOnly: true },
 ];
 
 export function Sidebar() {
+  const user = getStoredUser();
+  const visibleLinks = links.filter((link) => !link.adminOnly || user?.role === 'admin');
+
   return (
     <aside className="sidebar">
       <Link to="/dashboard" className="sidebar__brand">Controle Interno</Link>
       <nav className="sidebar__nav">
-        {links.map(({ to, label, icon: Icon }) => (
+        {visibleLinks.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className={({ isActive }) => `sidebar__link ${isActive ? 'sidebar__link_active' : ''}`}>
             <Icon size={18} />
             <span>{label}</span>

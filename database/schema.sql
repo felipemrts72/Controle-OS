@@ -7,6 +7,9 @@ CREATE TABLE users (
   password_hash VARCHAR NOT NULL,
   role VARCHAR NOT NULL CHECK (role IN ('admin', 'manager', 'shipping', 'viewer')),
   is_active BOOLEAN DEFAULT TRUE,
+  approval_status VARCHAR DEFAULT 'approved' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+  approved_by UUID REFERENCES users(id),
+  approved_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -118,8 +121,8 @@ CREATE INDEX idx_sectors_slug ON sectors(slug);
 CREATE INDEX idx_audit_logs_entity_type ON audit_logs(entity_type);
 CREATE INDEX idx_audit_logs_entity_id ON audit_logs(entity_id);
 
-INSERT INTO users (name, username, password_hash, role)
-VALUES ('Administrador', 'admin', crypt('admin123', gen_salt('bf')), 'admin')
+INSERT INTO users (name, username, password_hash, role, is_active, approval_status)
+VALUES ('Administrador', 'admin', crypt('admin123', gen_salt('bf')), 'admin', TRUE, 'approved')
 ON CONFLICT (username) DO NOTHING;
 
 INSERT INTO sectors (name, slug) VALUES

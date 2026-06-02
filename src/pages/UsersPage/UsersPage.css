@@ -1,0 +1,18 @@
+.users-page {
+  max-width: 1180px;
+}
+
+.users-page__title {
+  font-size: 18px;
+  margin: 0 0 14px;
+}
+
+.users-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.users-page__role {
+  min-width: 160px;
+}
