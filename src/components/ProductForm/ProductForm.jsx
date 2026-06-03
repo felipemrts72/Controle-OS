@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api.js';
+import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import { ProductComponentsEditor } from '../ProductComponentsEditor/ProductComponentsEditor.jsx';
 import './ProductForm.css';
 
 export function ProductForm({ initialProduct, onSubmit }) {
+  const toast = useToast();
   const [sectors, setSectors] = useState([]);
   const [materialProducts, setMaterialProducts] = useState([]);
   const [form, setForm] = useState(initialProduct || { name: '', type: 'manufactured', default_volume_quantity: 1, default_total_weight_kg: 1, is_active: true, components: [] });
@@ -27,6 +29,14 @@ export function ProductForm({ initialProduct, onSubmit }) {
 
   function submit(event) {
     event.preventDefault();
+    if (!form.name || !form.default_volume_quantity || !form.default_total_weight_kg) {
+      toast.error('Preencha os campos obrigatórios.');
+      return;
+    }
+    if (form.type !== 'resale' && !form.sector_id) {
+      toast.error('Produto fabricado ou matéria-prima precisa de setor responsável.');
+      return;
+    }
     onSubmit(form);
   }
 
@@ -66,7 +76,10 @@ export function ProductForm({ initialProduct, onSubmit }) {
         components={form.components || []}
         materialProducts={materialProducts}
         sectors={sectors}
-        onChange={(components) => setForm((current) => ({ ...current, components }))}
+        onChange={(components) => {
+          setForm((current) => ({ ...current, components }));
+          toast.success('Componente atualizado.');
+        }}
       />
       <button className="button button_primary product-form__button" type="submit">Salvar produto</button>
     </form>

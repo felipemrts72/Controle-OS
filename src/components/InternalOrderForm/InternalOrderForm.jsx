@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { api } from '../../services/api.js';
+import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import './InternalOrderForm.css';
 
 export function InternalOrderForm({ onSubmit }) {
+  const toast = useToast();
   const [form, setForm] = useState({ sale_number: '', customer_name: '', customer_phone: '', promised_date: '' });
   const [itemForm, setItemForm] = useState({ quantity: 1 });
   const [productSearch, setProductSearch] = useState('');
@@ -13,6 +15,7 @@ export function InternalOrderForm({ onSubmit }) {
   const [hasSearchedProducts, setHasSearchedProducts] = useState(false);
   const [items, setItems] = useState([]);
   const [message, setMessage] = useState('');
+  const quantityInputRef = useRef(null);
 
   useEffect(() => {
     if (selectedProduct && productSearch !== selectedProduct.name) {
@@ -29,6 +32,10 @@ export function InternalOrderForm({ onSubmit }) {
   }
 
   async function searchProducts() {
+    if (productSearch.trim().length < 3) {
+      toast.error('Digite ao menos 3 caracteres para buscar.');
+      return;
+    }
     const response = await api.get('/products/search?type=manufactured,resale');
     const normalizedSearch = productSearch.trim().toLowerCase();
     const results = response.data.filter((product) => product.name.toLowerCase().includes(normalizedSearch));
@@ -36,23 +43,66 @@ export function InternalOrderForm({ onSubmit }) {
     setHighlightedProductId(results[0]?.id || '');
     setHasSearchedProducts(true);
     setMessage('');
+    if (!results.length) toast.error('Nenhum produto encontrado.');
   }
 
   function selectProduct(product) {
     setSelectedProduct(product);
     setProductSearch(product.name);
     setHighlightedProductId(product.id);
+    setProductResults([]);
+    setHasSearchedProducts(false);
     setMessage('');
+    window.setTimeout(() => quantityInputRef.current?.focus(), 0);
+  }
+
+  function selectHighlightedProduct() {
+    const product = productResults.find((currentProduct) => currentProduct.id === highlightedProductId) || productResults[0];
+    if (product) selectProduct(product);
+  }
+
+  function moveHighlightedProduct(direction) {
+    if (!productResults.length) return;
+    const currentIndex = productResults.findIndex((product) => product.id === highlightedProductId);
+    const nextIndex = (currentIndex + direction + productResults.length) % productResults.length;
+    setHighlightedProductId(productResults[nextIndex].id);
+  }
+
+  function handleSearchKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (hasSearchedProducts && productResults.length) selectHighlightedProduct();
+      else searchProducts();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveHighlightedProduct(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveHighlightedProduct(-1);
+    }
+  }
+
+  function handleQuantityKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addItem();
+    }
   }
 
   function addItem() {
     const quantity = Number(itemForm.quantity);
     if (!selectedProduct) {
       setMessage('Selecione um produto antes de adicionar');
+      toast.error('Selecione um produto antes de adicionar.');
       return;
     }
     if (quantity < 1) {
       setMessage('Informe uma quantidade maior que zero.');
+      toast.error('Informe uma quantidade válida.');
       return;
     }
     setItems((current) => [...current, { product_id: selectedProduct.id, quantity, product: selectedProduct }]);
@@ -63,6 +113,7 @@ export function InternalOrderForm({ onSubmit }) {
     setHighlightedProductId('');
     setHasSearchedProducts(false);
     setMessage('');
+    toast.success('Item adicionado à OS.');
   }
 
   function removeItem(index) {
@@ -113,7 +164,12 @@ export function InternalOrderForm({ onSubmit }) {
           <div className="field internal-order-form__search-field">
             <span className="field__label">Buscar produto</span>
             <div className="internal-order-form__search-row">
-              <input className="field__input" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} />
+              <input
+                className="field__input"
+                value={productSearch}
+                onChange={(event) => setProductSearch(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+              />
               <button className="button internal-order-form__search-button" type="button" onClick={searchProducts} title="Buscar produto">
                 <Search size={18} />
               </button>
@@ -129,7 +185,10 @@ export function InternalOrderForm({ onSubmit }) {
                     onClick={() => setHighlightedProductId(product.id)}
                     onDoubleClick={() => selectProduct(product)}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter') selectProduct(product);
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        selectProduct(product);
+                      }
                     }}
                   >
                     <strong>{product.name}</strong>
@@ -147,7 +206,16 @@ export function InternalOrderForm({ onSubmit }) {
           </div>
           <label className="field">
             <span className="field__label">Quantidade</span>
-            <input className="field__input" type="number" min="1" name="quantity" value={itemForm.quantity} onChange={changeItem} />
+            <input
+              ref={quantityInputRef}
+              className="field__input"
+              type="number"
+              min="1"
+              name="quantity"
+              value={itemForm.quantity}
+              onChange={changeItem}
+              onKeyDown={handleQuantityKeyDown}
+            />
           </label>
         </div>
         <button className="button button_primary" type="button" onClick={addItem}>Adicionar item</button>

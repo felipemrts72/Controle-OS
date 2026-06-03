@@ -84,6 +84,29 @@
   gap: 20px;
   min-height: 210px;
   padding: 26px;
+  position: relative;
+}
+
+.sector-tv-page__pin {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #64748b;
+  display: inline-flex;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: 18px;
+  top: 16px;
+}
+
+.sector-tv-page__pin_active {
+  color: #facc15;
+}
+
+.sector-tv-page__pin_active svg {
+  fill: currentColor;
 }
 
 .sector-tv-page__card_late {

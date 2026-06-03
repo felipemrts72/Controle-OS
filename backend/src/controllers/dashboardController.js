@@ -9,6 +9,7 @@ export async function dashboard(_req, res, next) {
        FROM internal_orders io
        LEFT JOIN sold_items si ON si.internal_order_id = io.id
        LEFT JOIN internal_tasks it ON it.sold_item_id = si.id
+       WHERE COALESCE(io.status, '') <> 'deleted'
        GROUP BY io.id
        ORDER BY io.promised_date ASC`,
     );
@@ -22,11 +23,15 @@ export async function tvPanel(_req, res, next) {
       `SELECT it.id AS task_id,
         it.task_name,
         it.quantity,
+        it.is_pinned,
+        it.pinned_at,
         s.name AS sector_name,
         s.slug AS sector_slug,
         io.sale_number,
         io.customer_name,
         io.promised_date,
+        io.status AS order_status,
+        io.deleted_at AS order_deleted_at,
         io.promised_date < CURRENT_DATE AS is_late
        FROM internal_tasks it
        JOIN sectors s ON s.id = it.sector_id
@@ -34,6 +39,7 @@ export async function tvPanel(_req, res, next) {
        JOIN internal_orders io ON io.id = si.internal_order_id
        WHERE s.is_active = TRUE
          AND it.status = 'pending'
+         AND COALESCE(io.status, '') <> 'deleted'
          AND (
            s.slug <> 'pintura'
            OR NOT EXISTS (
@@ -46,7 +52,7 @@ export async function tvPanel(_req, res, next) {
                AND dependency_sector.slug <> 'pintura'
            )
          )
-       ORDER BY (io.promised_date < CURRENT_DATE) DESC, io.promised_date ASC, it.created_at ASC`,
+       ORDER BY it.is_pinned DESC, it.pinned_at DESC NULLS LAST, (io.promised_date < CURRENT_DATE) DESC, io.promised_date ASC, it.created_at ASC`,
     );
     res.json(tasksResult.rows);
   } catch (error) { next(error); }
@@ -58,11 +64,15 @@ export async function tvBySector(req, res, next) {
       `SELECT it.id AS task_id,
         it.task_name,
         it.quantity,
+        it.is_pinned,
+        it.pinned_at,
         s.name AS sector_name,
         s.slug AS sector_slug,
         io.sale_number,
         io.customer_name,
         io.promised_date,
+        io.status AS order_status,
+        io.deleted_at AS order_deleted_at,
         io.promised_date < CURRENT_DATE AS is_late
        FROM internal_tasks it
        JOIN sectors s ON s.id = it.sector_id
@@ -71,6 +81,7 @@ export async function tvBySector(req, res, next) {
        WHERE s.slug = $1
          AND s.is_active = TRUE
          AND it.status = 'pending'
+         AND COALESCE(io.status, '') <> 'deleted'
          AND (
            s.slug <> 'pintura'
            OR NOT EXISTS (
@@ -83,7 +94,7 @@ export async function tvBySector(req, res, next) {
                AND dependency_sector.slug <> 'pintura'
            )
          )
-       ORDER BY (io.promised_date < CURRENT_DATE) DESC, io.promised_date ASC, it.created_at ASC`,
+       ORDER BY it.is_pinned DESC, it.pinned_at DESC NULLS LAST, (io.promised_date < CURRENT_DATE) DESC, io.promised_date ASC, it.created_at ASC`,
       [req.params.sectorId],
     );
     res.json(result.rows);

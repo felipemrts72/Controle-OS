@@ -35,6 +35,9 @@ export async function refreshSoldItemStatus(client, soldItemId) {
 }
 
 export async function refreshInternalOrderStatus(client, internalOrderId) {
+  const order = await client.query('SELECT status FROM internal_orders WHERE id = $1', [internalOrderId]);
+  if (order.rows[0]?.status === 'deleted') return;
+
   const totals = await client.query(
     `SELECT
       (SELECT COUNT(*)::int FROM sold_items si JOIN shipment_volumes sv ON sv.sold_item_id = si.id WHERE si.internal_order_id = $1) AS volumes,

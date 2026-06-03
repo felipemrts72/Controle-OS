@@ -8,7 +8,7 @@ export function LabelQueuePage() {
 
   async function load() {
     const response = await api.get('/labels/queue');
-    setVolumes(response.data);
+    setVolumes(response.data.filter((volume) => volume.order_status !== 'deleted' && !volume.deleted_at && !volume.order_deleted_at));
   }
 
   useEffect(() => { load(); }, []);

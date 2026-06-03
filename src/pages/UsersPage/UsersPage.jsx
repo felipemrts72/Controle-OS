@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api.js';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './UsersPage.css';
 
 const roleOptions = [
@@ -17,6 +18,7 @@ const statusLabels = {
 };
 
 export function UsersPage() {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
 
   async function load() {
@@ -27,23 +29,43 @@ export function UsersPage() {
   useEffect(() => { load(); }, []);
 
   async function approve(id) {
-    await api.patch(`/users/${id}/approve`);
-    await load();
+    try {
+      await api.patch(`/users/${id}/approve`);
+      await load();
+      toast.success('Usuário aprovado com sucesso.');
+    } catch {
+      toast.error('Não foi possível aprovar o usuário.');
+    }
   }
 
   async function reject(id) {
-    await api.patch(`/users/${id}/reject`);
-    await load();
+    try {
+      await api.patch(`/users/${id}/reject`);
+      await load();
+      toast.success('Usuário recusado.');
+    } catch {
+      toast.error('Não foi possível recusar o usuário.');
+    }
   }
 
   async function changeRole(id, role) {
-    await api.patch(`/users/${id}/role`, { role });
-    await load();
+    try {
+      await api.patch(`/users/${id}/role`, { role });
+      await load();
+      toast.success('Perfil atualizado com sucesso.');
+    } catch {
+      toast.error('Não foi possível atualizar o perfil.');
+    }
   }
 
   async function toggleActive(id) {
-    await api.patch(`/users/${id}/toggle-active`);
-    await load();
+    try {
+      await api.patch(`/users/${id}/toggle-active`);
+      await load();
+      toast.success('Status do usuário atualizado.');
+    } catch {
+      toast.error('Não foi possível atualizar o usuário.');
+    }
   }
 
   const groupedUsers = useMemo(() => ({

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api.js';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import '../LoginPage/LoginPage.css';
 
 export function RegisterPage() {
   const [form, setForm] = useState({ name: '', username: '', password: '' });
+  const toast = useToast();
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
 
@@ -17,9 +19,11 @@ export function RegisterPage() {
     try {
       await api.post('/auth/register', form);
       setForm({ name: '', username: '', password: '' });
+      toast.success('Cadastro solicitado com sucesso. Aguarde aprovação.');
       setMessage('Cadastro solicitado com sucesso. Aguarde aprovação do administrador.');
       setMessageType('success');
     } catch (error) {
+      toast.error('Não foi possível solicitar o cadastro.');
       setMessage(error.response?.data?.message || 'Não foi possível solicitar cadastro.');
       setMessageType('error');
     }

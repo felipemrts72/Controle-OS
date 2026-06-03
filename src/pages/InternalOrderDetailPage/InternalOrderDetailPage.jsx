@@ -5,10 +5,12 @@ import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { VolumeEditor } from '../../components/VolumeEditor/VolumeEditor.jsx';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './InternalOrderDetailPage.css';
 
 export function InternalOrderDetailPage() {
   const { id } = useParams();
+  const toast = useToast();
   const [order, setOrder] = useState(null);
   const [modalVolumeIds, setModalVolumeIds] = useState([]);
 
@@ -23,17 +25,28 @@ export function InternalOrderDetailPage() {
   const readyVolumes = useMemo(() => order?.volumes?.filter((volume) => volume.label_status === 'released_for_label') || [], [order]);
 
   async function markReady(taskId) {
-    await api.patch(`/tasks/${taskId}/ready`);
-    const nextOrder = await load();
-    const nextReadyVolumes = nextOrder.volumes.filter((volume) => volume.label_status === 'released_for_label');
-    if (nextReadyVolumes.length > readyVolumes.length) {
-      setModalVolumeIds(nextReadyVolumes.map((volume) => volume.id));
+    try {
+      await api.patch(`/tasks/${taskId}/ready`);
+      const nextOrder = await load();
+      const nextReadyVolumes = nextOrder.volumes.filter((volume) => volume.label_status === 'released_for_label');
+      toast.success('Tarefa marcada como pronta.');
+      if (nextReadyVolumes.length > readyVolumes.length) {
+        toast.success('Item liberado para etiqueta.');
+        setModalVolumeIds(nextReadyVolumes.map((volume) => volume.id));
+      }
+    } catch {
+      toast.error('Não foi possível marcar a tarefa como pronta.');
     }
   }
 
   async function saveVolumes() {
-    await api.put(`/internal-orders/${id}`, order);
-    await load();
+    try {
+      await api.put(`/internal-orders/${id}`, order);
+      await load();
+      toast.success('Ordem de Serviço atualizada.');
+    } catch {
+      toast.error('Não foi possível atualizar a Ordem de Serviço.');
+    }
   }
 
   async function generateModalLabels() {

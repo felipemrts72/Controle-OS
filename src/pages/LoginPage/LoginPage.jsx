@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, setSession } from '../../services/api.js';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { getDefaultRoute } from '../../utils/permissions.js';
 import './LoginPage.css';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [form, setForm] = useState({ username: 'admin', password: 'admin123' });
   const [message, setMessage] = useState('');
 
@@ -14,8 +16,10 @@ export function LoginPage() {
     try {
       const response = await api.post('/auth/login', form);
       setSession(response.data.token, response.data.user);
+      toast.success('Login realizado com sucesso.');
       navigate(getDefaultRoute(response.data.user));
     } catch {
+      toast.error('Usuário ou senha inválidos.');
       setMessage('Usuário ou senha inválidos.');
     }
   }

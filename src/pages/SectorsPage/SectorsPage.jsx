@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api.js';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { SectorForm } from '../../components/SectorForm/SectorForm.jsx';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './SectorsPage.css';
 
 export function SectorsPage() {
+  const toast = useToast();
   const [sectors, setSectors] = useState([]);
 
   async function load() {
@@ -15,13 +17,23 @@ export function SectorsPage() {
   useEffect(() => { load(); }, []);
 
   async function create(payload) {
-    await api.post('/sectors', payload);
-    await load();
+    try {
+      await api.post('/sectors', payload);
+      await load();
+      toast.success('Setor criado com sucesso.');
+    } catch {
+      toast.error('Não foi possível criar o setor.');
+    }
   }
 
   async function deactivate(id) {
-    await api.patch(`/sectors/${id}/deactivate`);
-    await load();
+    try {
+      await api.patch(`/sectors/${id}/deactivate`);
+      await load();
+      toast.success('Setor desativado.');
+    } catch {
+      toast.error('Não foi possível desativar o setor.');
+    }
   }
 
   return (

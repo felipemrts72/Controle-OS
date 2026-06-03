@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, getStoredUser } from '../../services/api.js';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './InternalOrdersPage.css';
 
 function formatDate(date) {
@@ -20,6 +21,7 @@ function ProgressLine({ label, ready = 0, total = 0 }) {
 
 export function InternalOrdersPage() {
   const user = getStoredUser();
+  const toast = useToast();
   const canManage = ['admin', 'manager'].includes(user?.role);
   const [orders, setOrders] = useState([]);
   const [orderToDelete, setOrderToDelete] = useState(null);
@@ -32,9 +34,14 @@ export function InternalOrdersPage() {
   useEffect(() => { load(); }, []);
 
   async function deleteOrder() {
-    await api.delete(`/internal-orders/${orderToDelete.id}`);
-    setOrderToDelete(null);
-    await load();
+    try {
+      await api.delete(`/internal-orders/${orderToDelete.id}`);
+      setOrderToDelete(null);
+      await load();
+      toast.success('Ordem de Serviço excluída.');
+    } catch {
+      toast.error('Não foi possível excluir a Ordem de Serviço.');
+    }
   }
 
   return (
@@ -75,7 +82,7 @@ export function InternalOrdersPage() {
         onCancel={() => setOrderToDelete(null)}
         actions={<button className="button button_danger" type="button" onClick={deleteOrder}>Excluir</button>}
       >
-        Deseja excluir a OS {orderToDelete?.sale_number}? Itens, tarefas e volumes vinculados também serão apagados.
+        Deseja excluir a OS {orderToDelete?.sale_number}? Ela sairá das listagens operacionais, mas ficará preservada no histórico.
       </ConfirmModal>
     </section>
   );

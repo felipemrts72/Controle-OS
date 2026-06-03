@@ -6,6 +6,7 @@ const labels = {
   ready_for_label: 'Pronto para Etiqueta',
   partially_shipped: 'Parcialmente Expedido',
   shipped: 'Expedido',
+  deleted: 'Excluída',
   ready: 'Pronto',
   waiting_tasks: 'Aguardando tarefas',
   released_for_label: 'Liberado para etiqueta',

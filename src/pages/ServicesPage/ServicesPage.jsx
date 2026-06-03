@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getStoredUser } from '../../services/api.js';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './ServicesPage.css';
 
 function formatDate(date) {
@@ -12,6 +13,7 @@ function formatStatus(status) {
 
 export function ServicesPage() {
   const user = getStoredUser();
+  const toast = useToast();
   const canMarkReady = ['admin', 'manager'].includes(user?.role);
   const [orders, setOrders] = useState([]);
   const [selectedSectorSlug, setSelectedSectorSlug] = useState(null);
@@ -54,7 +56,7 @@ export function ServicesPage() {
 
   async function loadServices() {
     const response = await api.get('/services');
-    setOrders(response.data);
+    setOrders(response.data.filter((order) => order.order_status !== 'deleted' && !order.deleted_at));
   }
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function ServicesPage() {
       try {
         setError('');
         const response = await api.get('/services');
-        if (active) setOrders(response.data);
+        if (active) setOrders(response.data.filter((order) => order.order_status !== 'deleted' && !order.deleted_at));
       } catch {
         if (active) setError('Não foi possível carregar os serviços.');
       } finally {
@@ -105,8 +107,10 @@ export function ServicesPage() {
       setError('');
       await api.patch(`/tasks/${taskId}/ready`);
       await loadServices();
+      toast.success('Tarefa marcada como pronta.');
     } catch {
       setError('Não foi possível marcar a tarefa como pronta.');
+      toast.error('Não foi possível marcar a tarefa como pronta.');
     } finally {
       setSavingTaskId(null);
     }

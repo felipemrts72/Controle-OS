@@ -53,8 +53,10 @@ CREATE TABLE internal_orders (
   customer_name VARCHAR NOT NULL,
   customer_phone VARCHAR,
   promised_date DATE NOT NULL,
-  status VARCHAR DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'ready_for_label', 'partially_shipped', 'shipped')),
+  status VARCHAR DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'ready_for_label', 'partially_shipped', 'shipped', 'deleted')),
   created_by UUID REFERENCES users(id),
+  deleted_by UUID REFERENCES users(id),
+  deleted_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -77,6 +79,8 @@ CREATE TABLE internal_tasks (
   task_name VARCHAR NOT NULL,
   quantity INTEGER DEFAULT 1 CHECK (quantity > 0),
   status VARCHAR DEFAULT 'pending' CHECK (status IN ('pending', 'ready')),
+  is_pinned BOOLEAN DEFAULT FALSE,
+  pinned_at TIMESTAMP,
   completed_by UUID REFERENCES users(id),
   completed_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW(),

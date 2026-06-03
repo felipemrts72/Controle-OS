@@ -3,6 +3,7 @@ import { api } from '../../services/api.js';
 import { ShippingLookup } from '../../components/ShippingLookup/ShippingLookup.jsx';
 import { ShippingResultCard } from '../../components/ShippingResultCard/ShippingResultCard.jsx';
 import { QrScannerBox } from '../../components/QrScannerBox/QrScannerBox.jsx';
+import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './ShippingPage.css';
 
 function formatDate(date) {
@@ -34,6 +35,7 @@ function getRemainingText(count) {
 }
 
 export function ShippingPage() {
+  const toast = useToast();
   const [volumes, setVolumes] = useState([]);
   const [saleSummary, setSaleSummary] = useState(null);
   const [currentSaleNumber, setCurrentSaleNumber] = useState('');
@@ -114,6 +116,7 @@ export function ShippingPage() {
     try {
       const response = await api.get(`/shipping/code/${normalizedCode}`);
       applyLookup(response.data);
+      toast.success('Volume localizado.');
     } catch {
       setVolumes([]);
       setSaleSummary(null);
@@ -122,6 +125,7 @@ export function ShippingPage() {
         title: 'CÓDIGO NÃO ENCONTRADO',
         text: 'Código não encontrado.',
       });
+      toast.error('Código não encontrado.');
     }
   }
 
@@ -144,6 +148,7 @@ export function ShippingPage() {
       await refreshShippingData(summary?.sale_number);
 
       if (volume.sale_completed) {
+        toast.success('Venda concluída.');
         showFeedback({
           variant: 'completed',
           title: 'VENDA CONCLUÍDA',
@@ -157,6 +162,7 @@ export function ShippingPage() {
         title: 'VOLUME CONFIRMADO',
         saleSummary: summary,
       });
+      toast.success('Expedição confirmada.');
     } catch (error) {
       if (error.response?.status === 409 && error.response.data) {
         const volume = error.response.data;
@@ -172,6 +178,7 @@ export function ShippingPage() {
             : `Este volume já foi expedido. Ainda restam ${summary.remaining_volumes} volume(s) para expedir.`,
           saleSummary: summary,
         });
+        toast.error('Volume já expedido.');
         scheduleAutoCloseAfterAlreadyShipped(summary?.sale_number);
         return;
       }
@@ -180,6 +187,7 @@ export function ShippingPage() {
         title: 'CÓDIGO NÃO ENCONTRADO',
         text: 'Código não encontrado.',
       });
+      toast.error('Não foi possível confirmar a expedição.');
     }
   }
 
@@ -188,6 +196,7 @@ export function ShippingPage() {
     applyLookup(response.data);
     setCurrentSaleNumber(response.data.sale_summary?.sale_number || sale);
     await refreshShippingData(response.data.sale_summary?.sale_number || sale);
+    toast.success('Venda concluída.');
     showFeedback({
       variant: 'completed',
       title: 'VENDA CONCLUÍDA',
@@ -204,6 +213,7 @@ export function ShippingPage() {
         title: 'QR CODE INVÁLIDO',
         text: 'Não foi possível localizar este volume.',
       });
+      toast.error('QR Code inválido.');
       return;
     }
 
@@ -217,6 +227,7 @@ export function ShippingPage() {
           title: 'ATENÇÃO',
           text: `Você estava expedindo a venda ${currentSaleNumber}. Agora foi lido um volume da venda ${nextSaleNumber}. Deseja trocar para esta venda?`,
         });
+        toast.warning('Volume pertence a outra venda.');
         return;
       }
       await confirmCode(code);
@@ -226,6 +237,7 @@ export function ShippingPage() {
         title: 'CÓDIGO NÃO ENCONTRADO',
         text: 'Código não encontrado.',
       });
+      toast.error('Código não encontrado.');
     }
   }
 

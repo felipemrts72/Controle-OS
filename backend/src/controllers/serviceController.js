@@ -14,12 +14,15 @@ export async function listServices(_req, res, next) {
         s.slug AS sector_slug,
         it.status,
         si.product_name_snapshot AS product_name,
+        io.status AS order_status,
+        io.deleted_at AS order_deleted_at,
         it.created_at
        FROM internal_tasks it
        JOIN sectors s ON s.id = it.sector_id
        JOIN sold_items si ON si.id = it.sold_item_id
        JOIN internal_orders io ON io.id = si.internal_order_id
        WHERE s.is_active = TRUE
+         AND COALESCE(io.status, '') <> 'deleted'
        ORDER BY io.promised_date ASC, io.sale_number ASC, it.created_at ASC`,
     );
 
@@ -31,6 +34,8 @@ export async function listServices(_req, res, next) {
         promised_date: row.promised_date,
         pending_tasks_count: 0,
         ready_tasks_count: 0,
+        order_status: row.order_status,
+        deleted_at: row.order_deleted_at,
         tasks: [],
       };
 

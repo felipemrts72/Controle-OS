@@ -1,0 +1,68 @@
+.order-history-page {
+  max-width: 1180px;
+}
+
+.order-history-page .confirm-modal__content {
+  max-width: 1120px;
+}
+
+.order-history-page__subtitle {
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+}
+
+.order-history-page__toolbar {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.order-history-page__filter {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.order-history-page__filter select {
+  min-width: 220px;
+}
+
+.order-history-page__pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.order-history-page__modal {
+  display: grid;
+  gap: 18px;
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.order-history-page__modal h3 {
+  margin: 0;
+}
+
+.order-history-page__summary {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 14px;
+}
+
+@media (max-width: 720px) {
+  .order-history-page__summary {
+    grid-template-columns: 1fr;
+  }
+}

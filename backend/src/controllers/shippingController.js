@@ -3,7 +3,9 @@ import { logAudit } from '../services/auditService.js';
 import { refreshInternalOrderStatus, refreshSoldItemStatus } from '../services/statusService.js';
 import { httpError } from '../utils/httpError.js';
 
-const volumeSelect = `SELECT sv.*, si.product_name_snapshot AS product_name, si.internal_order_id, io.sale_number, io.customer_name, io.customer_phone, io.promised_date
+const activeOrderFilter = "COALESCE(io.status, '') <> 'deleted'";
+
+const volumeSelect = `SELECT sv.*, si.product_name_snapshot AS product_name, si.internal_order_id, io.sale_number, io.customer_name, io.customer_phone, io.promised_date, io.status AS order_status
   FROM shipment_volumes sv
   JOIN sold_items si ON si.id = sv.sold_item_id
   JOIN internal_orders io ON io.id = si.internal_order_id`;
@@ -20,6 +22,7 @@ async function getSaleSummary(client, saleNumber) {
      JOIN sold_items si ON si.internal_order_id = io.id
      JOIN shipment_volumes sv ON sv.sold_item_id = si.id
      WHERE io.sale_number = $1
+       AND ${activeOrderFilter}
      GROUP BY io.sale_number, io.customer_name, io.promised_date`,
     [saleNumber],
   );
@@ -61,7 +64,7 @@ function formatShippingVolume(volume, saleSummary) {
 
 export async function lookupByCode(req, res, next) {
   try {
-    const result = await query(`${volumeSelect} WHERE sv.shipment_code = $1`, [req.params.shipmentCode]);
+    const result = await query(`${volumeSelect} WHERE sv.shipment_code = $1 AND ${activeOrderFilter}`, [req.params.shipmentCode]);
     if (!result.rows[0]) {
       res.status(404).json({ message: 'Código não encontrado.' });
       return;
@@ -73,7 +76,7 @@ export async function lookupByCode(req, res, next) {
 export async function confirmByCode(req, res, next) {
   try {
     const result = await transaction(async (client) => {
-      const found = await client.query(`${volumeSelect} WHERE sv.shipment_code = $1`, [req.params.shipmentCode]);
+      const found = await client.query(`${volumeSelect} WHERE sv.shipment_code = $1 AND ${activeOrderFilter}`, [req.params.shipmentCode]);
       const volume = found.rows[0];
       if (!volume) return { type: 'invalid_code' };
       if (volume.label_status === 'shipped') {
@@ -90,7 +93,7 @@ export async function confirmByCode(req, res, next) {
       );
       await logAudit(client, { entityType: 'shipment_volume', entityId: volume.id, action: 'ship', newValue: { forced_shipping: forced }, userId: req.user.id });
       await refreshSoldItemStatus(client, volume.sold_item_id);
-      const updatedWithInfo = await client.query(`${volumeSelect} WHERE sv.id = $1`, [updated.rows[0].id]);
+      const updatedWithInfo = await client.query(`${volumeSelect} WHERE sv.id = $1 AND ${activeOrderFilter}`, [updated.rows[0].id]);
       const shippedVolume = updatedWithInfo.rows[0];
       const saleSummary = await getSaleSummary(client, shippedVolume.sale_number);
       const data = formatShippingVolume(shippedVolume, saleSummary);
@@ -110,7 +113,7 @@ export async function confirmByCode(req, res, next) {
 
 export async function lookupBySale(req, res, next) {
   try {
-    const result = await query(`${volumeSelect} WHERE io.sale_number = $1 ORDER BY sv.volume_number`, [req.params.saleNumber]);
+    const result = await query(`${volumeSelect} WHERE io.sale_number = $1 AND ${activeOrderFilter} ORDER BY sv.volume_number`, [req.params.saleNumber]);
     const saleSummary = await getSaleSummary({ query }, req.params.saleNumber);
     res.json({
       volumes: result.rows.map((volume) => formatShippingVolume(volume, saleSummary)),
@@ -122,7 +125,7 @@ export async function lookupBySale(req, res, next) {
 export async function confirmSale(req, res, next) {
   try {
     const result = await transaction(async (client) => {
-      const found = await client.query(`${volumeSelect} WHERE io.sale_number = $1`, [req.params.saleNumber]);
+      const found = await client.query(`${volumeSelect} WHERE io.sale_number = $1 AND ${activeOrderFilter}`, [req.params.saleNumber]);
       if (!found.rows.length) throw httpError(404, 'Venda não encontrada.');
       const forced = found.rows.some((volume) => !['label_generated', 'ready_without_label', 'shipped'].includes(volume.label_status));
       const ids = found.rows.map((volume) => volume.id);
@@ -138,7 +141,7 @@ export async function confirmSale(req, res, next) {
         await refreshSoldItemStatus(client, soldItemId);
       }
       await refreshInternalOrderStatus(client, found.rows[0].internal_order_id);
-      const updatedWithInfo = await client.query(`${volumeSelect} WHERE io.sale_number = $1 ORDER BY sv.volume_number`, [req.params.saleNumber]);
+      const updatedWithInfo = await client.query(`${volumeSelect} WHERE io.sale_number = $1 AND ${activeOrderFilter} ORDER BY sv.volume_number`, [req.params.saleNumber]);
       const saleSummary = await getSaleSummary(client, req.params.saleNumber);
       return {
         type: 'sale_completed',
@@ -184,6 +187,7 @@ export async function auditShipping(_req, res, next) {
          LIMIT 1
        ) latest_audit ON TRUE
        WHERE sv.label_status = 'shipped'
+         AND COALESCE(io.status, '') <> 'deleted'
        ORDER BY sv.shipped_at DESC NULLS LAST, io.sale_number DESC, sv.volume_number DESC`,
     );
     res.json(result.rows);

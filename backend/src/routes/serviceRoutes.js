@@ -5,4 +5,4 @@ import { authenticate, authorize } from '../middlewares/authMiddleware.js';
 export const serviceRoutes = Router();
 
 serviceRoutes.use(authenticate);
-serviceRoutes.get('/', authorize('admin', 'manager', 'viewer'), listServices);
+serviceRoutes.get('/', authorize('admin', 'manager', 'shipping'), listServices);

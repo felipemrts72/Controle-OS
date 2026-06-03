@@ -29,7 +29,8 @@
 }
 
 .status-badge_partially_shipped,
-.status-badge_material_prima {
+.status-badge_material_prima,
+.status-badge_deleted {
   background: #f1f5f9;
   color: #475569;
 }

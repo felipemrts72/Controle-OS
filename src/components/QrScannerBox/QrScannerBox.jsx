@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import './QrScannerBox.css';
 
 const QR_READER_ID = 'qr-scanner-reader';
 
 export function QrScannerBox({ onScan }) {
+  const toast = useToast();
   const scannerRef = useRef(null);
   const lastScanRef = useRef({ text: '', scannedAt: 0 });
   const [isScanning, setIsScanning] = useState(false);
@@ -55,6 +57,7 @@ export function QrScannerBox({ onScan }) {
       setIsScanning(true);
     } catch {
       setError('Não foi possível acessar a câmera. Verifique a permissão da câmera no navegador.');
+      toast.error('Não foi possível acessar a câmera.');
       await stopScanner();
     }
   }
