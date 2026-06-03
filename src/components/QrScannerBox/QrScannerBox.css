@@ -1,10 +1,31 @@
 .qr-scanner-box {
-  align-items: center;
   color: var(--color-text-muted);
-  display: flex;
+  display: grid;
   gap: 12px;
 }
 
 .qr-scanner-box strong {
   color: var(--color-text);
+}
+
+.qr-scanner-box__header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.qr-scanner-box__title {
+  color: var(--color-text);
+  font-size: 18px;
+  margin: 0;
+}
+
+.qr-scanner-box__reader {
+  overflow: hidden;
+}
+
+.qr-scanner-box__error {
+  color: #b91c1c;
+  margin: 0;
 }

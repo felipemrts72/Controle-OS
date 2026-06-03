@@ -1,16 +1,26 @@
-import { useState } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import './ShippingLookup.css';
 
-export function ShippingLookup({ onLookupCode, onLookupSale }) {
+export const ShippingLookup = forwardRef(function ShippingLookup({ onLookupCode, onLookupSale }, ref) {
   const [code, setCode] = useState('');
   const [sale, setSale] = useState('');
+  const codeInputRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    clearCode() {
+      setCode('');
+    },
+    focusCode() {
+      codeInputRef.current?.focus();
+    },
+  }));
 
   return (
     <div className="shipping-lookup panel">
       <form className="shipping-lookup__form" onSubmit={(event) => { event.preventDefault(); onLookupCode(code); }}>
         <label className="field">
           <span className="field__label">Código de 6 dígitos</span>
-          <input className="field__input" maxLength="6" value={code} onChange={(event) => setCode(event.target.value)} />
+          <input ref={codeInputRef} className="field__input" maxLength="6" value={code} onChange={(event) => setCode(event.target.value)} />
         </label>
         <button className="button button_primary" type="submit">Buscar código</button>
       </form>
@@ -23,4 +33,4 @@ export function ShippingLookup({ onLookupCode, onLookupSale }) {
       </form>
     </div>
   );
-}
+});

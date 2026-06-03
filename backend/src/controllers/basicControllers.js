@@ -120,7 +120,12 @@ export async function deactivateSector(req, res, next) {
 
 export async function listProducts(req, res, next) {
   try {
-    const result = await query('SELECT * FROM products ORDER BY name');
+    const result = await query(
+      `SELECT p.*, s.name AS sector_name
+       FROM products p
+       LEFT JOIN sectors s ON s.id = p.sector_id
+       ORDER BY p.name`,
+    );
     res.json(result.rows);
   } catch (error) { next(error); }
 }
@@ -128,18 +133,33 @@ export async function listProducts(req, res, next) {
 export async function searchProducts(req, res, next) {
   try {
     const types = String(req.query.type || 'manufactured,resale').split(',');
-    const result = await query('SELECT * FROM products WHERE type = ANY($1) AND is_active = TRUE ORDER BY name', [types]);
+    const result = await query(
+      `SELECT p.*, s.name AS sector_name
+       FROM products p
+       LEFT JOIN sectors s ON s.id = p.sector_id
+       WHERE p.type = ANY($1) AND p.is_active = TRUE
+       ORDER BY p.name`,
+      [types],
+    );
     res.json(result.rows);
   } catch (error) { next(error); }
 }
 
 export async function getProduct(req, res, next) {
   try {
-    const product = await query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    const product = await query(
+      `SELECT p.*, s.name AS sector_name
+       FROM products p
+       LEFT JOIN sectors s ON s.id = p.sector_id
+       WHERE p.id = $1`,
+      [req.params.id],
+    );
     if (!product.rows[0]) throw httpError(404, 'Produto não encontrado.');
     const components = await query(
-      `SELECT pc.*, s.name AS sector_name FROM product_components pc
-       LEFT JOIN sectors s ON s.id = pc.sector_id WHERE product_id = $1 ORDER BY pc.created_at`,
+      `SELECT pc.*, s.name AS sector_name, mp.name AS material_product_name FROM product_components pc
+       LEFT JOIN sectors s ON s.id = pc.sector_id
+       LEFT JOIN products mp ON mp.id = pc.material_product_id
+       WHERE product_id = $1 ORDER BY pc.created_at`,
       [req.params.id],
     );
     res.json({ ...product.rows[0], components: components.rows });
@@ -149,24 +169,47 @@ export async function getProduct(req, res, next) {
 export async function saveProduct(req, res, next) {
   try {
     const result = await transaction(async (client) => {
+      let sectorId = req.body.sector_id || null;
+      if (req.body.type === 'resale') {
+        const shippingSector = await client.query("SELECT id FROM sectors WHERE slug = 'expedicao' AND is_active = TRUE");
+        if (!shippingSector.rows[0]) throw httpError(400, 'Setor Expedição não encontrado.');
+        sectorId = shippingSector.rows[0].id;
+      } else {
+        if (!sectorId) throw httpError(400, 'Informe o setor responsável do produto.');
+        const sector = await client.query('SELECT id FROM sectors WHERE id = $1 AND is_active = TRUE', [sectorId]);
+        if (!sector.rows[0]) throw httpError(400, 'Setor responsável inválido.');
+      }
+
+      const components = req.body.components || [];
+      for (const component of components) {
+        if (!component.component_name) throw httpError(400, 'Informe o nome do componente.');
+        if (!component.sector_id) throw httpError(400, 'Informe o setor responsável do componente.');
+        const sector = await client.query('SELECT id FROM sectors WHERE id = $1 AND is_active = TRUE', [component.sector_id]);
+        if (!sector.rows[0]) throw httpError(400, 'Setor responsável inválido.');
+        if (component.material_product_id) {
+          const material = await client.query('SELECT id FROM products WHERE id = $1 AND type = $2 AND is_active = TRUE', [component.material_product_id, 'material_prima']);
+          if (!material.rows[0]) throw httpError(400, 'Produto matéria-prima inválido.');
+        }
+      }
+
       const product = req.params.id
         ? await client.query(
-          `UPDATE products SET name = $1, type = $2, default_volume_quantity = $3, default_total_weight_kg = $4, is_active = $5, updated_at = NOW()
-           WHERE id = $6 RETURNING *`,
-          [req.body.name, req.body.type, req.body.default_volume_quantity, req.body.default_total_weight_kg, req.body.is_active ?? true, req.params.id],
+          `UPDATE products SET name = $1, type = $2, sector_id = $3, default_volume_quantity = $4, default_total_weight_kg = $5, is_active = $6, updated_at = NOW()
+           WHERE id = $7 RETURNING *`,
+          [req.body.name, req.body.type, sectorId, req.body.default_volume_quantity, req.body.default_total_weight_kg, req.body.is_active ?? true, req.params.id],
         )
         : await client.query(
-          `INSERT INTO products (name, type, default_volume_quantity, default_total_weight_kg)
-           VALUES ($1, $2, $3, $4) RETURNING *`,
-          [req.body.name, req.body.type, req.body.default_volume_quantity, req.body.default_total_weight_kg],
+          `INSERT INTO products (name, type, sector_id, default_volume_quantity, default_total_weight_kg)
+           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [req.body.name, req.body.type, sectorId, req.body.default_volume_quantity, req.body.default_total_weight_kg],
         );
       if (!product.rows[0]) throw httpError(404, 'Produto não encontrado.');
       await client.query('DELETE FROM product_components WHERE product_id = $1', [product.rows[0].id]);
-      for (const component of req.body.components || []) {
+      for (const component of components) {
         await client.query(
-          `INSERT INTO product_components (product_id, component_name, sector_id, quantity, is_required)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [product.rows[0].id, component.component_name, component.sector_id, component.quantity || 1, component.is_required ?? true],
+          `INSERT INTO product_components (product_id, material_product_id, component_name, sector_id, quantity, is_required)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [product.rows[0].id, component.material_product_id || null, component.component_name, component.sector_id, component.quantity || 1, component.is_required ?? true],
         );
       }
       await logAudit(client, { entityType: 'product', entityId: product.rows[0].id, action: req.params.id ? 'update' : 'create', newValue: req.body, userId: req.user?.id });

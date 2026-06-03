@@ -5,3 +5,112 @@
   color: #166534;
   padding: 12px;
 }
+
+.shipping-page__status {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 0.8fr 1.1fr 0.9fr 0.8fr 0.8fr;
+}
+
+.shipping-page__status span {
+  color: var(--color-text-muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.shipping-page__status strong {
+  display: block;
+  font-size: 18px;
+}
+
+.shipping-page__remaining {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  text-align: center;
+}
+
+.shipping-page__remaining strong {
+  color: var(--color-primary-dark);
+  font-size: 42px;
+  line-height: 1;
+}
+
+.shipping-page__modal {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 20;
+}
+
+.shipping-page__modal-content {
+  background: var(--color-white);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  color: var(--color-text);
+  max-width: 560px;
+  padding: 24px;
+  width: 100%;
+}
+
+.shipping-page__modal-content_confirmed {
+  border-color: #22c55e;
+}
+
+.shipping-page__modal-content_completed {
+  background: #dcfce7;
+  border-color: #22c55e;
+}
+
+.shipping-page__modal-content_already,
+.shipping-page__modal-content_invalid {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+.shipping-page__modal-content_warning {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.shipping-page__modal-content h2 {
+  font-size: 28px;
+  margin: 0 0 14px;
+}
+
+.shipping-page__modal-content p {
+  color: var(--color-text-muted);
+  font-weight: 700;
+  margin: 6px 0;
+}
+
+.shipping-page__modal-main {
+  display: block;
+  font-size: 40px;
+  line-height: 1.1;
+  margin-top: 18px;
+}
+
+.shipping-page__modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+
+@media (max-width: 900px) {
+  .shipping-page__status {
+    grid-template-columns: 1fr;
+  }
+}

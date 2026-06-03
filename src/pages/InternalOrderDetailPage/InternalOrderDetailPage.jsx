@@ -71,6 +71,10 @@ export function InternalOrderDetailPage() {
           columns={[
             { key: 'product_name_snapshot', label: 'Produto' },
             { key: 'quantity', label: 'Quantidade' },
+            { key: 'total_volumes', label: 'Volumes totais' },
+            { key: 'total_weight_kg', label: 'Peso total', render: (row) => `${Number(row.total_weight_kg).toLocaleString('pt-BR')} kg` },
+            { key: 'default_volume_quantity', label: 'Volumes por unidade' },
+            { key: 'default_total_weight_kg', label: 'Peso por unidade', render: (row) => `${Number(row.default_total_weight_kg).toLocaleString('pt-BR')} kg` },
             { key: 'status', label: 'Status', render: (row) => <StatusBadge value={row.status} /> },
           ]}
           rows={order.items}

@@ -27,6 +27,7 @@ CREATE TABLE products (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR NOT NULL,
   type VARCHAR NOT NULL CHECK (type IN ('manufactured', 'resale', 'material_prima')),
+  sector_id UUID REFERENCES sectors(id),
   default_volume_quantity INTEGER NOT NULL CHECK (default_volume_quantity > 0),
   default_total_weight_kg NUMERIC(10,2) NOT NULL CHECK (default_total_weight_kg > 0),
   is_active BOOLEAN DEFAULT TRUE,
@@ -37,6 +38,7 @@ CREATE TABLE products (
 CREATE TABLE product_components (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  material_product_id UUID REFERENCES products(id),
   component_name VARCHAR NOT NULL,
   sector_id UUID REFERENCES sectors(id),
   quantity INTEGER DEFAULT 1 CHECK (quantity > 0),
@@ -73,6 +75,7 @@ CREATE TABLE internal_tasks (
   sold_item_id UUID REFERENCES sold_items(id) ON DELETE CASCADE,
   sector_id UUID REFERENCES sectors(id),
   task_name VARCHAR NOT NULL,
+  quantity INTEGER DEFAULT 1 CHECK (quantity > 0),
   status VARCHAR DEFAULT 'pending' CHECK (status IN ('pending', 'ready')),
   completed_by UUID REFERENCES users(id),
   completed_at TIMESTAMP,
@@ -145,6 +148,17 @@ INSERT INTO products (name, type, default_volume_quantity, default_total_weight_
   ('Par de Martelos H2', 'manufactured', 1, 16),
   ('Rolamento', 'resale', 1, 5)
 ON CONFLICT DO NOTHING;
+
+UPDATE products SET sector_id = sectors.id
+FROM sectors
+WHERE products.sector_id IS NULL
+  AND sectors.slug = CASE
+    WHEN products.name IN ('Baterias/Martelos', 'Jogo de Martelos H10', 'Par de Martelos H2') THEN 'torno'
+    WHEN products.name IN ('Caixa do Moinho', 'Base') THEN 'solda'
+    WHEN products.name = 'Motor' THEN 'montagem'
+    WHEN products.type = 'resale' THEN 'expedicao'
+    ELSE 'montagem'
+  END;
 
 INSERT INTO product_components (product_id, component_name, sector_id, quantity, is_required)
 SELECT p.id, c.component_name, s.id, 1, TRUE

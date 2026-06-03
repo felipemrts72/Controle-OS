@@ -56,6 +56,9 @@ export async function downloadLabelPdf(req, res, next) {
   try {
     let volume = await findVolume(req.params.shipmentVolumeId);
     if (!volume) throw httpError(404, 'Volume não encontrado.');
+    if (!['released_for_label', 'label_generated'].includes(volume.label_status)) {
+      throw httpError(400, 'Volume ainda não está liberado para etiqueta.');
+    }
     if (!volume.shipment_code) {
       await transaction(async (client) => {
         const code = await createShipmentCode(client);
@@ -64,6 +67,7 @@ export async function downloadLabelPdf(req, res, next) {
            WHERE id = $2`,
           [code, req.params.shipmentVolumeId],
         );
+        await logAudit(client, { entityType: 'shipment_volume', entityId: req.params.shipmentVolumeId, action: 'generate_label_pdf', newValue: { shipment_code: code }, userId: req.user.id });
       });
       volume = await findVolume(req.params.shipmentVolumeId);
     }

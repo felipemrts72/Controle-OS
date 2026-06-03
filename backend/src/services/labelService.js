@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import QRCode from 'qrcode';
+import { generateQrCodeBuffer } from '../utils/qrCode.js';
 
 export async function createShipmentCode(client) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -16,19 +16,18 @@ export async function buildLabelPdf(volume) {
   doc.on('data', (chunk) => chunks.push(chunk));
   const finished = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
 
-  const qrDataUrl = await QRCode.toDataURL(volume.shipment_code);
-  const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64');
+  const qrBuffer = await generateQrCodeBuffer(volume.shipment_code);
 
-  doc.fontSize(13).font('Helvetica-Bold').text(volume.customer_name, { width: 178, ellipsis: true });
+  doc.fontSize(13).font('Helvetica-Bold').text(volume.customer_name, { width: 172, ellipsis: true });
   doc.fontSize(7).font('Helvetica');
   doc.text(`Venda: ${volume.sale_number}`);
-  doc.text(`Produto: ${volume.product_name_snapshot}`, { width: 178, ellipsis: true });
+  doc.text(`Produto: ${volume.product_name_snapshot}`, { width: 172, ellipsis: true });
   doc.text(`Entrega: ${new Date(volume.promised_date).toLocaleDateString('pt-BR')}`);
   doc.text(`Telefone: ${volume.customer_phone || '-'}`);
   doc.text(`Peso: ${Number(volume.weight_kg).toLocaleString('pt-BR')} kg`);
-  doc.image(qrBuffer, 204, 18, { width: 62, height: 62 });
-  doc.fontSize(9).font('Helvetica-Bold').text(`Código: ${volume.shipment_code}`, 190, 84, { align: 'center', width: 85 });
-  doc.fontSize(10).text(`Volume: ${volume.volume_number}/${volume.total_volumes}`, 190, 106, { align: 'center', width: 85 });
+  doc.image(qrBuffer, 194, 12, { width: 76, height: 76 });
+  doc.fontSize(10).font('Helvetica-Bold').text(volume.shipment_code, 190, 90, { align: 'center', width: 85 });
+  doc.fontSize(10).text(`Volume ${volume.volume_number}/${volume.total_volumes}`, 190, 110, { align: 'center', width: 85 });
   doc.end();
 
   return finished;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, setSession } from '../../services/api.js';
+import { getDefaultRoute } from '../../utils/permissions.js';
 import './LoginPage.css';
 
 export function LoginPage() {
@@ -13,7 +14,7 @@ export function LoginPage() {
     try {
       const response = await api.post('/auth/login', form);
       setSession(response.data.token, response.data.user);
-      navigate('/dashboard');
+      navigate(getDefaultRoute(response.data.user));
     } catch {
       setMessage('Usuário ou senha inválidos.');
     }

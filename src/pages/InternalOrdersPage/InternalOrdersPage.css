@@ -1,0 +1,86 @@
+.internal-orders-page {
+  max-width: 1180px;
+}
+
+.internal-orders-page__list {
+  display: grid;
+  gap: 12px;
+}
+
+.internal-orders-page__card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.internal-orders-page__card:hover {
+  border-color: var(--color-primary);
+}
+
+.internal-orders-page__card-content {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr auto 1fr 1fr;
+}
+
+.internal-orders-page__card-content p {
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
+}
+
+.internal-orders-page__progress {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.internal-orders-page__progress span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.internal-orders-page__progress progress {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.internal-orders-page__progress progress::-webkit-progress-bar {
+  background: #dbeafe;
+  border-radius: 999px;
+}
+
+.internal-orders-page__progress progress::-webkit-progress-value {
+  background: var(--color-primary);
+  border-radius: 999px;
+}
+
+.internal-orders-page__progress progress::-moz-progress-bar {
+  background: var(--color-primary);
+  border-radius: 999px;
+}
+
+.internal-orders-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1000px) {
+  .internal-orders-page__card-content {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .internal-orders-page__actions {
+    justify-content: flex-start;
+  }
+}

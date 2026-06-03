@@ -23,6 +23,7 @@ export function ProductsPage() {
           columns={[
             { key: 'name', label: 'Nome', render: (row) => <Link to={`/produtos/${row.id}`}>{row.name}</Link> },
             { key: 'type', label: 'Tipo', render: (row) => <StatusBadge value={row.type} /> },
+            { key: 'sector_name', label: 'Setor responsável', render: (row) => row.sector_name || '-' },
             { key: 'default_volume_quantity', label: 'Volumes' },
             { key: 'default_total_weight_kg', label: 'Peso total (kg)' },
           ]}

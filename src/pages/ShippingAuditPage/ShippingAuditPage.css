@@ -1,0 +1,9 @@
+.shipping-audit-page__error {
+  color: #b91c1c;
+  margin: 0;
+}
+
+.shipping-audit-page__empty {
+  color: var(--color-text-muted);
+  margin: 14px 0 0;
+}

@@ -8,18 +8,133 @@
 .sector-tv-page__header {
   align-items: end;
   display: flex;
-  justify-content: space-between;
   gap: 18px;
-  margin-bottom: 22px;
+  justify-content: space-between;
+  margin-bottom: 24px;
   text-transform: uppercase;
 }
 
 .sector-tv-page__header h1 {
-  font-size: 46px;
+  font-size: 52px;
   margin: 0;
+}
+
+.sector-tv-page__selector {
+  position: relative;
+}
+
+.sector-tv-page__title-button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  padding: 0;
+  text-align: left;
+  text-transform: inherit;
+}
+
+.sector-tv-page__menu {
+  background: #0f172a;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  display: grid;
+  gap: 8px;
+  left: 0;
+  min-width: 260px;
+  padding: 14px 16px;
+  position: absolute;
+  top: calc(100% + 12px);
+  z-index: 10;
+}
+
+.sector-tv-page__menu button {
+  background: transparent;
+  border: 0;
+  color: #cbd5e1;
+  font-size: 22px;
+  font-weight: 800;
+  padding: 0;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.sector-tv-page__menu button:hover {
+  color: #f8fafc;
 }
 
 .sector-tv-page__header span {
   color: #94a3b8;
   font-size: 18px;
+}
+
+.sector-tv-page__cards {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
+.sector-tv-page__card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-left: 6px solid #16a34a;
+  border-radius: var(--radius-md);
+  color: #e5edf7;
+  display: grid;
+  gap: 20px;
+  min-height: 210px;
+  padding: 26px;
+}
+
+.sector-tv-page__card_late {
+  border-left-color: #dc2626;
+}
+
+.sector-tv-page__card_on-time {
+  border-left-color: #16a34a;
+}
+
+.sector-tv-page__task-title {
+  color: #f8fafc;
+  font-size: 40px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.sector-tv-page__meta {
+  align-self: end;
+  color: #cbd5e1;
+  display: grid;
+  gap: 8px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.sector-tv-page__empty {
+  color: #94a3b8;
+  font-size: 28px;
+  margin: 0;
+}
+
+@media (min-width: 1800px) {
+  .sector-tv-page__cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 3000px) {
+  .sector-tv-page__cards {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 1000px) {
+  .sector-tv-page__header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .sector-tv-page__cards {
+    grid-template-columns: 1fr;
+  }
 }

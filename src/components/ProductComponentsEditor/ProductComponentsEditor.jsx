@@ -1,13 +1,26 @@
 import './ProductComponentsEditor.css';
 
-export function ProductComponentsEditor({ components, sectors, onChange }) {
+export function ProductComponentsEditor({ components, materialProducts = [], sectors, onChange }) {
   function update(index, field, value) {
     const next = components.map((component, currentIndex) => currentIndex === index ? { ...component, [field]: value } : component);
     onChange(next);
   }
 
   function add() {
-    onChange([...components, { component_name: '', sector_id: '', quantity: 1, is_required: true }]);
+    onChange([...components, { material_product_id: '', component_name: '', sector_id: '', quantity: 1, is_required: true }]);
+  }
+
+  function updateMaterial(index, materialProductId) {
+    const materialProduct = materialProducts.find((product) => product.id === materialProductId);
+    const next = components.map((component, currentIndex) => {
+      if (currentIndex !== index) return component;
+      return {
+        ...component,
+        material_product_id: materialProductId,
+        component_name: component.component_name || materialProduct?.name || '',
+      };
+    });
+    onChange(next);
   }
 
   function remove(index) {
@@ -22,8 +35,12 @@ export function ProductComponentsEditor({ components, sectors, onChange }) {
       </div>
       {components.map((component, index) => (
         <div className="product-components-editor__row" key={index}>
-          <input className="field__input" placeholder="Nome do componente" value={component.component_name} onChange={(event) => update(index, 'component_name', event.target.value)} />
-          <select className="field__input" value={component.sector_id} onChange={(event) => update(index, 'sector_id', event.target.value)}>
+          <select className="field__input" value={component.material_product_id || ''} onChange={(event) => updateMaterial(index, event.target.value)}>
+            <option value="">Matéria-prima vinculada</option>
+            {materialProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+          </select>
+          <input className="field__input" placeholder="Nome do componente" value={component.component_name} onChange={(event) => update(index, 'component_name', event.target.value)} required />
+          <select className="field__input" value={component.sector_id} onChange={(event) => update(index, 'sector_id', event.target.value)} required>
             <option value="">Setor responsável</option>
             {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
           </select>

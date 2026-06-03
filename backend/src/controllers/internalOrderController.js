@@ -8,13 +8,21 @@ export async function listInternalOrders(_req, res, next) {
     const result = await query(
       `SELECT io.*,
         COALESCE(task_counts.ready, 0) AS ready_tasks,
-        COALESCE(task_counts.total, 0) AS total_tasks
+        COALESCE(task_counts.total, 0) AS total_tasks,
+        COALESCE(volume_counts.ready, 0) AS ready_volumes,
+        COALESCE(volume_counts.total, 0) AS total_volumes
        FROM internal_orders io
        LEFT JOIN (
          SELECT si.internal_order_id, COUNT(it.id)::int AS total, COUNT(*) FILTER (WHERE it.status = 'ready')::int AS ready
          FROM sold_items si LEFT JOIN internal_tasks it ON it.sold_item_id = si.id
          GROUP BY si.internal_order_id
        ) task_counts ON task_counts.internal_order_id = io.id
+       LEFT JOIN (
+         SELECT si.internal_order_id, COUNT(sv.id)::int AS total,
+          COUNT(*) FILTER (WHERE sv.label_status IN ('label_generated', 'ready_without_label', 'shipped'))::int AS ready
+         FROM sold_items si LEFT JOIN shipment_volumes sv ON sv.sold_item_id = si.id
+         GROUP BY si.internal_order_id
+       ) volume_counts ON volume_counts.internal_order_id = io.id
        ORDER BY io.promised_date ASC`,
     );
     res.json(result.rows);
@@ -33,8 +41,21 @@ export async function getInternalOrder(req, res, next) {
     const order = await query('SELECT * FROM internal_orders WHERE id = $1', [req.params.id]);
     if (!order.rows[0]) throw httpError(404, 'OS não encontrada.');
     const items = await query(
-      `SELECT si.*, p.type AS product_type FROM sold_items si
+      `SELECT si.*,
+        p.type AS product_type,
+        p.default_volume_quantity,
+        p.default_total_weight_kg,
+        COALESCE(volume_totals.total_volumes, 0)::int AS total_volumes,
+        COALESCE(volume_totals.total_weight_kg, 0)::numeric AS total_weight_kg
+       FROM sold_items si
        LEFT JOIN products p ON p.id = si.product_id
+       LEFT JOIN (
+         SELECT sold_item_id,
+          COUNT(*) AS total_volumes,
+          SUM(weight_kg) AS total_weight_kg
+         FROM shipment_volumes
+         GROUP BY sold_item_id
+       ) volume_totals ON volume_totals.sold_item_id = si.id
        WHERE si.internal_order_id = $1 ORDER BY si.created_at`,
       [req.params.id],
     );
@@ -90,5 +111,13 @@ export async function updateInternalOrder(req, res, next) {
       return order.rows[0];
     });
     res.json(result);
+  } catch (error) { next(error); }
+}
+
+export async function deleteInternalOrder(req, res, next) {
+  try {
+    const result = await query('DELETE FROM internal_orders WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows[0]) throw httpError(404, 'OS não encontrada.');
+    res.status(204).send();
   } catch (error) { next(error); }
 }

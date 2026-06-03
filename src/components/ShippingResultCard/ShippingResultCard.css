@@ -16,7 +16,7 @@
   border-bottom: 1px solid var(--color-border);
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr 0.8fr 0.8fr auto auto;
+  grid-template-columns: 1fr 0.7fr 1fr 0.7fr 0.6fr auto auto;
   padding-bottom: 10px;
 }
 

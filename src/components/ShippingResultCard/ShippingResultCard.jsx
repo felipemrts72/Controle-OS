@@ -8,10 +8,12 @@ export function ShippingResultCard({ volumes, onConfirmCode, onConfirmSale }) {
     <section className="shipping-result panel">
       {forced && <p className="shipping-result__alert">Esta OS possui volumes ainda não concluídos ou sem etiqueta. Deseja expedir mesmo assim?</p>}
       {volumes.map((volume) => (
-        <div className="shipping-result__row" key={volume.id}>
+        <div className="shipping-result__row" key={volume.id || volume.shipment_volume_id}>
           <strong>{volume.customer_name}</strong>
           <span>Venda {volume.sale_number}</span>
+          <span>{volume.product_name || volume.product_name_snapshot}</span>
           <span>Volume {volume.volume_number}/{volume.total_volumes}</span>
+          <span>{Number(volume.weight_kg).toLocaleString('pt-BR')} kg</span>
           <StatusBadge value={volume.label_status} />
           {volumes.length === 1 && <button className="button button_primary" type="button" onClick={() => onConfirmCode(volume.shipment_code)}>Confirmar expedição</button>}
         </div>
