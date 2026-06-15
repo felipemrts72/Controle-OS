@@ -20,13 +20,15 @@
   align-items: start;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(280px, 1fr) 180px;
+  grid-template-columns: minmax(min(280px, 100%), 1fr) 180px;
+  min-width: 0;
 }
 
 .internal-order-form__search-row {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr auto;
+  min-width: 0;
 }
 
 .internal-order-form__search-button {
@@ -105,6 +107,7 @@
   display: grid;
   gap: 10px;
   grid-template-columns: 1.3fr 0.8fr 0.6fr 0.8fr 0.7fr auto;
+  min-width: 0;
   padding: 12px;
 }
 
@@ -116,5 +119,20 @@
   .internal-order-form__item-fields,
   .internal-order-form__item {
     grid-template-columns: 1fr;
+  }
+
+  .internal-order-form__button,
+  .internal-order-form__item .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .internal-order-form__search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-order-form__search-button {
+    width: 100%;
   }
 }

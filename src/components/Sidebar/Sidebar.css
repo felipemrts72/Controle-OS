@@ -1,7 +1,8 @@
 .sidebar {
   background: var(--color-primary-deep);
-  color: var(--color-white);
+  color: #ffffff;
   padding: 22px 16px;
+  min-width: 0;
 }
 
 .sidebar__brand {
@@ -22,25 +23,38 @@
   color: #dbeafe;
   display: flex;
   gap: 10px;
+  min-height: 42px;
   padding: 11px 12px;
 }
 
 .sidebar__link_active,
 .sidebar__link:hover {
   background: rgba(255, 255, 255, 0.12);
-  color: var(--color-white);
+  color: #ffffff;
 }
 
 @media (max-width: 900px) {
   .sidebar {
+    padding: 14px;
     overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 15;
+  }
+
+  .sidebar__brand {
+    margin-bottom: 12px;
+    font-size: 18px;
   }
 
   .sidebar__nav {
     display: flex;
+    gap: 8px;
+    min-width: max-content;
   }
 
   .sidebar__link {
+    min-height: 44px;
     white-space: nowrap;
   }
 }

@@ -6,6 +6,10 @@ import { ToastProvider } from './components/ToastProvider/ToastProvider.jsx';
 import './styles/variables.css';
 import './styles/global.css';
 
+const storedTheme = localStorage.getItem('controle-os-theme');
+const preferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+document.documentElement.dataset.theme = storedTheme || preferredTheme;
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ToastProvider>

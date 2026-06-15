@@ -8,7 +8,7 @@ import './LoginPage.css';
 export function LoginPage() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [form, setForm] = useState({ username: 'admin', password: 'admin123' });
+  const [form, setForm] = useState({ username: '', password: '' });
   const [message, setMessage] = useState('');
 
   async function submit(event) {

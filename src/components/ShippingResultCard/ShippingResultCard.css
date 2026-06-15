@@ -28,4 +28,10 @@
   .shipping-result__row {
     grid-template-columns: 1fr;
   }
+
+  .shipping-result__button,
+  .shipping-result__row .button {
+    justify-self: stretch;
+    width: 100%;
+  }
 }

@@ -7,6 +7,11 @@
   min-height: 64px;
   padding: 0 22px;
   gap: 14px;
+  min-width: 0;
+}
+
+.header > div {
+  min-width: 0;
 }
 
 .header__role {
@@ -25,4 +30,24 @@
   height: 38px;
   justify-content: center;
   width: 38px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .header {
+    min-height: 58px;
+    padding: 8px 14px;
+  }
+
+  .header strong,
+  .header__role {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header__button {
+    height: 44px;
+    width: 44px;
+  }
 }

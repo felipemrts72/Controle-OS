@@ -52,7 +52,7 @@
 }
 
 .order-history-page__summary {
-  background: #f8fafc;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   display: grid;
@@ -62,6 +62,18 @@
 }
 
 @media (max-width: 720px) {
+  .order-history-page__toolbar,
+  .order-history-page__filter,
+  .order-history-page__filter select,
+  .order-history-page__pagination,
+  .order-history-page__pagination .button {
+    width: 100%;
+  }
+
+  .order-history-page__pagination {
+    justify-content: stretch;
+  }
+
   .order-history-page__summary {
     grid-template-columns: 1fr;
   }

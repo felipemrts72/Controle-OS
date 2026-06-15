@@ -8,6 +8,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .product-components-editor__header h3 {
@@ -31,5 +32,10 @@
 @media (max-width: 900px) {
   .product-components-editor__row {
     grid-template-columns: 1fr;
+  }
+
+  .product-components-editor__header .button,
+  .product-components-editor__row .button {
+    width: 100%;
   }
 }

@@ -14,4 +14,8 @@
   .volume-editor__row {
     grid-template-columns: 1fr;
   }
+
+  .volume-editor__row .button {
+    width: 100%;
+  }
 }

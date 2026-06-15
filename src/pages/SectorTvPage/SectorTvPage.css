@@ -32,6 +32,7 @@
   padding: 0;
   text-align: left;
   text-transform: inherit;
+  overflow-wrap: anywhere;
 }
 
 .sector-tv-page__menu {
@@ -152,12 +153,47 @@
 }
 
 @media (max-width: 1000px) {
+  .sector-tv-page {
+    padding: 18px;
+  }
+
   .sector-tv-page__header {
     align-items: start;
     flex-direction: column;
   }
 
+  .sector-tv-page__header h1 {
+    font-size: 38px;
+  }
+
   .sector-tv-page__cards {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .sector-tv-page {
+    padding: 14px;
+  }
+
+  .sector-tv-page__header h1 {
+    font-size: 30px;
+  }
+
+  .sector-tv-page__header span {
+    font-size: 15px;
+  }
+
+  .sector-tv-page__card {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .sector-tv-page__task-title {
+    font-size: 28px;
+  }
+
+  .sector-tv-page__meta {
+    font-size: 18px;
   }
 }

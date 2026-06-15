@@ -13,7 +13,9 @@
   background: var(--color-white);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-soft);
+  max-height: calc(100vh - 40px);
   max-width: 480px;
+  overflow: auto;
   padding: 22px;
   width: 100%;
 }
@@ -32,4 +34,21 @@
   gap: 10px;
   justify-content: flex-end;
   margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .confirm-modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .confirm-modal__content {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .confirm-modal__actions,
+  .confirm-modal__actions .button {
+    width: 100%;
+  }
 }

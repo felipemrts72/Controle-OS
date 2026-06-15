@@ -58,7 +58,9 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-soft);
   color: var(--color-text);
+  max-height: calc(100vh - 40px);
   max-width: 560px;
+  overflow: auto;
   padding: 24px;
   width: 100%;
 }
@@ -70,17 +72,20 @@
 .shipping-page__modal-content_completed {
   background: #dcfce7;
   border-color: #22c55e;
+  color: #0f172a;
 }
 
 .shipping-page__modal-content_already,
 .shipping-page__modal-content_invalid {
   background: #fee2e2;
   border-color: #dc2626;
+  color: #0f172a;
 }
 
 .shipping-page__modal-content_warning {
   background: #fef3c7;
   border-color: #f59e0b;
+  color: #0f172a;
 }
 
 .shipping-page__modal-content h2 {
@@ -112,5 +117,30 @@
 @media (max-width: 900px) {
   .shipping-page__status {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .shipping-page__modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .shipping-page__modal-content {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .shipping-page__modal-content h2 {
+    font-size: 24px;
+  }
+
+  .shipping-page__modal-main {
+    font-size: 30px;
+  }
+
+  .shipping-page__modal-actions,
+  .shipping-page__modal-actions .button {
+    width: 100%;
   }
 }

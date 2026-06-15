@@ -16,3 +16,11 @@
 .users-page__role {
   min-width: 160px;
 }
+
+@media (max-width: 760px) {
+  .users-page__actions,
+  .users-page__actions .button,
+  .users-page__role {
+    width: 100%;
+  }
+}

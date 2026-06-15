@@ -1,5 +1,5 @@
 import { query, transaction } from '../database/pool.js';
-import { createShipmentCode, buildLabelPdf } from '../services/labelService.js';
+import { createShipmentCode, buildLabelPdf, buildLabelBatchPdf } from '../services/labelService.js';
 import { logAudit } from '../services/auditService.js';
 import { httpError } from '../utils/httpError.js';
 
@@ -92,6 +92,77 @@ export async function downloadLabelPdf(req, res, next) {
     const pdf = await buildLabelPdf(volume);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="etiqueta-${volume.shipment_code}.pdf"`);
+    res.send(pdf);
+  } catch (error) { next(error); }
+}
+
+export async function downloadSoldItemLabelPdf(req, res, next) {
+  try {
+    const { volumes } = await transaction(async (client) => {
+      const current = await client.query(
+        `SELECT sv.*, si.product_name_snapshot, io.sale_number, io.customer_name, io.customer_phone, io.promised_date, io.status AS order_status
+         FROM shipment_volumes sv
+         JOIN sold_items si ON si.id = sv.sold_item_id
+         JOIN internal_orders io ON io.id = si.internal_order_id
+         WHERE sv.sold_item_id = $1
+           AND COALESCE(io.status, '') <> 'deleted'
+         ORDER BY sv.volume_number`,
+        [req.params.soldItemId],
+      );
+
+      if (!current.rows.length) throw httpError(404, 'Volumes não encontrados.');
+
+      const blocked = current.rows.find((volume) => !['released_for_label', 'label_generated'].includes(volume.label_status));
+      if (blocked) throw httpError(400, 'Todos os volumes precisam estar liberados para etiqueta.');
+
+      let generatedCount = 0;
+      let reprintedCount = 0;
+
+      for (const volume of current.rows) {
+        if (volume.shipment_code) {
+          reprintedCount += 1;
+          continue;
+        }
+
+        const code = await createShipmentCode(client);
+        await client.query(
+          `UPDATE shipment_volumes SET shipment_code = $1, label_status = 'label_generated', updated_at = NOW()
+           WHERE id = $2`,
+          [code, volume.id],
+        );
+        generatedCount += 1;
+      }
+
+      await logAudit(client, {
+        entityType: 'sold_item',
+        entityId: req.params.soldItemId,
+        action: 'generate_label_batch_pdf',
+        newValue: {
+          total_volumes: current.rows.length,
+          generated: generatedCount,
+          reprinted: reprintedCount,
+        },
+        userId: req.user.id,
+      });
+
+      const updated = await client.query(
+        `SELECT sv.*, si.product_name_snapshot, io.sale_number, io.customer_name, io.customer_phone, io.promised_date, io.status AS order_status
+         FROM shipment_volumes sv
+         JOIN sold_items si ON si.id = sv.sold_item_id
+         JOIN internal_orders io ON io.id = si.internal_order_id
+         WHERE sv.sold_item_id = $1
+           AND COALESCE(io.status, '') <> 'deleted'
+         ORDER BY sv.volume_number`,
+        [req.params.soldItemId],
+      );
+
+      return { volumes: updated.rows, generatedCount, reprintedCount };
+    });
+
+    const pdf = await buildLabelBatchPdf(volumes);
+    const saleNumber = volumes[0]?.sale_number || req.params.soldItemId;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="etiquetas-${saleNumber}-${req.params.soldItemId}.pdf"`);
     res.send(pdf);
   } catch (error) { next(error); }
 }

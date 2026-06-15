@@ -1,6 +1,8 @@
 import PDFDocument from 'pdfkit';
 import { generateQrCodeBuffer } from '../utils/qrCode.js';
 
+const LABEL_SIZE = [283.46, 141.73];
+
 export async function createShipmentCode(client) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -10,12 +12,7 @@ export async function createShipmentCode(client) {
   throw new Error('Não foi possível gerar código único.');
 }
 
-export async function buildLabelPdf(volume) {
-  const doc = new PDFDocument({ size: [283.46, 141.73], margin: 10 });
-  const chunks = [];
-  doc.on('data', (chunk) => chunks.push(chunk));
-  const finished = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
-
+async function drawLabelPage(doc, volume) {
   const qrBuffer = await generateQrCodeBuffer(volume.shipment_code);
 
   doc.fontSize(13).font('Helvetica-Bold').text(volume.customer_name, { width: 172, ellipsis: true });
@@ -28,7 +25,33 @@ export async function buildLabelPdf(volume) {
   doc.image(qrBuffer, 194, 12, { width: 76, height: 76 });
   doc.fontSize(10).font('Helvetica-Bold').text(volume.shipment_code, 190, 90, { align: 'center', width: 85 });
   doc.fontSize(10).text(`Volume ${volume.volume_number}/${volume.total_volumes}`, 190, 110, { align: 'center', width: 85 });
+}
+
+function createLabelDocument() {
+  const doc = new PDFDocument({ size: LABEL_SIZE, margin: 10 });
+  const chunks = [];
+  doc.on('data', (chunk) => chunks.push(chunk));
+  const finished = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
+
+  return { doc, finished };
+}
+
+export async function buildLabelPdf(volume) {
+  const { doc, finished } = createLabelDocument();
+  await drawLabelPage(doc, volume);
   doc.end();
 
+  return finished;
+}
+
+export async function buildLabelBatchPdf(volumes) {
+  const { doc, finished } = createLabelDocument();
+
+  for (const [index, volume] of volumes.entries()) {
+    if (index > 0) doc.addPage({ size: LABEL_SIZE, margin: 10 });
+    await drawLabelPage(doc, volume);
+  }
+
+  doc.end();
   return finished;
 }

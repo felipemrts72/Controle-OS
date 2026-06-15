@@ -1,4 +1,6 @@
 :root {
+  color-scheme: light;
+
   --color-primary: #2563eb;
   --color-primary-dark: #0f2f66;
   --color-primary-deep: #0b1f44;
@@ -18,4 +20,23 @@
   --shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.16);
 
   --radius-md: 12px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-primary-dark: #bfdbfe;
+  --color-bg: #0f172a;
+  --color-surface: #111827;
+  --color-white: #182235;
+
+  --color-text: #f8fafc;
+  --color-text-muted: #cbd5e1;
+
+  --color-border: #334155;
+  --color-border-strong: #475569;
+
+  --color-primary-soft: #1e3a8a;
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
+  --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.24);
 }

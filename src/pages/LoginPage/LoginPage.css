@@ -28,3 +28,13 @@
   color: #b91c1c;
   margin: 0;
 }
+
+@media (max-width: 520px) {
+  .login-page {
+    padding: 14px;
+  }
+
+  .login-page__form {
+    padding: 20px;
+  }
+}

@@ -84,3 +84,10 @@
     justify-content: flex-start;
   }
 }
+
+@media (max-width: 760px) {
+  .internal-orders-page__actions,
+  .internal-orders-page__actions .button {
+    width: 100%;
+  }
+}

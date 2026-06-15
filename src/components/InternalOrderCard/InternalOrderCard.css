@@ -23,4 +23,8 @@
     align-items: start;
     grid-template-columns: 1fr;
   }
+
+  .internal-order-card .button {
+    width: 100%;
+  }
 }

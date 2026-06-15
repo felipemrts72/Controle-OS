@@ -30,6 +30,7 @@
   padding: 0;
   text-align: left;
   text-transform: inherit;
+  overflow-wrap: anywhere;
 }
 
 .services-page__menu {
@@ -178,6 +179,11 @@
 }
 
 @media (max-width: 700px) {
+  .services-page__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .services-page__header h1 {
     font-size: 28px;
   }
@@ -190,5 +196,20 @@
 
   .services-page__modal-header {
     display: grid;
+  }
+
+  .services-page__modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .services-page__modal-content {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .services-page__modal-header .button,
+  .services-page__task .button {
+    width: 100%;
   }
 }

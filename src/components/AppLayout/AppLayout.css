@@ -2,6 +2,7 @@
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
+  min-width: 0;
 }
 
 .app-layout__main {
@@ -9,7 +10,14 @@
 }
 
 .app-layout__content {
-  padding: 22px;
+  min-width: 0;
+  padding: clamp(14px, 2vw, 28px);
+}
+
+@media (min-width: 1600px) {
+  .app-layout {
+    grid-template-columns: 280px 1fr;
+  }
 }
 
 @media (max-width: 900px) {
