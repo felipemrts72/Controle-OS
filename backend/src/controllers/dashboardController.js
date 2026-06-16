@@ -39,6 +39,7 @@ export async function tvPanel(_req, res, next) {
        JOIN internal_orders io ON io.id = si.internal_order_id
        WHERE s.is_active = TRUE
          AND it.status = 'pending'
+         AND it.is_released = TRUE
          AND COALESCE(io.status, '') <> 'deleted'
          AND (
            s.slug <> 'pintura'
@@ -49,6 +50,7 @@ export async function tvPanel(_req, res, next) {
              WHERE dependency.sold_item_id = it.sold_item_id
                AND dependency.id <> it.id
                AND dependency.status = 'pending'
+               AND dependency.is_released = TRUE
                AND dependency_sector.slug <> 'pintura'
            )
          )
@@ -81,6 +83,7 @@ export async function tvBySector(req, res, next) {
        WHERE s.slug = $1
          AND s.is_active = TRUE
          AND it.status = 'pending'
+         AND it.is_released = TRUE
          AND COALESCE(io.status, '') <> 'deleted'
          AND (
            s.slug <> 'pintura'
@@ -91,6 +94,7 @@ export async function tvBySector(req, res, next) {
              WHERE dependency.sold_item_id = it.sold_item_id
                AND dependency.id <> it.id
                AND dependency.status = 'pending'
+               AND dependency.is_released = TRUE
                AND dependency_sector.slug <> 'pintura'
            )
          )

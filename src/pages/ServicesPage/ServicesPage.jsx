@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getStoredUser } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './ServicesPage.css';
 
 function formatDate(date) {
@@ -53,6 +54,8 @@ export function ServicesPage() {
   const selectedOrder = selectedOrderId
     ? orders.find((order) => order.internal_order_id === selectedOrderId)
     : null;
+
+  useEscapeKey(Boolean(selectedOrder), () => setSelectedOrderId(null));
 
   async function loadServices() {
     const response = await api.get('/services');
@@ -107,6 +110,7 @@ export function ServicesPage() {
       setError('');
       await api.patch(`/tasks/${taskId}/ready`);
       await loadServices();
+      setSelectedOrderId(null);
       toast.success('Tarefa marcada como pronta.');
     } catch {
       setError('Não foi possível marcar a tarefa como pronta.');

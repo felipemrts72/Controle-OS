@@ -1,0 +1,146 @@
+.manufacturing-route-editor {
+  border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.manufacturing-route-editor__header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.manufacturing-route-editor__header h3,
+.manufacturing-route-editor__header p {
+  margin: 0;
+}
+
+.manufacturing-route-editor__header p,
+.manufacturing-route-editor__hint,
+.manufacturing-route-editor__dependency-list p {
+  color: var(--color-text-muted);
+}
+
+.manufacturing-route-editor__list {
+  display: grid;
+  gap: 10px;
+}
+
+.manufacturing-route-editor__card {
+  align-items: center;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1.2fr 0.5fr 1.2fr auto;
+  padding: 12px;
+}
+
+.manufacturing-route-editor__card span {
+  color: var(--color-text-muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.manufacturing-route-editor__card strong {
+  overflow-wrap: anywhere;
+}
+
+.manufacturing-route-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.manufacturing-route-editor__hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.manufacturing-route-editor__modal {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 25;
+}
+
+.manufacturing-route-editor__modal-content {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 16px;
+  max-height: calc(100vh - 40px);
+  max-width: 780px;
+  overflow: auto;
+  padding: 22px;
+  width: 100%;
+}
+
+.manufacturing-route-editor__modal-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.manufacturing-route-editor__modal-header h3 {
+  margin: 0;
+}
+
+.manufacturing-route-editor__dependencies {
+  display: grid;
+  gap: 8px;
+}
+
+.manufacturing-route-editor__dependency-list {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.manufacturing-route-editor__dependency {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .manufacturing-route-editor__card {
+    grid-template-columns: 1fr;
+  }
+
+  .manufacturing-route-editor__actions,
+  .manufacturing-route-editor__actions .button,
+  .manufacturing-route-editor__header .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .manufacturing-route-editor__modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .manufacturing-route-editor__modal-content {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+}

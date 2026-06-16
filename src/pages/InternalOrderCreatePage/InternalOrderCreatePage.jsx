@@ -13,8 +13,8 @@ export function InternalOrderCreatePage() {
       const response = await api.post('/internal-orders', payload);
       toast.success('Ordem de Serviço criada com sucesso.');
       navigate(`/os/${response.data.id}`);
-    } catch {
-      toast.error('Não foi possível criar a Ordem de Serviço.');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível criar a Ordem de Serviço.');
     }
   }
 

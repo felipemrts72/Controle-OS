@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api.js';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
@@ -34,8 +35,8 @@ export function InternalOrderDetailPage() {
         toast.success('Item liberado para etiqueta.');
         setModalVolumeIds(nextReadyVolumes.map((volume) => volume.id));
       }
-    } catch {
-      toast.error('Não foi possível marcar a tarefa como pronta.');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível marcar a tarefa como pronta.');
     }
   }
 
@@ -70,7 +71,10 @@ export function InternalOrderDetailPage() {
           <h1 className="page__title">Ordem de Serviço Interna {order.sale_number}</h1>
           <p className="internal-order-detail-page__subtitle">{order.customer_name} · {order.customer_phone || '-'}</p>
         </div>
-        <StatusBadge value={order.status} />
+        <div className="page__actions">
+          <Link className="button" to={`/os/${order.id}/editar`}>Editar OS</Link>
+          <StatusBadge value={order.status} />
+        </div>
       </div>
 
       <div className="panel internal-order-detail-page__summary">
@@ -84,6 +88,7 @@ export function InternalOrderDetailPage() {
           columns={[
             { key: 'product_name_snapshot', label: 'Produto' },
             { key: 'quantity', label: 'Quantidade' },
+            { key: 'is_spare_part', label: 'Contexto', render: (row) => row.is_spare_part ? 'Peça de reposição' : '-' },
             { key: 'total_volumes', label: 'Volumes totais' },
             { key: 'total_weight_kg', label: 'Peso total', render: (row) => `${Number(row.total_weight_kg).toLocaleString('pt-BR')} kg` },
             { key: 'default_volume_quantity', label: 'Volumes por unidade' },
@@ -101,7 +106,17 @@ export function InternalOrderDetailPage() {
             { key: 'task_name', label: 'Tarefa' },
             { key: 'sector_name', label: 'Setor' },
             { key: 'status', label: 'Status', render: (row) => <StatusBadge value={row.status} /> },
-            { key: 'actions', label: 'Ações', render: (row) => row.status === 'pending' ? <button className="button button_primary" type="button" onClick={() => markReady(row.id)}>Marcar pronto</button> : <button className="button" type="button" onClick={() => api.patch(`/tasks/${row.id}/pending`).then(load)}>Voltar pendente</button> },
+            {
+              key: 'waiting_dependencies',
+              label: 'Liberação',
+              render: (row) => {
+                const waiting = row.waiting_dependencies || [];
+                if (row.is_released || row.status === 'ready') return 'Liberada';
+                if (waiting.length === 1) return `Aguardando: ${waiting[0].name}`;
+                return `Aguardando ${waiting.length} etapas: ${waiting.map((dependency) => dependency.name).join(', ')}`;
+              },
+            },
+            { key: 'actions', label: 'Ações', render: (row) => row.status === 'pending' ? <button className="button button_primary" type="button" disabled={row.is_released === false} onClick={() => markReady(row.id)}>Marcar pronto</button> : <button className="button" type="button" onClick={() => api.patch(`/tasks/${row.id}/pending`).then(load)}>Voltar pendente</button> },
           ]}
           rows={order.tasks}
         />

@@ -14,6 +14,11 @@
   padding: clamp(14px, 2vw, 28px);
 }
 
+.app-layout__sidebar-toggle,
+.app-layout__backdrop {
+  display: none;
+}
+
 @media (min-width: 1600px) {
   .app-layout {
     grid-template-columns: 280px 1fr;
@@ -23,5 +28,37 @@
 @media (max-width: 900px) {
   .app-layout {
     grid-template-columns: 1fr;
+  }
+
+  .app-layout__sidebar-toggle {
+    align-items: center;
+    background: var(--color-primary-deep);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: #ffffff;
+    display: inline-flex;
+    height: 44px;
+    justify-content: center;
+    left: 14px;
+    position: fixed;
+    top: 8px;
+    width: 44px;
+    z-index: 18;
+  }
+
+  .app-layout__backdrop {
+    background: rgba(15, 23, 42, 0.45);
+    border: 0;
+    inset: 0;
+    position: fixed;
+    z-index: 16;
+  }
+
+  .app-layout_sidebar-open .app-layout__backdrop {
+    display: block;
+  }
+
+  .app-layout__main {
+    padding-top: 0;
   }
 }

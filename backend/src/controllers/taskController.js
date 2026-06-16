@@ -1,6 +1,7 @@
 import { query, transaction } from '../database/pool.js';
 import { logAudit } from '../services/auditService.js';
 import { refreshSoldItemStatus } from '../services/statusService.js';
+import { releaseDependentTasks } from '../services/manufacturingRouteService.js';
 import { httpError } from '../utils/httpError.js';
 
 export async function setTaskStatus(req, res, next) {
@@ -18,6 +19,11 @@ export async function setTaskStatus(req, res, next) {
       );
       const previousTask = previousResult.rows[0];
       if (!previousTask) throw httpError(404, 'Tarefa não encontrada.');
+      if (nextStatus === 'ready' && previousTask.is_released === false) {
+        throw httpError(400, 'Esta tarefa ainda está aguardando a conclusão de etapas anteriores.', {
+          code: 'TASK_NOT_RELEASED',
+        });
+      }
 
       const result = await client.query(
         `UPDATE internal_tasks
@@ -33,6 +39,7 @@ export async function setTaskStatus(req, res, next) {
         newValue: result.rows[0],
         userId: req.user.id,
       });
+      if (nextStatus === 'ready') await releaseDependentTasks(client, req.params.id);
       await refreshSoldItemStatus(client, result.rows[0].sold_item_id);
       return result.rows[0];
     });
@@ -50,6 +57,7 @@ export async function listTasksBySector(req, res, next) {
        JOIN internal_orders io ON io.id = si.internal_order_id
        WHERE it.sector_id = $1
         AND it.status = 'pending'
+        AND it.is_released = TRUE
         AND COALESCE(io.status, '') <> 'deleted'
        ORDER BY io.promised_date ASC`,
       [req.params.sectorId],
@@ -82,6 +90,7 @@ export async function pinTask(req, res, next) {
            WHERE internal_tasks.sector_id = $1
              AND internal_tasks.is_pinned = TRUE
              AND internal_tasks.status = 'pending'
+             AND internal_tasks.is_released = TRUE
              AND COALESCE(io.status, '') <> 'deleted'`,
           [currentTask.sector_id],
         );

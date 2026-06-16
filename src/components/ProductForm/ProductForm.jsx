@@ -2,18 +2,21 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api.js';
 import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import { ProductComponentsEditor } from '../ProductComponentsEditor/ProductComponentsEditor.jsx';
+import { ProductManufacturingRouteEditor } from '../ProductManufacturingRouteEditor/ProductManufacturingRouteEditor.jsx';
 import './ProductForm.css';
 
 export function ProductForm({ initialProduct, onSubmit }) {
   const toast = useToast();
   const [sectors, setSectors] = useState([]);
   const [materialProducts, setMaterialProducts] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
   const [form, setForm] = useState(initialProduct || { name: '', type: 'manufactured', default_volume_quantity: 1, default_total_weight_kg: 1, is_active: true, components: [] });
   const shippingSector = sectors.find((sector) => sector.slug === 'expedicao');
 
   useEffect(() => {
     api.get('/sectors').then((response) => setSectors(response.data.filter((sector) => sector.is_active)));
     api.get('/products/search?type=material_prima').then((response) => setMaterialProducts(response.data));
+    api.get('/products/types').then((response) => setProductTypes(response.data.filter((type) => type.is_active)));
   }, []);
 
   useEffect(() => {
@@ -50,9 +53,7 @@ export function ProductForm({ initialProduct, onSubmit }) {
         <label className="field">
           <span className="field__label">Tipo</span>
           <select className="field__input" name="type" value={form.type} onChange={change}>
-            <option value="manufactured">Fabricado</option>
-            <option value="resale">Revenda</option>
-            <option value="material_prima">Matéria-prima</option>
+            {productTypes.map((type) => <option key={type.code} value={type.code}>{type.name}</option>)}
           </select>
         </label>
         <label className="field">
@@ -78,9 +79,16 @@ export function ProductForm({ initialProduct, onSubmit }) {
         sectors={sectors}
         onChange={(components) => {
           setForm((current) => ({ ...current, components }));
-          toast.success('Componente atualizado.');
         }}
       />
+      <ProductManufacturingRouteEditor
+        steps={form.manufacturing_steps || []}
+        sectors={sectors}
+        onChange={(manufacturingSteps) => setForm((current) => ({ ...current, manufacturing_steps: manufacturingSteps }))}
+      />
+      {form.type === 'manufactured' && !(form.manufacturing_steps || []).length && (
+        <p className="product-form__hint">Este produto ainda utiliza o processo antigo de geração de tarefas. Cadastre um roteiro de fabricação para utilizar dependências.</p>
+      )}
       <button className="button button_primary product-form__button" type="submit">Salvar produto</button>
     </form>
   );

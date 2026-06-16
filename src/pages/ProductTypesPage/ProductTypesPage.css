@@ -1,0 +1,20 @@
+.product-types-page {
+  max-width: 1120px;
+}
+
+.product-types-page__form {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 220px minmax(260px, 1fr) auto;
+}
+
+@media (max-width: 760px) {
+  .product-types-page__form {
+    grid-template-columns: 1fr;
+  }
+
+  .product-types-page__form .button {
+    width: 100%;
+  }
+}

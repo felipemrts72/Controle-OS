@@ -36,7 +36,7 @@
 @media (max-width: 760px) {
   .header {
     min-height: 58px;
-    padding: 8px 14px;
+    padding: 8px 14px 8px 66px;
   }
 
   .header strong,

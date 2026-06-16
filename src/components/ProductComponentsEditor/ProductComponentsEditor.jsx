@@ -1,26 +1,50 @@
+import { useMemo, useState } from 'react';
 import './ProductComponentsEditor.css';
 
 export function ProductComponentsEditor({ components, materialProducts = [], sectors, onChange }) {
+  const [search, setSearch] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [message, setMessage] = useState('');
+  const [selectedMaterial, setSelectedMaterial] = useState(null);
+
+  const results = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    if (normalizedSearch.length < 3) return [];
+    return materialProducts.filter((product) => product.name.toLowerCase().includes(normalizedSearch)).slice(0, 12);
+  }, [materialProducts, search]);
+
   function update(index, field, value) {
     const next = components.map((component, currentIndex) => currentIndex === index ? { ...component, [field]: value } : component);
     onChange(next);
   }
 
-  function add() {
-    onChange([...components, { material_product_id: '', component_name: '', sector_id: '', quantity: 1, is_required: true }]);
-  }
-
-  function updateMaterial(index, materialProductId) {
-    const materialProduct = materialProducts.find((product) => product.id === materialProductId);
-    const next = components.map((component, currentIndex) => {
-      if (currentIndex !== index) return component;
-      return {
-        ...component,
-        material_product_id: materialProductId,
-        component_name: component.component_name || materialProduct?.name || '',
-      };
-    });
-    onChange(next);
+  function addSelected() {
+    if (!selectedMaterial) {
+      setMessage('Selecione uma matéria-prima antes de adicionar.');
+      return;
+    }
+    if (!selectedMaterial.sector_id) {
+      setMessage('A matéria-prima selecionada não possui setor responsável cadastrado. Edite o produto antes de adicioná-lo como componente.');
+      return;
+    }
+    if (Number(quantity) < 1) {
+      setMessage('Informe uma quantidade maior que zero.');
+      return;
+    }
+    onChange([
+      ...components,
+      {
+        material_product_id: selectedMaterial.id,
+        component_name: selectedMaterial.name,
+        sector_id: selectedMaterial.sector_id,
+        quantity: Number(quantity),
+        is_required: true,
+      },
+    ]);
+    setSearch('');
+    setQuantity(1);
+    setSelectedMaterial(null);
+    setMessage('');
   }
 
   function remove(index) {
@@ -31,16 +55,48 @@ export function ProductComponentsEditor({ components, materialProducts = [], sec
     <div className="product-components-editor">
       <div className="product-components-editor__header">
         <h3>Componentes</h3>
-        <button className="button" type="button" onClick={add}>Adicionar componente</button>
       </div>
+      <div className="product-components-editor__search">
+        <div className="field">
+          <span className="field__label">Buscar matéria-prima</span>
+          <input className="field__input" value={search} onChange={(event) => {
+            setSearch(event.target.value);
+            setSelectedMaterial(null);
+            setMessage('');
+          }} placeholder="Digite ao menos 3 caracteres" />
+          {search.trim().length >= 3 && (
+            <div className="product-components-editor__results">
+              {results.length === 0 && <p>Nenhuma matéria-prima encontrada.</p>}
+              {results.map((product) => (
+                <button
+                  className={`product-components-editor__result ${selectedMaterial?.id === product.id ? 'product-components-editor__result_active' : ''}`}
+                  key={product.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedMaterial(product);
+                    setSearch(product.name);
+                    setMessage('');
+                  }}
+                >
+                  <strong>{product.name}</strong>
+                  <span>{product.sector_name || 'Sem setor responsável'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <label className="field">
+          <span className="field__label">Quantidade</span>
+          <input className="field__input" type="number" min="1" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} />
+        </label>
+        <button className="button" type="button" onClick={addSelected}>Adicionar componente</button>
+      </div>
+      {message && <p className="product-components-editor__message">{message}</p>}
       {components.map((component, index) => (
         <div className="product-components-editor__row" key={index}>
-          <select className="field__input" value={component.material_product_id || ''} onChange={(event) => updateMaterial(index, event.target.value)}>
-            <option value="">Matéria-prima vinculada</option>
-            {materialProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
-          </select>
-          <input className="field__input" placeholder="Nome do componente" value={component.component_name} onChange={(event) => update(index, 'component_name', event.target.value)} required />
-          <select className="field__input" value={component.sector_id} onChange={(event) => update(index, 'sector_id', event.target.value)} required>
+          <strong>{component.component_name}</strong>
+          <span>{sectors.find((sector) => sector.id === component.sector_id)?.name || component.sector_name || 'Sem setor'}</span>
+          <select className="field__input" value={component.sector_id} onChange={(event) => update(index, 'sector_id', event.target.value)} required disabled={Boolean(component.material_product_id)}>
             <option value="">Setor responsável</option>
             {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
           </select>

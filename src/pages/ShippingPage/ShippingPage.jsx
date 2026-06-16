@@ -4,6 +4,7 @@ import { ShippingLookup } from '../../components/ShippingLookup/ShippingLookup.j
 import { ShippingResultCard } from '../../components/ShippingResultCard/ShippingResultCard.jsx';
 import { QrScannerBox } from '../../components/QrScannerBox/QrScannerBox.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './ShippingPage.css';
 
 function formatDate(date) {
@@ -45,6 +46,11 @@ export function ShippingPage() {
   const lookupRef = useRef(null);
   const autoCloseTimerRef = useRef(null);
   const lastReadRef = useRef({ code: '', readAt: 0 });
+
+  useEscapeKey(Boolean(feedback), () => {
+    setFeedback(null);
+    setPendingSaleSwitch(null);
+  });
 
   function getSummaryFromVolume(volume) {
     if (!volume) return null;

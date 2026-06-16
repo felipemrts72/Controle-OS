@@ -12,8 +12,11 @@ export function ToastProvider({ children }) {
 
   const addToast = useCallback((type, message) => {
     const id = `${Date.now()}-${Math.random()}`;
-    setToasts((current) => [...current, { id, type, message }]);
-    window.setTimeout(() => removeToast(id), 3800);
+    setToasts((current) => {
+      const withoutDuplicate = current.filter((toast) => toast.message !== message || toast.type !== type);
+      return [...withoutDuplicate, { id, type, message }];
+    });
+    window.setTimeout(() => removeToast(id), 7000);
   }, [removeToast]);
 
   const value = useMemo(() => ({

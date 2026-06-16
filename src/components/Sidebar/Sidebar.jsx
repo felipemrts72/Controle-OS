@@ -19,16 +19,16 @@ const links = [
   { to: '/usuarios', label: 'Usuários', icon: Users, permission: 'users' },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }) {
   const user = getStoredUser();
   const visibleLinks = links.filter((link) => canAccessPermission(user, link.permission));
 
   return (
     <aside className="sidebar">
-      <Link to={getDefaultRoute(user)} className="sidebar__brand">Controle Interno</Link>
+      <Link to={getDefaultRoute(user)} className="sidebar__brand" onClick={onNavigate}>Controle Interno</Link>
       <nav className="sidebar__nav">
         {visibleLinks.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} className={({ isActive }) => `sidebar__link ${isActive ? 'sidebar__link_active' : ''}`}>
+          <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `sidebar__link ${isActive ? 'sidebar__link_active' : ''}`}>
             <Icon size={18} />
             <span>{label}</span>
           </NavLink>

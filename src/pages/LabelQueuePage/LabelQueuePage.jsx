@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api.js';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './LabelQueuePage.css';
 
 function groupVolumes(volumes) {
@@ -45,6 +46,11 @@ export function LabelQueuePage() {
   const groups = groupVolumes(volumes);
   const confirmGroup = groups.find((group) => group.sold_item_id === confirmGroupId);
   const individualGroup = groups.find((group) => group.sold_item_id === individualGroupId);
+
+  useEscapeKey(Boolean(confirmGroup || individualGroup), () => {
+    setConfirmGroupId(null);
+    setIndividualGroupId(null);
+  });
 
   async function load() {
     const response = await api.get('/labels/queue');

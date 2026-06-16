@@ -69,6 +69,24 @@
   font-size: 18px;
 }
 
+.sector-tv-page__header-actions {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.sector-tv-page__theme-button {
+  align-items: center;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  color: #f8fafc;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
 .sector-tv-page__cards {
   display: grid;
   gap: 20px;
@@ -140,6 +158,31 @@
   margin: 0;
 }
 
+:root[data-theme="light"] .sector-tv-page {
+  background: #eef4fb;
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .sector-tv-page__menu,
+:root[data-theme="light"] .sector-tv-page__card,
+:root[data-theme="light"] .sector-tv-page__theme-button {
+  background: #ffffff;
+  border-color: #d6e0ee;
+  color: #0f2f66;
+}
+
+:root[data-theme="light"] .sector-tv-page__menu button,
+:root[data-theme="light"] .sector-tv-page__meta,
+:root[data-theme="light"] .sector-tv-page__header span,
+:root[data-theme="light"] .sector-tv-page__empty {
+  color: #475569;
+}
+
+:root[data-theme="light"] .sector-tv-page__menu button:hover,
+:root[data-theme="light"] .sector-tv-page__task-title {
+  color: #0f2f66;
+}
+
 @media (min-width: 1800px) {
   .sector-tv-page__cards {
     grid-template-columns: repeat(3, 1fr);
@@ -159,6 +202,11 @@
 
   .sector-tv-page__header {
     align-items: start;
+    flex-direction: column;
+  }
+
+  .sector-tv-page__header-actions {
+    align-items: flex-start;
     flex-direction: column;
   }
 

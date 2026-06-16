@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { query, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from '../services/auditService.js';
+import { getProductManufacturingSteps, saveProductManufacturingSteps } from '../services/manufacturingRouteService.js';
 
 export async function listUsers(_req, res, next) {
   try {
@@ -121,9 +122,19 @@ export async function deactivateSector(req, res, next) {
 export async function listProducts(req, res, next) {
   try {
     const result = await query(
-      `SELECT p.*, s.name AS sector_name
+      `SELECT p.*,
+        s.name AS sector_name,
+        pt.id AS product_type_id,
+        pt.name AS type_name,
+        pt.is_system AS type_is_system,
+        CASE
+          WHEN pt.id IS NULL THEN NULL
+          ELSE json_build_object('id', pt.id, 'code', pt.code, 'name', pt.name, 'is_system', pt.is_system, 'is_active', pt.is_active)
+        END AS product_type
        FROM products p
        LEFT JOIN sectors s ON s.id = p.sector_id
+       LEFT JOIN product_types pt ON pt.code = p.type
+       WHERE COALESCE(p.is_active, TRUE) = TRUE
        ORDER BY p.name`,
     );
     res.json(result.rows);
@@ -132,25 +143,93 @@ export async function listProducts(req, res, next) {
 
 export async function searchProducts(req, res, next) {
   try {
-    const types = String(req.query.type || 'manufactured,resale').split(',');
+    const includeSpareParts = String(req.query.include_spare_parts || 'false') === 'true';
+    const search = String(req.query.q || '').trim();
+    const explicitTypes = req.query.type ? String(req.query.type).split(',').filter(Boolean) : null;
+    const params = [];
+    const filters = ['p.is_active = TRUE'];
+
+    if (explicitTypes) {
+      params.push(explicitTypes);
+      filters.push(`p.type = ANY($${params.length})`);
+    } else if (!includeSpareParts) {
+      filters.push("p.type <> 'material_prima'");
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      filters.push(`p.name ILIKE $${params.length}`);
+    }
+
     const result = await query(
-      `SELECT p.*, s.name AS sector_name
+      `SELECT p.*,
+        s.name AS sector_name,
+        pt.id AS product_type_id,
+        pt.name AS type_name,
+        CASE
+          WHEN pt.id IS NULL THEN NULL
+          ELSE json_build_object('id', pt.id, 'code', pt.code, 'name', pt.name, 'is_system', pt.is_system, 'is_active', pt.is_active)
+        END AS product_type
        FROM products p
        LEFT JOIN sectors s ON s.id = p.sector_id
-       WHERE p.type = ANY($1) AND p.is_active = TRUE
-       ORDER BY p.name`,
-      [types],
+       LEFT JOIN product_types pt ON pt.code = p.type
+       WHERE ${filters.join(' AND ')}
+       ORDER BY p.name
+       LIMIT 40`,
+      params,
     );
     res.json(result.rows);
+  } catch (error) { next(error); }
+}
+
+export async function listProductTypes(_req, res, next) {
+  try {
+    const result = await query('SELECT * FROM product_types ORDER BY is_system DESC, name ASC');
+    res.json(result.rows);
+  } catch (error) { next(error); }
+}
+
+export async function saveProductType(req, res, next) {
+  try {
+    const name = String(req.body.name || '').trim();
+    const code = String(req.body.code || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!name) throw httpError(400, 'Informe o nome do tipo de produto.', { code: 'PRODUCT_TYPE_NAME_REQUIRED', field: 'name' });
+    if (!req.params.id && !code) throw httpError(400, 'Informe o código do tipo de produto.', { code: 'PRODUCT_TYPE_CODE_REQUIRED', field: 'code' });
+
+    const result = req.params.id
+      ? await query(
+        `UPDATE product_types
+         SET name = $1, is_active = $2, updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [name, req.body.is_active ?? true, req.params.id],
+      )
+      : await query(
+        `INSERT INTO product_types (code, name, is_system, is_active)
+         VALUES ($1, $2, FALSE, TRUE)
+         RETURNING *`,
+        [code, name],
+      );
+
+    if (!result.rows[0]) throw httpError(404, 'Tipo de produto não encontrado.', { code: 'PRODUCT_TYPE_NOT_FOUND' });
+    res.status(req.params.id ? 200 : 201).json(result.rows[0]);
   } catch (error) { next(error); }
 }
 
 export async function getProduct(req, res, next) {
   try {
     const product = await query(
-      `SELECT p.*, s.name AS sector_name
+      `SELECT p.*,
+        s.name AS sector_name,
+        pt.id AS product_type_id,
+        pt.name AS type_name,
+        CASE
+          WHEN pt.id IS NULL THEN NULL
+          ELSE json_build_object('id', pt.id, 'code', pt.code, 'name', pt.name, 'is_system', pt.is_system, 'is_active', pt.is_active)
+        END AS product_type
        FROM products p
        LEFT JOIN sectors s ON s.id = p.sector_id
+       LEFT JOIN product_types pt ON pt.code = p.type
        WHERE p.id = $1`,
       [req.params.id],
     );
@@ -162,13 +241,17 @@ export async function getProduct(req, res, next) {
        WHERE product_id = $1 ORDER BY pc.created_at`,
       [req.params.id],
     );
-    res.json({ ...product.rows[0], components: components.rows });
+    const manufacturingSteps = await getProductManufacturingSteps({ query }, req.params.id);
+    res.json({ ...product.rows[0], components: components.rows, manufacturing_steps: manufacturingSteps });
   } catch (error) { next(error); }
 }
 
 export async function saveProduct(req, res, next) {
   try {
     const result = await transaction(async (client) => {
+      const typeResult = await client.query('SELECT * FROM product_types WHERE code = $1 AND is_active = TRUE', [req.body.type]);
+      if (!typeResult.rows[0]) throw httpError(400, 'Tipo de produto inválido ou inativo.', { code: 'PRODUCT_TYPE_NOT_FOUND', field: 'type' });
+
       let sectorId = req.body.sector_id || null;
       if (req.body.type === 'resale') {
         const shippingSector = await client.query("SELECT id FROM sectors WHERE slug = 'expedicao' AND is_active = TRUE");
@@ -187,8 +270,14 @@ export async function saveProduct(req, res, next) {
         const sector = await client.query('SELECT id FROM sectors WHERE id = $1 AND is_active = TRUE', [component.sector_id]);
         if (!sector.rows[0]) throw httpError(400, 'Setor responsável inválido.');
         if (component.material_product_id) {
-          const material = await client.query('SELECT id FROM products WHERE id = $1 AND type = $2 AND is_active = TRUE', [component.material_product_id, 'material_prima']);
+          const material = await client.query('SELECT id, sector_id FROM products WHERE id = $1 AND type = $2 AND is_active = TRUE', [component.material_product_id, 'material_prima']);
           if (!material.rows[0]) throw httpError(400, 'Produto matéria-prima inválido.');
+          if (!material.rows[0].sector_id) {
+            throw httpError(400, 'A matéria-prima selecionada não possui setor responsável cadastrado. Edite o produto antes de adicioná-lo como componente.', {
+              code: 'MATERIAL_WITHOUT_SECTOR',
+              field: 'material_product_id',
+            });
+          }
         }
       }
 
@@ -212,9 +301,38 @@ export async function saveProduct(req, res, next) {
           [product.rows[0].id, component.material_product_id || null, component.component_name, component.sector_id, component.quantity || 1, component.is_required ?? true],
         );
       }
+      await saveProductManufacturingSteps(client, product.rows[0].id, req.body.manufacturing_steps || []);
       await logAudit(client, { entityType: 'product', entityId: product.rows[0].id, action: req.params.id ? 'update' : 'create', newValue: req.body, userId: req.user?.id });
       return product.rows[0];
     });
     res.status(req.params.id ? 200 : 201).json(result);
+  } catch (error) { next(error); }
+}
+
+export async function deleteProduct(req, res, next) {
+  try {
+    await transaction(async (client) => {
+      const current = await client.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+      if (!current.rows[0]) throw httpError(404, 'Produto não encontrado.');
+      if (current.rows[0].is_active === false) return;
+
+      const updated = await client.query(
+        `UPDATE products
+         SET is_active = FALSE, updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [req.params.id],
+      );
+
+      await logAudit(client, {
+        entityType: 'product',
+        entityId: req.params.id,
+        action: 'soft_delete',
+        previousValue: current.rows[0],
+        newValue: updated.rows[0],
+        userId: req.user.id,
+      });
+    });
+    res.status(204).send();
   } catch (error) { next(error); }
 }

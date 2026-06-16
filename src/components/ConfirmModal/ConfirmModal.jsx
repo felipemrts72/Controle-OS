@@ -1,6 +1,9 @@
+import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './ConfirmModal.css';
 
 export function ConfirmModal({ open, title, children, onCancel, actions }) {
+  useEscapeKey(open, onCancel);
+
   if (!open) return null;
   return (
     <div className="confirm-modal">

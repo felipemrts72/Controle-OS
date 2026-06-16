@@ -6,8 +6,10 @@ import { RegisterPage } from '../pages/RegisterPage/RegisterPage.jsx';
 import { DashboardPage } from '../pages/DashboardPage/DashboardPage.jsx';
 import { InternalOrdersPage } from '../pages/InternalOrdersPage/InternalOrdersPage.jsx';
 import { InternalOrderCreatePage } from '../pages/InternalOrderCreatePage/InternalOrderCreatePage.jsx';
+import { InternalOrderEditPage } from '../pages/InternalOrderEditPage/InternalOrderEditPage.jsx';
 import { InternalOrderDetailPage } from '../pages/InternalOrderDetailPage/InternalOrderDetailPage.jsx';
 import { ProductsPage } from '../pages/ProductsPage/ProductsPage.jsx';
+import { ProductTypesPage } from '../pages/ProductTypesPage/ProductTypesPage.jsx';
 import { ProductFormPage } from '../pages/ProductFormPage/ProductFormPage.jsx';
 import { SectorsPage } from '../pages/SectorsPage/SectorsPage.jsx';
 import { SectorTvPage } from '../pages/SectorTvPage/SectorTvPage.jsx';
@@ -48,8 +50,10 @@ export function AppRoutes() {
         <Route path="/dashboard" element={<RoleRoute permission="dashboard"><DashboardPage /></RoleRoute>} />
         <Route path="/os" element={<RoleRoute permission="orders"><InternalOrdersPage /></RoleRoute>} />
         <Route path="/os/nova" element={<RoleRoute permission="order-create"><InternalOrderCreatePage /></RoleRoute>} />
+        <Route path="/os/:id/editar" element={<RoleRoute permission="orders"><InternalOrderEditPage /></RoleRoute>} />
         <Route path="/os/:id" element={<RoleRoute permission="orders"><InternalOrderDetailPage /></RoleRoute>} />
         <Route path="/produtos" element={<RoleRoute permission="products"><ProductsPage /></RoleRoute>} />
+        <Route path="/produtos/tipos" element={<RoleRoute permission="products"><ProductTypesPage /></RoleRoute>} />
         <Route path="/produtos/novo" element={<RoleRoute permission="products"><ProductFormPage /></RoleRoute>} />
         <Route path="/produtos/:id" element={<RoleRoute permission="products"><ProductFormPage /></RoleRoute>} />
         <Route path="/setores" element={<RoleRoute permission="sectors"><SectorsPage /></RoleRoute>} />

@@ -1,3 +1,9 @@
 .products-page {
   max-width: 1120px;
 }
+
+.products-page__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

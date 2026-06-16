@@ -2,7 +2,87 @@ import { query, transaction } from '../database/pool.js';
 import { createInternalOrder } from '../services/orderService.js';
 import { logAudit } from '../services/auditService.js';
 import { refreshInternalOrderStatus } from '../services/statusService.js';
+import { copyProductRouteToSoldItemTasks } from '../services/manufacturingRouteService.js';
 import { httpError } from '../utils/httpError.js';
+
+async function assertSoldItemEditable(client, soldItemId) {
+  const progress = await client.query(
+    `SELECT
+      (SELECT COUNT(*)::int FROM internal_tasks WHERE sold_item_id = $1 AND status = 'ready') AS ready_tasks,
+      (SELECT COUNT(*)::int FROM shipment_volumes WHERE sold_item_id = $1 AND label_status IN ('label_generated', 'ready_without_label', 'shipped')) AS advanced_volumes
+     `,
+    [soldItemId],
+  );
+  if (progress.rows[0].ready_tasks > 0 || progress.rows[0].advanced_volumes > 0) {
+    throw httpError(400, 'Este item já possui produção, etiquetas ou expedições registradas. A quantidade não pode ser alterada sem cancelar o andamento existente.', {
+      code: 'SOLD_ITEM_HAS_PROGRESS',
+    });
+  }
+}
+
+async function createSoldItemRecords(client, orderId, item) {
+  if (!item.product_id) throw httpError(400, 'Informe o produto do item.', { code: 'PRODUCT_REQUIRED', field: 'product_id' });
+  if (Number(item.quantity) < 1) throw httpError(400, 'A quantidade deve ser maior que zero.', { code: 'INVALID_QUANTITY', field: 'quantity' });
+
+  const productResult = await client.query('SELECT * FROM products WHERE id = $1 AND is_active = TRUE', [item.product_id]);
+  const product = productResult.rows[0];
+  if (!product) throw httpError(404, 'Produto não encontrado ou inativo.', { code: 'PRODUCT_NOT_FOUND', field: 'product_id' });
+  if (product.type === 'material_prima' && !item.is_spare_part) {
+    throw httpError(400, 'Matéria-prima só pode ser lançada na OS como peça de reposição.', {
+      code: 'MATERIAL_REQUIRES_SPARE_PART',
+      field: 'is_spare_part',
+    });
+  }
+
+  const soldItemResult = await client.query(
+    `INSERT INTO sold_items (internal_order_id, product_id, product_name_snapshot, quantity, is_spare_part)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [orderId, product.id, product.name, item.quantity || 1, item.is_spare_part === true],
+  );
+  const soldItem = soldItemResult.rows[0];
+  let hasProductionTasks = await copyProductRouteToSoldItemTasks(client, {
+    productId: product.id,
+    soldItemId: soldItem.id,
+    soldQuantity: item.quantity || 1,
+  });
+
+  if (!hasProductionTasks && product.type === 'manufactured') {
+    const components = await client.query('SELECT * FROM product_components WHERE product_id = $1', [product.id]);
+    if (components.rows.length) {
+      for (const component of components.rows) {
+        await client.query(
+          `INSERT INTO internal_tasks (sold_item_id, sector_id, task_name, quantity)
+           VALUES ($1, $2, $3, $4)`,
+          [soldItem.id, component.sector_id, component.component_name, component.quantity || 1],
+        );
+      }
+      hasProductionTasks = true;
+    } else {
+      if (!product.sector_id) throw httpError(400, 'Produto fabricado sem setor responsável.', { code: 'PRODUCT_WITHOUT_SECTOR' });
+      await client.query(
+        `INSERT INTO internal_tasks (sold_item_id, sector_id, task_name, quantity)
+         VALUES ($1, $2, $3, $4)`,
+        [soldItem.id, product.sector_id, product.name, item.quantity || 1],
+      );
+      hasProductionTasks = true;
+    }
+  }
+
+  const itemQuantity = Number(item.quantity || 1);
+  const volumesPerUnit = Number(product.default_volume_quantity);
+  const totalVolumes = itemQuantity * volumesPerUnit;
+  const perVolumeWeight = Number(product.default_total_weight_kg) / volumesPerUnit;
+  const labelStatus = hasProductionTasks ? 'waiting_tasks' : 'released_for_label';
+  for (let index = 1; index <= totalVolumes; index += 1) {
+    await client.query(
+      `INSERT INTO shipment_volumes (sold_item_id, volume_number, total_volumes, weight_kg, description, label_status)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [soldItem.id, index, totalVolumes, perVolumeWeight, item.description || product.name, labelStatus],
+    );
+  }
+  return soldItem;
+}
 
 export async function listInternalOrders(_req, res, next) {
   try {
@@ -72,8 +152,18 @@ export async function getInternalOrder(req, res, next) {
     );
     const itemIds = items.rows.map((item) => item.id);
     const tasks = itemIds.length ? await query(
-      `SELECT it.*, s.name AS sector_name FROM internal_tasks it
+      `SELECT it.*,
+        s.name AS sector_name,
+        COALESCE(waiting.waiting_dependencies, '[]'::json) AS waiting_dependencies
+       FROM internal_tasks it
        LEFT JOIN sectors s ON s.id = it.sector_id
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('id', dependency.id, 'name', dependency.task_name, 'status', dependency.status) ORDER BY dependency.created_at) AS waiting_dependencies
+         FROM internal_task_dependencies itd
+         JOIN internal_tasks dependency ON dependency.id = itd.depends_on_task_id
+         WHERE itd.task_id = it.id
+           AND dependency.status <> 'ready'
+       ) waiting ON TRUE
        WHERE it.sold_item_id = ANY($1) ORDER BY it.created_at`,
       [itemIds],
     ) : { rows: [] };
@@ -94,11 +184,49 @@ export async function getInternalOrder(req, res, next) {
 export async function updateInternalOrder(req, res, next) {
   try {
     const result = await transaction(async (client) => {
+      const current = await client.query('SELECT * FROM internal_orders WHERE id = $1', [req.params.id]);
+      if (!current.rows[0]) throw httpError(404, 'OS não encontrada.');
+      const duplicate = await client.query('SELECT id FROM internal_orders WHERE sale_number = $1 AND id <> $2', [req.body.sale_number, req.params.id]);
+      if (duplicate.rows[0]) {
+        throw httpError(409, 'Já existe uma OS cadastrada com este número de venda. Verifique o número informado ou utilize outro número.', {
+          code: 'SALE_NUMBER_ALREADY_EXISTS',
+          field: 'sale_number',
+        });
+      }
       const order = await client.query(
         `UPDATE internal_orders SET sale_number = $1, customer_name = $2, customer_phone = $3, promised_date = $4, updated_at = NOW()
          WHERE id = $5 RETURNING *`,
         [req.body.sale_number, req.body.customer_name, req.body.customer_phone, req.body.promised_date, req.params.id],
       );
+      if (Array.isArray(req.body.items)) {
+        const currentItems = await client.query('SELECT * FROM sold_items WHERE internal_order_id = $1', [req.params.id]);
+        const nextIds = new Set(req.body.items.filter((item) => item.id).map((item) => item.id));
+
+        for (const currentItem of currentItems.rows) {
+          if (!nextIds.has(currentItem.id)) {
+            await assertSoldItemEditable(client, currentItem.id);
+            await client.query('DELETE FROM sold_items WHERE id = $1', [currentItem.id]);
+          }
+        }
+
+        for (const item of req.body.items) {
+          if (!item.id) {
+            await createSoldItemRecords(client, req.params.id, item);
+            continue;
+          }
+          const previous = currentItems.rows.find((currentItem) => currentItem.id === item.id);
+          if (!previous) throw httpError(404, 'Item da OS não encontrado.', { code: 'SOLD_ITEM_NOT_FOUND' });
+          const changedOperationalData = Number(previous.quantity) !== Number(item.quantity) || previous.product_id !== item.product_id;
+          if (changedOperationalData) {
+            await assertSoldItemEditable(client, item.id);
+            await client.query('DELETE FROM sold_items WHERE id = $1', [item.id]);
+            await createSoldItemRecords(client, req.params.id, item);
+          } else if (previous.is_spare_part !== (item.is_spare_part === true)) {
+            await assertSoldItemEditable(client, item.id);
+            await client.query('UPDATE sold_items SET is_spare_part = $1, updated_at = NOW() WHERE id = $2', [item.is_spare_part === true, item.id]);
+          }
+        }
+      }
       for (const volume of req.body.volumes || []) {
         if (volume.id) {
           await client.query(
@@ -125,6 +253,14 @@ export async function updateInternalOrder(req, res, next) {
         );
       }
       await refreshInternalOrderStatus(client, req.params.id);
+      await logAudit(client, {
+        entityType: 'internal_order',
+        entityId: req.params.id,
+        action: 'update',
+        previousValue: current.rows[0],
+        newValue: req.body,
+        userId: req.user.id,
+      });
       return order.rows[0];
     });
     res.json(result);

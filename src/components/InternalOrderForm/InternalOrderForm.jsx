@@ -4,16 +4,34 @@ import { api } from '../../services/api.js';
 import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import './InternalOrderForm.css';
 
-export function InternalOrderForm({ onSubmit }) {
+export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar Ordem de Serviço Interna' }) {
   const toast = useToast();
-  const [form, setForm] = useState({ sale_number: '', customer_name: '', customer_phone: '', promised_date: '' });
+  const [form, setForm] = useState(() => initialOrder ? {
+    sale_number: initialOrder.sale_number || '',
+    customer_name: initialOrder.customer_name || '',
+    customer_phone: initialOrder.customer_phone || '',
+    promised_date: initialOrder.promised_date?.slice(0, 10) || '',
+  } : { sale_number: '', customer_name: '', customer_phone: '', promised_date: '' });
   const [itemForm, setItemForm] = useState({ quantity: 1 });
   const [productSearch, setProductSearch] = useState('');
   const [productResults, setProductResults] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [includeSpareParts, setIncludeSpareParts] = useState(false);
   const [highlightedProductId, setHighlightedProductId] = useState('');
   const [hasSearchedProducts, setHasSearchedProducts] = useState(false);
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() => (initialOrder?.items || []).map((item) => ({
+    id: item.id,
+    product_id: item.product_id,
+    quantity: item.quantity,
+    is_spare_part: item.is_spare_part,
+    product: {
+      id: item.product_id,
+      name: item.product_name_snapshot,
+      type: item.product_type,
+      default_volume_quantity: item.default_volume_quantity,
+      default_total_weight_kg: item.default_total_weight_kg,
+    },
+  })));
   const [message, setMessage] = useState('');
   const quantityInputRef = useRef(null);
 
@@ -36,9 +54,13 @@ export function InternalOrderForm({ onSubmit }) {
       toast.error('Digite ao menos 3 caracteres para buscar.');
       return;
     }
-    const response = await api.get('/products/search?type=manufactured,resale');
-    const normalizedSearch = productSearch.trim().toLowerCase();
-    const results = response.data.filter((product) => product.name.toLowerCase().includes(normalizedSearch));
+    const response = await api.get('/products/search', {
+      params: {
+        q: productSearch.trim(),
+        include_spare_parts: includeSpareParts,
+      },
+    });
+    const results = response.data;
     setProductResults(results);
     setHighlightedProductId(results[0]?.id || '');
     setHasSearchedProducts(true);
@@ -105,7 +127,7 @@ export function InternalOrderForm({ onSubmit }) {
       toast.error('Informe uma quantidade válida.');
       return;
     }
-    setItems((current) => [...current, { product_id: selectedProduct.id, quantity, product: selectedProduct }]);
+    setItems((current) => [...current, { product_id: selectedProduct.id, quantity, is_spare_part: includeSpareParts, product: selectedProduct }]);
     setItemForm({ quantity: 1 });
     setProductSearch('');
     setProductResults([]);
@@ -131,7 +153,7 @@ export function InternalOrderForm({ onSubmit }) {
       customer_name: form.customer_name,
       customer_phone: form.customer_phone,
       promised_date: form.promised_date,
-      items: items.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
+      items: items.map((item) => ({ id: item.id, product_id: item.product_id, quantity: item.quantity, is_spare_part: item.is_spare_part })),
     });
   }
 
@@ -174,6 +196,10 @@ export function InternalOrderForm({ onSubmit }) {
                 <Search size={18} />
               </button>
             </div>
+            <label className="internal-order-form__spare-toggle">
+              <input type="checkbox" checked={includeSpareParts} onChange={(event) => setIncludeSpareParts(event.target.checked)} />
+              Peças de reposição
+            </label>
             {hasSearchedProducts && (
               <div className="internal-order-form__product-results">
                 {productResults.length === 0 && <p>Nenhum produto encontrado</p>}
@@ -192,7 +218,7 @@ export function InternalOrderForm({ onSubmit }) {
                     }}
                   >
                     <strong>{product.name}</strong>
-                    <span>{product.type === 'manufactured' ? 'Fabricado' : 'Revenda'}</span>
+                    <span>{product.type_name || (product.type === 'manufactured' ? 'Fabricado' : product.type === 'material_prima' ? 'Matéria-prima' : 'Revenda')}</span>
                   </button>
                 ))}
               </div>
@@ -224,16 +250,17 @@ export function InternalOrderForm({ onSubmit }) {
           {items.map((item, index) => (
             <div className="internal-order-form__item" key={`${item.product_id}-${index}`}>
               <strong>{item.product.name}</strong>
-              <span>{item.product.type === 'manufactured' ? 'Fabricado' : 'Revenda'}</span>
+              <span>{item.product.type_name || (item.product.type === 'manufactured' ? 'Fabricado' : item.product.type === 'material_prima' ? 'Matéria-prima' : 'Revenda')}</span>
               <span>Qtd {item.quantity}</span>
               <span>{item.product.default_volume_quantity} volumes</span>
               <span>{item.product.default_total_weight_kg} kg</span>
+              <span>{item.is_spare_part ? 'Peça de reposição' : '-'}</span>
               <button className="button button_danger" type="button" onClick={() => removeItem(index)}>Remover</button>
             </div>
           ))}
         </div>
       </div>
-      <button className="button button_primary internal-order-form__button" type="submit">Criar Ordem de Serviço Interna</button>
+      <button className="button button_primary internal-order-form__button" type="submit">{submitLabel}</button>
     </form>
   );
 }

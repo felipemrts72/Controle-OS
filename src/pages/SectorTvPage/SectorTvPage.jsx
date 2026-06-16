@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Pin } from 'lucide-react';
+import { Moon, Pin, Sun } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './SectorTvPage.css';
@@ -21,6 +21,7 @@ export function SectorTvPage() {
   const [selectedSectorSlug, setSelectedSectorSlug] = useState(null);
   const [rotatingSectorSlug, setRotatingSectorSlug] = useState(null);
   const [isSectorMenuOpen, setIsSectorMenuOpen] = useState(false);
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || 'dark');
   const selectorRef = useRef(null);
 
   const sectors = useMemo(() => {
@@ -102,6 +103,13 @@ export function SectorTvPage() {
     setIsSectorMenuOpen(false);
   }
 
+  function toggleTheme() {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem('controle-os-theme', nextTheme);
+    setTheme(nextTheme);
+  }
+
   async function loadTasks() {
     const response = await api.get(setorSlug ? `/tv/${setorSlug}` : '/tv');
     setTasks(response.data.filter((task) => task.order_status !== 'deleted' && !task.order_deleted_at));
@@ -140,7 +148,12 @@ export function SectorTvPage() {
             </div>
           )}
         </div>
-        <span>Rotação automática a cada 7 segundos</span>
+        <div className="sector-tv-page__header-actions">
+          <span>Rotação automática a cada 7 segundos</span>
+          <button className="sector-tv-page__theme-button" type="button" onClick={toggleTheme} title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}>
+            {theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}
+          </button>
+        </div>
       </header>
 
       {visibleTasks.length === 0 ? (
