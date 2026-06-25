@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, getStoredUser } from '../../services/api.js';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
@@ -12,18 +12,30 @@ export function ProductsPage() {
   const toast = useToast();
   const canManage = ['admin', 'manager'].includes(user?.role);
   const [products, setProducts] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
+  const [sectors, setSectors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
   const [productToDelete, setProductToDelete] = useState(null);
+  const [filters, setFilters] = useState({ search: '', type: '', sector: '' });
+  const [sort, setSort] = useState({ key: '', direction: 'asc' });
 
   useEffect(() => {
     let active = true;
     async function loadProducts() {
       try {
         setError('');
-        const response = await api.get('/products');
-        if (active) setProducts(response.data);
+        const [productsResponse, productTypesResponse, sectorsResponse] = await Promise.all([
+          api.get('/products'),
+          api.get('/products/types'),
+          api.get('/sectors'),
+        ]);
+        if (active) {
+          setProducts(productsResponse.data);
+          setProductTypes(productTypesResponse.data);
+          setSectors(sectorsResponse.data);
+        }
       } catch {
         if (active) {
           const message = 'Não foi possível carregar os produtos. Verifique se o backend e o banco estão atualizados.';
@@ -60,10 +72,76 @@ export function ProductsPage() {
     }
   }
 
+  function changeFilter(event) {
+    const { name, value } = event.target;
+    setFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  function clearFilters() {
+    setFilters({ search: '', type: '', sector: '' });
+  }
+
+  function toggleSort(key) {
+    setSort((current) => (
+      current.key === key
+        ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
+    ));
+  }
+
+  function sortButton(key, label) {
+    const isActive = sort.key === key;
+
+    return (
+      <button className="products-page__sort-button" type="button" onClick={() => toggleSort(key)}>
+        <span>{label}</span>
+        <span className="products-page__sort-arrow" aria-hidden="true">
+          {isActive ? (sort.direction === 'asc' ? '▲' : '▼') : ''}
+        </span>
+      </button>
+    );
+  }
+
+  const filteredProducts = useMemo(() => {
+    const search = filters.search.trim().toLocaleLowerCase('pt-BR');
+
+    const filtered = [...products]
+      .filter((product) => {
+        const productName = String(product.name || '').toLocaleLowerCase('pt-BR');
+        const matchesSearch = !search || productName.includes(search);
+        const matchesType = !filters.type || product.type === filters.type;
+        const matchesSector = !filters.sector
+          || (filters.sector === 'without-sector' ? !product.sector_id : String(product.sector_id) === filters.sector);
+
+        return matchesSearch && matchesType && matchesSector;
+      });
+
+    if (!sort.key) return filtered;
+
+    return filtered.sort((first, second) => {
+      if (sort.key === 'sector_name') {
+        const firstHasSector = Boolean(first.sector_name);
+        const secondHasSector = Boolean(second.sector_name);
+        if (!firstHasSector && secondHasSector) return 1;
+        if (firstHasSector && !secondHasSector) return -1;
+      }
+
+      const firstValue = sort.key === 'type'
+        ? first.type_name || first.product_type?.name || first.type || ''
+        : first[sort.key] || '';
+      const secondValue = sort.key === 'type'
+        ? second.type_name || second.product_type?.name || second.type || ''
+        : second[sort.key] || '';
+      const result = String(firstValue).localeCompare(String(secondValue), 'pt-BR');
+
+      return sort.direction === 'asc' ? result : -result;
+    });
+  }, [filters, products, sort]);
+
   const columns = [
-    { key: 'name', label: 'Nome', render: (row) => <Link to={`/produtos/${row.id}`}>{row.name}</Link> },
-    { key: 'type', label: 'Tipo', render: (row) => <StatusBadge value={row.type} /> },
-    { key: 'sector_name', label: 'Setor responsável', render: (row) => row.sector_name || '-' },
+    { key: 'name', label: sortButton('name', 'Nome'), render: (row) => <Link to={`/produtos/${row.id}`}>{row.name}</Link> },
+    { key: 'type', label: sortButton('type', 'Tipo'), render: (row) => <StatusBadge value={row.type} /> },
+    { key: 'sector_name', label: sortButton('sector_name', 'Setor responsável'), render: (row) => row.sector_name || '-' },
     { key: 'default_volume_quantity', label: 'Volumes' },
     { key: 'default_total_weight_kg', label: 'Peso total (kg)' },
     ...(canManage ? [{
@@ -92,10 +170,43 @@ export function ProductsPage() {
         {isLoading && <p>Carregando produtos...</p>}
         {error && <p>{error}</p>}
         {!isLoading && !error && (
-          <DataTable
-            columns={columns}
-            rows={products}
-          />
+          <>
+            <div className="products-page__filters">
+              <label className="field">
+                <span className="field__label">Buscar por nome</span>
+                <input
+                  className="field__input"
+                  name="search"
+                  type="search"
+                  value={filters.search}
+                  onChange={changeFilter}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">Tipo do produto</span>
+                <select className="field__input" name="type" value={filters.type} onChange={changeFilter}>
+                  <option value="">Todos os tipos</option>
+                  {productTypes.map((type) => <option key={type.code} value={type.code}>{type.name}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">Setor responsável</span>
+                <select className="field__input" name="sector" value={filters.sector} onChange={changeFilter}>
+                  <option value="">Todos os setores</option>
+                  <option value="without-sector">Sem setor responsável</option>
+                  {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+                </select>
+              </label>
+              <button className="button products-page__clear-button" type="button" onClick={clearFilters}>
+                Limpar filtros
+              </button>
+            </div>
+            <DataTable
+              columns={columns}
+              rows={filteredProducts}
+              emptyText="Nenhum produto encontrado com os filtros selecionados."
+            />
+          </>
         )}
       </div>
       <ConfirmModal
