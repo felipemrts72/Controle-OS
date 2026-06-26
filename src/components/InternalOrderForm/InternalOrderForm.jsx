@@ -11,7 +11,20 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     customer_name: initialOrder.customer_name || '',
     customer_phone: initialOrder.customer_phone || '',
     promised_date: initialOrder.promised_date?.slice(0, 10) || '',
-  } : { sale_number: '', customer_name: '', customer_phone: '', promised_date: '' });
+    delivery_type: initialOrder.delivery_type || 'transportadora',
+    carrier_name: initialOrder.carrier_name || '',
+    destination_city: initialOrder.destination_city || '',
+    destination_uf: initialOrder.destination_uf || '',
+  } : {
+    sale_number: '',
+    customer_name: '',
+    customer_phone: '',
+    promised_date: '',
+    delivery_type: 'transportadora',
+    carrier_name: '',
+    destination_city: '',
+    destination_uf: '',
+  });
   const [itemForm, setItemForm] = useState({ quantity: 1 });
   const [productSearch, setProductSearch] = useState('');
   const [productResults, setProductResults] = useState([]);
@@ -153,6 +166,10 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
       customer_name: form.customer_name,
       customer_phone: form.customer_phone,
       promised_date: form.promised_date,
+      delivery_type: form.delivery_type || 'transportadora',
+      carrier_name: form.delivery_type === 'retirada' ? '' : form.carrier_name,
+      destination_city: form.delivery_type === 'retirada' ? '' : form.destination_city,
+      destination_uf: form.delivery_type === 'retirada' ? '' : form.destination_uf,
       items: items.map((item) => ({ id: item.id, product_id: item.product_id, quantity: item.quantity, is_spare_part: item.is_spare_part })),
     });
   }
@@ -176,6 +193,40 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
           <span className="field__label">Data de Entrega</span>
           <input className="field__input" type="date" name="promised_date" value={form.promised_date} onChange={change} required />
         </label>
+      </div>
+
+      <div className="internal-order-form__items">
+        <div className="internal-order-form__section-header">
+          <h3>Entrega</h3>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span className="field__label">Tipo de entrega</span>
+            <select className="field__input" name="delivery_type" value={form.delivery_type} onChange={change}>
+              <option value="transportadora">Transportadora</option>
+              <option value="retirada">Retirada</option>
+              <option value="frota_propria">Frota propria</option>
+            </select>
+          </label>
+          {form.delivery_type !== 'retirada' && (
+            <>
+              {form.delivery_type === 'transportadora' && (
+                <label className="field">
+                  <span className="field__label">Nome da transportadora</span>
+                  <input className="field__input" name="carrier_name" value={form.carrier_name} onChange={change} />
+                </label>
+              )}
+              <label className="field">
+                <span className="field__label">Cidade destino</span>
+                <input className="field__input" name="destination_city" value={form.destination_city} onChange={change} />
+              </label>
+              <label className="field">
+                <span className="field__label">UF</span>
+                <input className="field__input" name="destination_uf" value={form.destination_uf} onChange={change} maxLength="2" />
+              </label>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="internal-order-form__items">

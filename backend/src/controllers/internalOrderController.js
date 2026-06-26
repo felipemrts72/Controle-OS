@@ -1,5 +1,5 @@
 import { query, transaction } from '../database/pool.js';
-import { createInternalOrder } from '../services/orderService.js';
+import { createInternalOrder, normalizeDeliveryPayload } from '../services/orderService.js';
 import { logAudit } from '../services/auditService.js';
 import { refreshInternalOrderStatus } from '../services/statusService.js';
 import { copyProductRouteToSoldItemTasks } from '../services/manufacturingRouteService.js';
@@ -193,10 +193,30 @@ export async function updateInternalOrder(req, res, next) {
           field: 'sale_number',
         });
       }
+      const delivery = normalizeDeliveryPayload(req.body);
       const order = await client.query(
-        `UPDATE internal_orders SET sale_number = $1, customer_name = $2, customer_phone = $3, promised_date = $4, updated_at = NOW()
-         WHERE id = $5 RETURNING *`,
-        [req.body.sale_number, req.body.customer_name, req.body.customer_phone, req.body.promised_date, req.params.id],
+        `UPDATE internal_orders
+         SET sale_number = $1,
+          customer_name = $2,
+          customer_phone = $3,
+          promised_date = $4,
+          delivery_type = $5,
+          carrier_name = $6,
+          destination_city = $7,
+          destination_uf = $8,
+          updated_at = NOW()
+         WHERE id = $9 RETURNING *`,
+        [
+          req.body.sale_number,
+          req.body.customer_name,
+          req.body.customer_phone,
+          req.body.promised_date,
+          delivery.delivery_type,
+          delivery.carrier_name,
+          delivery.destination_city,
+          delivery.destination_uf,
+          req.params.id,
+        ],
       );
       if (Array.isArray(req.body.items)) {
         const currentItems = await client.query('SELECT * FROM sold_items WHERE internal_order_id = $1', [req.params.id]);

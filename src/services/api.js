@@ -20,6 +20,11 @@ export function clearSession() {
   localStorage.removeItem('user');
 }
 
+export function logout(navigate) {
+  clearSession();
+  navigate('/entrar');
+}
+
 export function getStoredUser() {
   const raw = localStorage.getItem('user');
   return raw ? JSON.parse(raw) : null;

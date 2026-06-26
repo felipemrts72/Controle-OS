@@ -4,9 +4,26 @@ import { logAudit } from './auditService.js';
 import { refreshInternalOrderStatus, refreshSoldItemStatus } from './statusService.js';
 import { copyProductRouteToSoldItemTasks } from './manufacturingRouteService.js';
 
+const DELIVERY_TYPES = new Set(['transportadora', 'retirada', 'frota_propria']);
+
+export function normalizeDeliveryPayload(payload) {
+  const deliveryType = payload.delivery_type || 'transportadora';
+  if (!DELIVERY_TYPES.has(deliveryType)) {
+    throw httpError(400, 'Tipo de entrega invalido.', { code: 'INVALID_DELIVERY_TYPE', field: 'delivery_type' });
+  }
+
+  return {
+    delivery_type: deliveryType,
+    carrier_name: deliveryType === 'transportadora' ? payload.carrier_name || null : null,
+    destination_city: deliveryType === 'retirada' ? null : payload.destination_city || null,
+    destination_uf: deliveryType === 'retirada' ? null : (payload.destination_uf || null)?.toUpperCase(),
+  };
+}
+
 export async function createInternalOrder(payload, userId) {
   return transaction(async (client) => {
     if (!payload.items?.length) throw httpError(400, 'Informe ao menos um item na OS.');
+    const delivery = normalizeDeliveryPayload(payload);
 
     const duplicate = await client.query('SELECT id FROM internal_orders WHERE sale_number = $1', [payload.sale_number]);
     if (duplicate.rows[0]) {
@@ -17,9 +34,22 @@ export async function createInternalOrder(payload, userId) {
     }
 
     const orderResult = await client.query(
-      `INSERT INTO internal_orders (sale_number, customer_name, customer_phone, promised_date, created_by)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [payload.sale_number, payload.customer_name, payload.customer_phone, payload.promised_date, userId],
+      `INSERT INTO internal_orders (
+        sale_number, customer_name, customer_phone, promised_date,
+        delivery_type, carrier_name, destination_city, destination_uf, created_by
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        payload.sale_number,
+        payload.customer_name,
+        payload.customer_phone,
+        payload.promised_date,
+        delivery.delivery_type,
+        delivery.carrier_name,
+        delivery.destination_city,
+        delivery.destination_uf,
+        userId,
+      ],
     );
     const order = orderResult.rows[0];
 

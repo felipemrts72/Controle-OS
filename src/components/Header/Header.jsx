@@ -1,7 +1,7 @@
 import { LogOut, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getStoredUser } from '../../services/api.js';
+import { getStoredUser, logout } from '../../services/api.js';
 import './Header.css';
 
 export function Header() {
@@ -16,9 +16,8 @@ export function Header() {
     setTheme(nextTheme);
   }
 
-  function logout() {
-    clearSession();
-    navigate('/entrar');
+  function handleLogout() {
+    logout(navigate);
   }
 
   return (
@@ -30,7 +29,7 @@ export function Header() {
       <button className="header__button" type="button" onClick={toggleTheme} title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}>
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
       </button>
-      <button className="header__button" type="button" onClick={logout} title="Sair">
+      <button className="header__button" type="button" onClick={handleLogout} title="Sair">
         <LogOut size={18} />
       </button>
     </header>

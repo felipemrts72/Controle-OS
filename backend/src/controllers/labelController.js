@@ -5,7 +5,19 @@ import { httpError } from '../utils/httpError.js';
 
 async function findVolume(id) {
   const result = await query(
-    `SELECT sv.*, si.product_name_snapshot, io.sale_number, io.customer_name, io.customer_phone, io.promised_date, io.status AS order_status
+    `SELECT sv.*,
+      si.product_name_snapshot,
+      io.id AS internal_order_id,
+      io.sale_number,
+      io.customer_name,
+      io.customer_phone,
+      io.promised_date,
+      COALESCE(io.delivery_type, 'transportadora') AS delivery_type,
+      io.carrier_name,
+      io.destination_city,
+      io.destination_uf,
+      io.invoice_number,
+      io.status AS order_status
      FROM shipment_volumes sv
      JOIN sold_items si ON si.id = sv.sold_item_id
      JOIN internal_orders io ON io.id = si.internal_order_id
@@ -14,6 +26,43 @@ async function findVolume(id) {
     [id],
   );
   return result.rows[0];
+}
+
+export async function updateOrderInvoiceNumber(req, res, next) {
+  try {
+    const invoiceNumber = String(req.body.invoice_number || '').trim();
+    if (!invoiceNumber) throw httpError(400, 'Informe o numero da Nota Fiscal.', { code: 'INVOICE_NUMBER_REQUIRED', field: 'invoice_number' });
+
+    const result = await transaction(async (client) => {
+      const current = await client.query(
+        `SELECT id, invoice_number
+         FROM internal_orders
+         WHERE id = $1
+           AND COALESCE(status, '') <> 'deleted'`,
+        [req.params.internalOrderId],
+      );
+      if (!current.rows[0]) throw httpError(404, 'OS nao encontrada.');
+
+      const updated = await client.query(
+        `UPDATE internal_orders
+         SET invoice_number = $1, updated_at = NOW()
+         WHERE id = $2
+         RETURNING *`,
+        [invoiceNumber, req.params.internalOrderId],
+      );
+      await logAudit(client, {
+        entityType: 'internal_order',
+        entityId: req.params.internalOrderId,
+        action: 'update_invoice_number',
+        previousValue: current.rows[0],
+        newValue: { invoice_number: invoiceNumber },
+        userId: req.user.id,
+      });
+      return updated.rows[0];
+    });
+
+    res.json(result);
+  } catch (error) { next(error); }
 }
 
 export async function generateLabel(req, res, next) {
@@ -100,7 +149,19 @@ export async function downloadSoldItemLabelPdf(req, res, next) {
   try {
     const { volumes } = await transaction(async (client) => {
       const current = await client.query(
-        `SELECT sv.*, si.product_name_snapshot, io.sale_number, io.customer_name, io.customer_phone, io.promised_date, io.status AS order_status
+        `SELECT sv.*,
+          si.product_name_snapshot,
+          io.id AS internal_order_id,
+          io.sale_number,
+          io.customer_name,
+          io.customer_phone,
+          io.promised_date,
+          COALESCE(io.delivery_type, 'transportadora') AS delivery_type,
+          io.carrier_name,
+          io.destination_city,
+          io.destination_uf,
+          io.invoice_number,
+          io.status AS order_status
          FROM shipment_volumes sv
          JOIN sold_items si ON si.id = sv.sold_item_id
          JOIN internal_orders io ON io.id = si.internal_order_id
@@ -146,7 +207,19 @@ export async function downloadSoldItemLabelPdf(req, res, next) {
       });
 
       const updated = await client.query(
-        `SELECT sv.*, si.product_name_snapshot, io.sale_number, io.customer_name, io.customer_phone, io.promised_date, io.status AS order_status
+        `SELECT sv.*,
+          si.product_name_snapshot,
+          io.id AS internal_order_id,
+          io.sale_number,
+          io.customer_name,
+          io.customer_phone,
+          io.promised_date,
+          COALESCE(io.delivery_type, 'transportadora') AS delivery_type,
+          io.carrier_name,
+          io.destination_city,
+          io.destination_uf,
+          io.invoice_number,
+          io.status AS order_status
          FROM shipment_volumes sv
          JOIN sold_items si ON si.id = sv.sold_item_id
          JOIN internal_orders io ON io.id = si.internal_order_id
@@ -170,7 +243,19 @@ export async function downloadSoldItemLabelPdf(req, res, next) {
 export async function listLabelQueue(_req, res, next) {
   try {
     const result = await query(
-      `SELECT sv.*, si.product_name_snapshot, io.sale_number, io.customer_name, io.promised_date, io.status AS order_status
+      `SELECT sv.*,
+        si.product_name_snapshot,
+        io.id AS internal_order_id,
+        io.sale_number,
+        io.customer_name,
+        io.customer_phone,
+        io.promised_date,
+        COALESCE(io.delivery_type, 'transportadora') AS delivery_type,
+        io.carrier_name,
+        io.destination_city,
+        io.destination_uf,
+        io.invoice_number,
+        io.status AS order_status
        FROM shipment_volumes sv
        JOIN sold_items si ON si.id = sv.sold_item_id
        JOIN internal_orders io ON io.id = si.internal_order_id

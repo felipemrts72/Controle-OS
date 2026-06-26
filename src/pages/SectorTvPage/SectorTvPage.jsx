@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Moon, Pin, Sun } from 'lucide-react';
-import { api } from '../../services/api.js';
+import { api, logout } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './SectorTvPage.css';
 
@@ -95,6 +95,18 @@ export function SectorTvPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
+  useEffect(() => {
+    function handleLogoutShortcut(event) {
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        logout(navigate);
+      }
+    }
+
+    window.addEventListener('keydown', handleLogoutShortcut);
+    return () => window.removeEventListener('keydown', handleLogoutShortcut);
   }, [navigate]);
 
   function selectSector(slug) {

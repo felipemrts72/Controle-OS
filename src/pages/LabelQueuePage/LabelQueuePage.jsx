@@ -12,8 +12,13 @@ function groupVolumes(volumes) {
     const key = volume.sold_item_id;
     const group = groups.get(key) || {
       sold_item_id: key,
+      internal_order_id: volume.internal_order_id,
       customer_name: volume.customer_name,
       sale_number: volume.sale_number,
+      delivery_type: volume.delivery_type || 'transportadora',
+      invoice_number: volume.invoice_number || '',
+      destination_city: volume.destination_city || '',
+      destination_uf: volume.destination_uf || '',
       product_name_snapshot: volume.product_name_snapshot,
       volumes: [],
     };
@@ -36,20 +41,30 @@ function groupVolumes(volumes) {
   });
 }
 
+function deliveryRequiresInvoice(deliveryType) {
+  const type = deliveryType || 'transportadora';
+  return type === 'transportadora' || type === 'frota_propria';
+}
+
 export function LabelQueuePage() {
   const toast = useToast();
   const [volumes, setVolumes] = useState([]);
   const [confirmGroupId, setConfirmGroupId] = useState(null);
   const [individualGroupId, setIndividualGroupId] = useState(null);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoicePrompt, setInvoicePrompt] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
   const groups = groupVolumes(volumes);
   const confirmGroup = groups.find((group) => group.sold_item_id === confirmGroupId);
   const individualGroup = groups.find((group) => group.sold_item_id === individualGroupId);
+  const invoicePromptVolume = invoicePrompt ? volumes.find((volume) => volume.id === invoicePrompt.volumeId) : null;
 
-  useEscapeKey(Boolean(confirmGroup || individualGroup), () => {
+  useEscapeKey(Boolean(confirmGroup || individualGroup || invoicePrompt), () => {
     setConfirmGroupId(null);
     setIndividualGroupId(null);
+    setInvoicePrompt(null);
+    setInvoiceNumber('');
   });
 
   async function load() {
@@ -69,10 +84,19 @@ export function LabelQueuePage() {
     if (!group) return;
     try {
       setIsPrinting(true);
+      if (deliveryRequiresInvoice(group.delivery_type) && !group.invoice_number) {
+        const nextInvoiceNumber = invoiceNumber.trim();
+        if (!nextInvoiceNumber) {
+          toast.error('Informe o numero da Nota Fiscal.');
+          return;
+        }
+        await api.patch(`/labels/internal-order/${group.internal_order_id}/invoice`, { invoice_number: nextInvoiceNumber });
+      }
       const response = await api.get(`/labels/sold-item/${group.sold_item_id}/pdf`, { responseType: 'blob' });
       openPdf(response.data);
       await load();
       setConfirmGroupId(null);
+      setInvoiceNumber('');
       toast.success('Etiquetas abertas para impressão.');
     } catch {
       toast.error('Não foi possível gerar as etiquetas deste item.');
@@ -81,7 +105,13 @@ export function LabelQueuePage() {
     }
   }
 
-  async function printSingle(volume) {
+  async function printSingle(volume, options = {}) {
+    if (!options.skipInvoiceCheck && deliveryRequiresInvoice(volume.delivery_type) && !volume.invoice_number) {
+      setInvoicePrompt({ volumeId: volume.id, internalOrderId: volume.internal_order_id });
+      setInvoiceNumber('');
+      return;
+    }
+
     try {
       setIsPrinting(true);
       const response = await api.get(`/labels/${volume.id}/pdf`, { responseType: 'blob' });
@@ -90,6 +120,27 @@ export function LabelQueuePage() {
       toast.success(volume.label_status === 'label_generated' ? 'Etiqueta aberta para reimpressão.' : 'Etiqueta gerada com sucesso.');
     } catch {
       toast.error(volume.label_status === 'label_generated' ? 'Não foi possível abrir a etiqueta.' : 'Não foi possível gerar a etiqueta.');
+    } finally {
+      setIsPrinting(false);
+    }
+  }
+
+  async function saveInvoiceAndPrintSingle() {
+    if (!invoicePrompt || !invoicePromptVolume) return;
+    const nextInvoiceNumber = invoiceNumber.trim();
+    if (!nextInvoiceNumber) {
+      toast.error('Informe o numero da Nota Fiscal.');
+      return;
+    }
+
+    try {
+      setIsPrinting(true);
+      await api.patch(`/labels/internal-order/${invoicePrompt.internalOrderId}/invoice`, { invoice_number: nextInvoiceNumber });
+      setInvoicePrompt(null);
+      setInvoiceNumber('');
+      await printSingle(invoicePromptVolume, { skipInvoiceCheck: true });
+    } catch {
+      toast.error('Não foi possível salvar a Nota Fiscal.');
     } finally {
       setIsPrinting(false);
     }
@@ -116,7 +167,10 @@ export function LabelQueuePage() {
               <span>Pendentes: <strong>{group.pending}</strong></span>
             </div>
             <div className="label-queue-group__actions">
-              <button className="button button_primary" type="button" onClick={() => setConfirmGroupId(group.sold_item_id)}>
+              <button className="button button_primary" type="button" onClick={() => {
+                setConfirmGroupId(group.sold_item_id);
+                setInvoiceNumber(group.invoice_number || '');
+              }}>
                 Imprimir etiquetas
               </button>
               <button className="button" type="button" onClick={() => setIndividualGroupId(group.sold_item_id)}>
@@ -136,8 +190,17 @@ export function LabelQueuePage() {
             {confirmGroup.generated > 0 && (
               <p>Este item já possui {confirmGroup.generated} etiquetas geradas. Deseja reimprimir todas mesmo assim?</p>
             )}
+            {deliveryRequiresInvoice(confirmGroup.delivery_type) && !confirmGroup.invoice_number && (
+              <label className="field">
+                <span className="field__label">Numero da Nota Fiscal</span>
+                <input className="field__input" value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} autoFocus />
+              </label>
+            )}
             <div className="label-modal__actions">
-              <button className="button" type="button" onClick={() => setConfirmGroupId(null)} disabled={isPrinting}>Cancelar</button>
+              <button className="button" type="button" onClick={() => {
+                setConfirmGroupId(null);
+                setInvoiceNumber('');
+              }} disabled={isPrinting}>Cancelar</button>
               <button className="button button_primary" type="button" onClick={() => printBatch(confirmGroup)} disabled={isPrinting}>
                 Confirmar
               </button>
@@ -165,6 +228,28 @@ export function LabelQueuePage() {
             </div>
             <div className="label-modal__actions">
               <button className="button" type="button" onClick={() => setIndividualGroupId(null)} disabled={isPrinting}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {invoicePrompt && invoicePromptVolume && (
+        <div className="label-modal">
+          <div className="label-modal__content">
+            <h2>Numero da Nota Fiscal</h2>
+            <p>{invoicePromptVolume.customer_name} · Venda {invoicePromptVolume.sale_number}</p>
+            <label className="field">
+              <span className="field__label">Numero da Nota Fiscal</span>
+              <input className="field__input" value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} autoFocus />
+            </label>
+            <div className="label-modal__actions">
+              <button className="button" type="button" onClick={() => {
+                setInvoicePrompt(null);
+                setInvoiceNumber('');
+              }} disabled={isPrinting}>Cancelar</button>
+              <button className="button button_primary" type="button" onClick={saveInvoiceAndPrintSingle} disabled={isPrinting}>
+                Confirmar
+              </button>
             </div>
           </div>
         </div>
