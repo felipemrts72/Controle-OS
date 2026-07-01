@@ -4,10 +4,10 @@ import { generateQrCodeBuffer } from '../utils/qrCode.js';
 const mmToPt = (mm) => mm * 2.834645669;
 
 export const DEFAULT_LABEL_SIZE = {
-  name: '50x100 mm retrato',
-  widthMm: 50,
-  heightMm: 100,
-  orientation: 'portrait',
+  name: '100x50 mm paisagem',
+  widthMm: 100,
+  heightMm: 50,
+  orientation: 'landscape',
 };
 
 const LABEL_SIZE = [
@@ -25,6 +25,32 @@ function logLabelPdfConfig(pageCount) {
   });
 }
 
+function getFittedFontSize(doc, text, { font, maxSize, minSize, width }) {
+  doc.font(font);
+  for (let size = maxSize; size >= minSize; size -= 1) {
+    doc.fontSize(size);
+    if (doc.widthOfString(String(text || '-')) <= width) return size;
+  }
+  return minSize;
+}
+
+function drawFittedText(doc, text, x, y, options) {
+  const {
+    width,
+    font = 'Helvetica',
+    maxSize,
+    minSize,
+    align = 'left',
+  } = options;
+  const fontSize = getFittedFontSize(doc, text, { font, maxSize, minSize, width });
+  doc.font(font).fontSize(fontSize).text(text || '-', x, y, {
+    width,
+    align,
+    ellipsis: true,
+    lineBreak: false,
+  });
+}
+
 export async function createShipmentCode(client) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -39,29 +65,29 @@ async function drawLabelPage(doc, volume) {
   const deliveryType = volume.delivery_type || 'transportadora';
   const usesInvoice = deliveryType === 'transportadora' || deliveryType === 'frota_propria';
   const documentText = usesInvoice ? `NF: ${volume.invoice_number || '-'}` : `Venda: ${volume.sale_number}`;
-  const destinationParts = [volume.destination_city, volume.destination_uf].filter(Boolean);
-  const destinationText = usesInvoice && destinationParts.length ? destinationParts.join('/') : '';
+  const destinationCity = usesInvoice ? volume.destination_city || '' : '';
+  const destinationUf = usesInvoice ? volume.destination_uf || '' : '';
   const productText = `Produto: ${volume.product_name_snapshot || '-'}`;
   const weightText = `Peso: ${Number(volume.weight_kg || 0).toLocaleString('pt-BR')} kg`;
   const pageWidth = LABEL_SIZE[0];
-  const pageHeight = LABEL_SIZE[1];
-  const padding = 6;
-  const contentWidth = pageWidth - (padding * 2);
+  const padding = 8;
   const qrSize = 92;
-  const qrX = (pageWidth - qrSize) / 2;
-  const qrY = destinationText ? 122 : 106;
+  const qrX = pageWidth - padding - qrSize;
+  const qrY = 8;
+  const textWidth = qrX - padding - 10;
 
-  doc.fontSize(16).font('Helvetica-Bold').text(volume.customer_name || '-', padding, 8, { width: contentWidth, ellipsis: true, lineBreak: false });
-  doc.fontSize(15).font('Helvetica-Bold').text(documentText, padding, 31, { width: contentWidth, ellipsis: true, lineBreak: false });
-  if (destinationText) {
-    doc.fontSize(13).font('Helvetica-Bold').text(destinationText, padding, 53, { width: contentWidth, ellipsis: true, lineBreak: false });
+  drawFittedText(doc, volume.customer_name || '-', padding, 8, { width: textWidth, font: 'Helvetica-Bold', maxSize: 18, minSize: 12 });
+  drawFittedText(doc, documentText, padding, 32, { width: textWidth, font: 'Helvetica-Bold', maxSize: 17, minSize: 12 });
+  if (destinationCity || destinationUf) {
+    drawFittedText(doc, destinationCity || '-', padding, 55, { width: textWidth, font: 'Helvetica-Bold', maxSize: 14, minSize: 10 });
+    drawFittedText(doc, destinationUf || '-', padding, 73, { width: textWidth, font: 'Helvetica-Bold', maxSize: 13, minSize: 10 });
   }
-  doc.fontSize(9).font('Helvetica').text(`Telefone: ${volume.customer_phone || '-'}`, padding, destinationText ? 76 : 55, { width: contentWidth, ellipsis: true, lineBreak: false });
-  doc.fontSize(10).font('Helvetica-Bold').text(productText, padding, destinationText ? 91 : 70, { width: contentWidth, ellipsis: true, lineBreak: false });
-  doc.fontSize(9).font('Helvetica').text(weightText, padding, destinationText ? 107 : 86, { width: contentWidth, ellipsis: true, lineBreak: false });
+  doc.fontSize(9).font('Helvetica').text(`Telefone: ${volume.customer_phone || '-'}`, padding, destinationCity || destinationUf ? 92 : 58, { width: textWidth, ellipsis: true, lineBreak: false });
+  doc.fontSize(9).font('Helvetica').text(productText, padding, destinationCity || destinationUf ? 106 : 74, { width: textWidth, ellipsis: true, lineBreak: false });
+  doc.fontSize(9).font('Helvetica').text(weightText, padding, destinationCity || destinationUf ? 121 : 90, { width: textWidth, ellipsis: true, lineBreak: false });
   doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-  doc.fontSize(14).font('Helvetica-Bold').text(volume.shipment_code, padding, qrY + qrSize + 6, { align: 'center', width: contentWidth });
-  doc.fontSize(13).font('Helvetica-Bold').text(`Volume ${volume.volume_number}/${volume.total_volumes}`, padding, pageHeight - 25, { align: 'center', width: contentWidth });
+  doc.fontSize(12).font('Helvetica-Bold').text(volume.shipment_code, qrX, qrY + qrSize + 4, { align: 'center', width: qrSize });
+  doc.fontSize(11).font('Helvetica-Bold').text(`Volume ${volume.volume_number}/${volume.total_volumes}`, qrX, qrY + qrSize + 22, { align: 'center', width: qrSize });
 }
 
 function createLabelDocument() {

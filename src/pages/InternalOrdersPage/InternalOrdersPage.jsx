@@ -6,6 +6,8 @@ import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './InternalOrdersPage.css';
 
+const SHIPPED_PAGE_SIZE = 15;
+
 function formatDate(date) {
   return new Date(date).toLocaleDateString('pt-BR');
 }
@@ -24,6 +26,9 @@ export function InternalOrdersPage() {
   const toast = useToast();
   const canManage = ['admin', 'manager'].includes(user?.role);
   const [orders, setOrders] = useState([]);
+  const [shippedOrders, setShippedOrders] = useState([]);
+  const [shippedPage, setShippedPage] = useState(1);
+  const [shippedTotalPages, setShippedTotalPages] = useState(1);
   const [orderToDelete, setOrderToDelete] = useState(null);
 
   async function load() {
@@ -31,18 +36,33 @@ export function InternalOrdersPage() {
     setOrders(response.data);
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadShipped(nextPage = shippedPage) {
+    const response = await api.get('/internal-orders/history', {
+      params: { page: nextPage, limit: SHIPPED_PAGE_SIZE, status: 'finalizadas' },
+    });
+    setShippedOrders(response.data.items);
+    setShippedPage(response.data.page);
+    setShippedTotalPages(response.data.totalPages);
+  }
+
+  useEffect(() => {
+    load();
+    loadShipped(1);
+  }, []);
 
   async function deleteOrder() {
     try {
       await api.delete(`/internal-orders/${orderToDelete.id}`);
       setOrderToDelete(null);
       await load();
+      await loadShipped(shippedPage);
       toast.success('Ordem de Serviço excluída.');
     } catch {
       toast.error('Não foi possível excluir a Ordem de Serviço.');
     }
   }
+
+  const activeOrders = orders.filter((order) => order.status !== 'shipped');
 
   return (
     <section className="page internal-orders-page">
@@ -52,7 +72,7 @@ export function InternalOrdersPage() {
       </div>
 
       <div className="internal-orders-page__list">
-        {orders.map((order) => (
+        {activeOrders.map((order) => (
           <article className="internal-orders-page__card" key={order.id}>
             <Link className="internal-orders-page__card-content" to={`/os/${order.id}`}>
               <div>
@@ -73,8 +93,38 @@ export function InternalOrdersPage() {
             )}
           </article>
         ))}
-        {orders.length === 0 && <div className="panel">Nenhuma OS encontrada.</div>}
+        {activeOrders.length === 0 && <div className="panel">Nenhuma OS encontrada.</div>}
       </div>
+
+      <section className="internal-orders-page__shipped">
+        <div className="internal-orders-page__section-header">
+          <h2>Expedidas</h2>
+          <span>{shippedOrders.length} registro(s)</span>
+        </div>
+        <div className="internal-orders-page__list">
+          {shippedOrders.map((order) => (
+            <article className="internal-orders-page__card internal-orders-page__card_shipped" key={order.id}>
+              <Link className="internal-orders-page__card-content" to={`/os/${order.id}`}>
+                <div>
+                  <strong>Número {order.sale_number}</strong>
+                  <p>{order.customer_name}</p>
+                </div>
+                <span>{order.customer_phone || '-'}</span>
+                <span>{formatDate(order.promised_date)}</span>
+                <StatusBadge value={order.status} />
+                <ProgressLine label="Tarefas" ready={order.ready_tasks} total={order.total_tasks} />
+                <ProgressLine label="Volumes" ready={order.shipped_volumes} total={order.total_volumes} />
+              </Link>
+            </article>
+          ))}
+          {shippedOrders.length === 0 && <div className="panel">Nenhuma OS expedida encontrada.</div>}
+        </div>
+        <div className="internal-orders-page__pagination">
+          <button className="button" type="button" disabled={shippedPage <= 1} onClick={() => loadShipped(shippedPage - 1)}>Anterior</button>
+          <span>Página {shippedPage} de {shippedTotalPages}</span>
+          <button className="button" type="button" disabled={shippedPage >= shippedTotalPages} onClick={() => loadShipped(shippedPage + 1)}>Próxima</button>
+        </div>
+      </section>
 
       <ConfirmModal
         open={Boolean(orderToDelete)}

@@ -82,7 +82,7 @@ export async function createInternalOrder(payload, userId) {
       });
       hasProductionTasks = copiedRoute;
 
-      if (!copiedRoute && product.type === 'manufactured') {
+      if (!copiedRoute && (product.type === 'manufactured' || item.is_spare_part === true)) {
         const components = await client.query('SELECT * FROM product_components WHERE product_id = $1', [product.id]);
         if (components.rows.length) {
           for (const component of components.rows) {
@@ -94,7 +94,7 @@ export async function createInternalOrder(payload, userId) {
           }
           hasProductionTasks = true;
         } else {
-          if (!product.sector_id) throw httpError(400, 'Produto fabricado sem setor responsável.');
+          if (!product.sector_id) throw httpError(400, 'Produto sem setor responsável.');
           await client.query(
             `INSERT INTO internal_tasks (sold_item_id, sector_id, task_name, quantity)
              VALUES ($1, $2, $3, $4)`,

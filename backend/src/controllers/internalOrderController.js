@@ -47,7 +47,7 @@ async function createSoldItemRecords(client, orderId, item) {
     soldQuantity: item.quantity || 1,
   });
 
-  if (!hasProductionTasks && product.type === 'manufactured') {
+  if (!hasProductionTasks && (product.type === 'manufactured' || item.is_spare_part === true)) {
     const components = await client.query('SELECT * FROM product_components WHERE product_id = $1', [product.id]);
     if (components.rows.length) {
       for (const component of components.rows) {
@@ -59,7 +59,7 @@ async function createSoldItemRecords(client, orderId, item) {
       }
       hasProductionTasks = true;
     } else {
-      if (!product.sector_id) throw httpError(400, 'Produto fabricado sem setor responsável.', { code: 'PRODUCT_WITHOUT_SECTOR' });
+      if (!product.sector_id) throw httpError(400, 'Produto sem setor responsável.', { code: 'PRODUCT_WITHOUT_SECTOR' });
       await client.query(
         `INSERT INTO internal_tasks (sold_item_id, sector_id, task_name, quantity)
          VALUES ($1, $2, $3, $4)`,
@@ -104,7 +104,7 @@ export async function listInternalOrders(_req, res, next) {
          FROM sold_items si LEFT JOIN shipment_volumes sv ON sv.sold_item_id = si.id
          GROUP BY si.internal_order_id
        ) volume_counts ON volume_counts.internal_order_id = io.id
-       WHERE COALESCE(io.status, 'pending') <> 'deleted'
+       WHERE COALESCE(io.status, 'pending') NOT IN ('deleted', 'shipped')
        ORDER BY io.promised_date ASC`,
     );
     res.json(result.rows);
