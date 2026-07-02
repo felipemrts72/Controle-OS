@@ -5,6 +5,8 @@ import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './LabelQueuePage.css';
 
+const labelModels = ['15x10', '10x5'];
+
 function groupVolumes(volumes) {
   const groups = new Map();
 
@@ -54,6 +56,7 @@ export function LabelQueuePage() {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoicePrompt, setInvoicePrompt] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [labelModel, setLabelModel] = useState('15x10');
 
   const groups = groupVolumes(volumes);
   const confirmGroup = groups.find((group) => group.sold_item_id === confirmGroupId);
@@ -92,7 +95,10 @@ export function LabelQueuePage() {
         }
         await api.patch(`/labels/internal-order/${group.internal_order_id}/invoice`, { invoice_number: nextInvoiceNumber });
       }
-      const response = await api.get(`/labels/sold-item/${group.sold_item_id}/pdf`, { responseType: 'blob' });
+      const response = await api.get(`/labels/sold-item/${group.sold_item_id}/pdf`, {
+        params: { labelModel },
+        responseType: 'blob',
+      });
       openPdf(response.data);
       await load();
       setConfirmGroupId(null);
@@ -114,7 +120,10 @@ export function LabelQueuePage() {
 
     try {
       setIsPrinting(true);
-      const response = await api.get(`/labels/${volume.id}/pdf`, { responseType: 'blob' });
+      const response = await api.get(`/labels/${volume.id}/pdf`, {
+        params: { labelModel },
+        responseType: 'blob',
+      });
       openPdf(response.data);
       await load();
       toast.success(volume.label_status === 'label_generated' ? 'Etiqueta aberta para reimpressão.' : 'Etiqueta gerada com sucesso.');
@@ -152,6 +161,19 @@ export function LabelQueuePage() {
     <section className="page label-queue-page">
       <div className="page__header">
         <h1 className="page__title">Fila de Etiquetas</h1>
+        <div className="label-model-toggle" aria-label="Modelo de etiqueta">
+          {labelModels.map((model) => (
+            <button
+              className={`label-model-toggle__button${labelModel === model ? ' label-model-toggle__button_active' : ''}`}
+              type="button"
+              key={model}
+              onClick={() => setLabelModel(model)}
+              aria-pressed={labelModel === model}
+            >
+              {model}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="label-queue-page__list">
         {groups.map((group) => (

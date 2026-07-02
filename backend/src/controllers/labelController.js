@@ -1,7 +1,12 @@
 import { query, transaction } from '../database/pool.js';
-import { createShipmentCode, buildLabelPdf, buildLabelBatchPdf } from '../services/labelService.js';
+import { createShipmentCode, buildLabelPdf, buildLabelBatchPdf, normalizeLabelModel } from '../services/labelService.js';
 import { logAudit } from '../services/auditService.js';
 import { httpError } from '../utils/httpError.js';
+
+function getRequestedLabelModel(req) {
+  const labelModel = req.query.labelModel || '15x10';
+  return normalizeLabelModel(labelModel);
+}
 
 async function findVolume(id) {
   const result = await query(
@@ -138,7 +143,7 @@ export async function downloadLabelPdf(req, res, next) {
       });
       volume = await findVolume(req.params.shipmentVolumeId);
     }
-    const pdf = await buildLabelPdf(volume);
+    const pdf = await buildLabelPdf(volume, { labelModel: getRequestedLabelModel(req) });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="etiqueta-${volume.shipment_code}.pdf"`);
     res.send(pdf);
@@ -232,7 +237,7 @@ export async function downloadSoldItemLabelPdf(req, res, next) {
       return { volumes: updated.rows, generatedCount, reprintedCount };
     });
 
-    const pdf = await buildLabelBatchPdf(volumes);
+    const pdf = await buildLabelBatchPdf(volumes, { labelModel: getRequestedLabelModel(req) });
     const saleNumber = volumes[0]?.sale_number || req.params.soldItemId;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="etiquetas-${saleNumber}-${req.params.soldItemId}.pdf"`);
