@@ -4,7 +4,7 @@ import { api } from '../../services/api.js';
 import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import './InternalOrderForm.css';
 
-export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar Ordem de Serviço Interna' }) {
+export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar Ordem de Serviço Interna', isSubmitting = false }) {
   const toast = useToast();
   const [form, setForm] = useState(() => initialOrder ? {
     sale_number: initialOrder.sale_number || '',
@@ -204,6 +204,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
 
   function submit(event) {
     event.preventDefault();
+    if (!event.currentTarget.reportValidity()) return;
     if (!items.length) {
       setMessage('Adicione ao menos um item na OS.');
       return;
@@ -223,7 +224,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
   }
 
   return (
-    <form className="internal-order-form panel" onSubmit={submit}>
+    <form className="internal-order-form panel" onSubmit={submit} noValidate>
       <div className="form-grid">
         <label className="field">
           <span className="field__label">Número da Venda</span>
@@ -387,7 +388,9 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
           ))}
         </div>
       </div>
-      <button className="button button_primary internal-order-form__button" type="submit">{submitLabel}</button>
+      <button className="button button_primary internal-order-form__button" type="submit" disabled={isSubmitting}>
+        {isSubmitting ? 'Salvando...' : submitLabel}
+      </button>
     </form>
   );
 }

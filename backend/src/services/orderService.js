@@ -144,6 +144,72 @@ export async function upsertCustomerForOrder(client, payload) {
   return created.rows[0];
 }
 
+async function markOrderGoodsReady(client, orderId, userId) {
+  const previousTasks = await client.query(
+    `SELECT it.*
+     FROM internal_tasks it
+     JOIN sold_items si ON si.id = it.sold_item_id
+     WHERE si.internal_order_id = $1
+       AND it.status <> 'ready'`,
+    [orderId],
+  );
+
+  const updatedTasks = await client.query(
+    `UPDATE internal_tasks it
+     SET status = 'ready',
+      completed_by = $2,
+      completed_at = NOW(),
+      updated_at = NOW()
+     FROM sold_items si
+     WHERE si.id = it.sold_item_id
+       AND si.internal_order_id = $1
+       AND it.status <> 'ready'
+     RETURNING it.*`,
+    [orderId, userId],
+  );
+
+  const previousById = new Map(previousTasks.rows.map((task) => [task.id, task]));
+  for (const task of updatedTasks.rows) {
+    await logAudit(client, {
+      entityType: 'internal_task',
+      entityId: task.id,
+      action: 'mark_ready_auto',
+      previousValue: previousById.get(task.id) || null,
+      newValue: task,
+      userId,
+    });
+  }
+
+  await client.query(
+    `UPDATE shipment_volumes sv
+     SET label_status = 'released_for_label',
+      updated_at = NOW()
+     FROM sold_items si
+     WHERE si.id = sv.sold_item_id
+       AND si.internal_order_id = $1
+       AND sv.label_status = 'waiting_tasks'`,
+    [orderId],
+  );
+
+  const soldItems = await client.query('SELECT id FROM sold_items WHERE internal_order_id = $1', [orderId]);
+  for (const soldItem of soldItems.rows) {
+    await refreshSoldItemStatus(client, soldItem.id);
+  }
+  await refreshInternalOrderStatus(client, orderId);
+
+  await logAudit(client, {
+    entityType: 'internal_order',
+    entityId: orderId,
+    action: 'create_ready_for_label',
+    newValue: {
+      goods_ready: true,
+      message: 'OS criada como mercadoria pronta. Tarefas marcadas como prontas automaticamente.',
+      marked_tasks: updatedTasks.rows.length,
+    },
+    userId,
+  });
+}
+
 export function normalizeDeliveryPayload(payload) {
   const deliveryType = payload.delivery_type || 'transportadora';
   if (!DELIVERY_TYPES.has(deliveryType)) {
@@ -260,7 +326,11 @@ export async function createInternalOrder(payload, userId) {
     }
 
     await logAudit(client, { entityType: 'internal_order', entityId: order.id, action: 'create', newValue: payload, userId });
+    if (payload.goods_ready === true) {
+      await markOrderGoodsReady(client, order.id, userId);
+    }
     await refreshInternalOrderStatus(client, order.id);
-    return order;
+    const finalOrder = await client.query('SELECT * FROM internal_orders WHERE id = $1', [order.id]);
+    return finalOrder.rows[0] || order;
   });
 }

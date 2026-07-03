@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../services/api.js';
+import { api, getStoredUser } from '../../services/api.js';
 import { ShippingLookup } from '../../components/ShippingLookup/ShippingLookup.jsx';
 import { ShippingResultCard } from '../../components/ShippingResultCard/ShippingResultCard.jsx';
 import { QrScannerBox } from '../../components/QrScannerBox/QrScannerBox.jsx';
+import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
+import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './ShippingPage.css';
@@ -37,12 +39,17 @@ function getRemainingText(count) {
 
 export function ShippingPage() {
   const toast = useToast();
+  const user = getStoredUser();
+  const isAdmin = user?.role === 'admin';
   const [volumes, setVolumes] = useState([]);
   const [saleSummary, setSaleSummary] = useState(null);
   const [currentSaleNumber, setCurrentSaleNumber] = useState('');
   const [message, setMessage] = useState('');
   const [feedback, setFeedback] = useState(null);
   const [pendingSaleSwitch, setPendingSaleSwitch] = useState(null);
+  const [readyOrders, setReadyOrders] = useState([]);
+  const [readyOrdersLoading, setReadyOrdersLoading] = useState(false);
+  const [readyOrderConfirmation, setReadyOrderConfirmation] = useState(null);
   const lookupRef = useRef(null);
   const autoCloseTimerRef = useRef(null);
   const lastReadRef = useRef({ code: '', readAt: 0 });
@@ -84,6 +91,19 @@ export function ShippingPage() {
     lookupRef.current?.focusCode();
   }
 
+  const refreshReadyOrders = useCallback(async () => {
+    if (!isAdmin) return;
+    setReadyOrdersLoading(true);
+    try {
+      const response = await api.get('/shipping/ready');
+      setReadyOrders(response.data);
+    } catch {
+      toast.error('Não foi possível carregar vendas prontas para expedição.');
+    } finally {
+      setReadyOrdersLoading(false);
+    }
+  }, [isAdmin, toast]);
+
   // Prevents duplicated processing when the same QR/code stays in front of the reader.
   function shouldIgnoreDuplicateCode(code) {
     const now = Date.now();
@@ -116,6 +136,10 @@ export function ShippingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    refreshReadyOrders();
+  }, [refreshReadyOrders]);
+
   async function lookupCode(code) {
     const normalizedCode = String(code || '').replace(/\s/g, '');
     if (shouldIgnoreDuplicateCode(normalizedCode)) return;
@@ -141,6 +165,30 @@ export function ShippingPage() {
     if (response.data.sale_summary) setCurrentSaleNumber(response.data.sale_summary.sale_number);
   }
 
+  async function loadReadyOrder(order) {
+    await lookupSale(order.sale_number);
+    toast.success('Venda carregada para expedição.');
+  }
+
+  async function handleLoadReadyOrder(order) {
+    if (Number(order.released_for_label_volumes) > 0) {
+      setReadyOrderConfirmation({ step: 1, order });
+      return;
+    }
+    await loadReadyOrder(order);
+  }
+
+  async function confirmReadyOrderLoad() {
+    if (!readyOrderConfirmation?.order) return;
+    if (readyOrderConfirmation.step === 1) {
+      setReadyOrderConfirmation({ ...readyOrderConfirmation, step: 2 });
+      return;
+    }
+    const order = readyOrderConfirmation.order;
+    setReadyOrderConfirmation(null);
+    await loadReadyOrder(order);
+  }
+
   async function confirmCode(code) {
     try {
       const response = await api.post(`/shipping/code/${code}/confirm`);
@@ -152,6 +200,7 @@ export function ShippingPage() {
       }
       if (volume) setVolumes([volume]);
       await refreshShippingData(summary?.sale_number);
+      await refreshReadyOrders();
 
       if (volume.sale_completed) {
         toast.success('Venda concluída.');
@@ -202,6 +251,7 @@ export function ShippingPage() {
     applyLookup(response.data);
     setCurrentSaleNumber(response.data.sale_summary?.sale_number || sale);
     await refreshShippingData(response.data.sale_summary?.sale_number || sale);
+    await refreshReadyOrders();
     toast.success('Venda concluída.');
     showFeedback({
       variant: 'completed',
@@ -262,6 +312,56 @@ export function ShippingPage() {
       </div>
       <QrScannerBox onScan={handleQrScan} />
       <ShippingLookup ref={lookupRef} onLookupCode={lookupCode} onLookupSale={lookupSale} />
+      {isAdmin && (
+        <section className="shipping-ready panel">
+          <div className="shipping-ready__header">
+            <div>
+              <h2>Prontas para expedição</h2>
+              {readyOrdersLoading && <span>Atualizando...</span>}
+            </div>
+            <button className="button" type="button" onClick={refreshReadyOrders}>Atualizar</button>
+          </div>
+
+          {!readyOrdersLoading && readyOrders.length === 0 && (
+            <p className="shipping-ready__empty">Nenhuma venda pronta para expedição no momento.</p>
+          )}
+
+          {readyOrders.length > 0 && (
+            <div className="shipping-ready__list">
+              {readyOrders.map((order) => {
+                const hasPendingLabels = Number(order.released_for_label_volumes) > 0;
+                return (
+                  <article className={`shipping-ready__card${hasPendingLabels ? ' shipping-ready__card_warning' : ''}`} key={order.internal_order_id}>
+                    <div className="shipping-ready__card-header">
+                      <div>
+                        <h3>Venda {order.sale_number}</h3>
+                        <p>Cliente: {order.customer_name}</p>
+                      </div>
+                      <StatusBadge value={order.order_status} />
+                    </div>
+                    <div className="shipping-ready__meta">
+                      <span>Entrega: <strong>{formatDate(order.promised_date)}</strong></span>
+                      <span>Serviços: <strong>{order.ready_tasks}/{order.total_tasks}</strong></span>
+                      <span>Volumes: <strong>{order.shipped_volumes} de {order.total_volumes} expedidos</strong></span>
+                      <span>Pendentes: <strong>{order.pending_volumes}</strong></span>
+                      <span>Etiquetas geradas: <strong>{order.label_generated_volumes}</strong></span>
+                      <span>Prontos sem etiqueta: <strong>{order.ready_without_label_volumes}</strong></span>
+                      <span>Liberados sem etiqueta: <strong>{order.released_for_label_volumes}</strong></span>
+                      <span>Aguardando tarefas: <strong>{order.waiting_tasks_volumes}</strong></span>
+                    </div>
+                    {hasPendingLabels && (
+                      <p className="shipping-ready__alert">Atenção: existem volumes liberados para etiqueta, mas sem etiqueta gerada.</p>
+                    )}
+                    <div className="shipping-ready__actions">
+                      <button className="button button_primary" type="button" onClick={() => handleLoadReadyOrder(order)}>Carregar venda</button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
       {saleSummary && (
         <section className="shipping-page__status panel">
           <div>
@@ -327,6 +427,27 @@ export function ShippingPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(readyOrderConfirmation)}
+        title={readyOrderConfirmation?.step === 1 ? 'Etiquetas ainda não geradas' : 'Confirmar carregamento para expedição?'}
+        onCancel={() => setReadyOrderConfirmation(null)}
+        showCancel={false}
+        actions={(
+          <>
+            <button className="button" type="button" onClick={() => setReadyOrderConfirmation(null)}>Cancelar</button>
+            <button className="button button_primary" type="button" onClick={confirmReadyOrderLoad}>
+              {readyOrderConfirmation?.step === 1 ? 'Continuar mesmo assim' : 'Sim, carregar venda'}
+            </button>
+          </>
+        )}
+      >
+        {readyOrderConfirmation?.step === 1 ? (
+          <p>Esta venda possui volumes liberados para etiqueta, mas nem todas as etiquetas foram geradas.</p>
+        ) : (
+          <p>Você tem certeza que deseja carregar esta venda para expedição mesmo com etiquetas pendentes?</p>
+        )}
+      </ConfirmModal>
     </section>
   );
 }

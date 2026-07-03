@@ -10,6 +10,60 @@ const volumeSelect = `SELECT sv.*, si.product_name_snapshot AS product_name, si.
   JOIN sold_items si ON si.id = sv.sold_item_id
   JOIN internal_orders io ON io.id = si.internal_order_id`;
 
+export async function listReadyForShipping(_req, res, next) {
+  try {
+    const result = await query(
+      `WITH task_counts AS (
+         SELECT si.internal_order_id,
+           COUNT(it.id)::int AS total_tasks,
+           COUNT(it.id) FILTER (WHERE it.status = 'ready')::int AS ready_tasks
+         FROM sold_items si
+         LEFT JOIN internal_tasks it ON it.sold_item_id = si.id
+         GROUP BY si.internal_order_id
+       ),
+       volume_counts AS (
+         SELECT si.internal_order_id,
+           COUNT(sv.id)::int AS total_volumes,
+           COUNT(sv.id) FILTER (WHERE sv.label_status = 'shipped')::int AS shipped_volumes,
+           COUNT(sv.id) FILTER (WHERE sv.label_status <> 'shipped')::int AS pending_volumes,
+           COUNT(sv.id) FILTER (WHERE sv.label_status = 'label_generated')::int AS label_generated_volumes,
+           COUNT(sv.id) FILTER (WHERE sv.label_status = 'ready_without_label')::int AS ready_without_label_volumes,
+           COUNT(sv.id) FILTER (WHERE sv.label_status = 'released_for_label')::int AS released_for_label_volumes,
+           COUNT(sv.id) FILTER (WHERE sv.label_status = 'waiting_tasks')::int AS waiting_tasks_volumes
+         FROM sold_items si
+         JOIN shipment_volumes sv ON sv.sold_item_id = si.id
+         GROUP BY si.internal_order_id
+       )
+       SELECT io.id AS internal_order_id,
+         io.sale_number,
+         io.customer_name,
+         io.promised_date,
+         io.status AS order_status,
+         COALESCE(tc.total_tasks, 0)::int AS total_tasks,
+         COALESCE(tc.ready_tasks, 0)::int AS ready_tasks,
+         vc.total_volumes,
+         vc.shipped_volumes,
+         vc.pending_volumes,
+         vc.label_generated_volumes,
+         vc.ready_without_label_volumes,
+         vc.released_for_label_volumes,
+         vc.waiting_tasks_volumes
+       FROM internal_orders io
+       JOIN volume_counts vc ON vc.internal_order_id = io.id
+       LEFT JOIN task_counts tc ON tc.internal_order_id = io.id
+       WHERE io.deleted_at IS NULL
+         AND COALESCE(io.status, '') NOT IN ('deleted', 'shipped')
+         AND vc.total_volumes > 0
+         AND vc.pending_volumes > 0
+         AND COALESCE(tc.total_tasks, 0) = COALESCE(tc.ready_tasks, 0)
+       ORDER BY io.promised_date ASC, io.sale_number ASC`,
+    );
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getSaleSummary(client, saleNumber) {
   const result = await client.query(
     `SELECT io.sale_number,
