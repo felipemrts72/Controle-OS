@@ -35,6 +35,16 @@ CREATE TABLE products (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR NOT NULL,
+  normalized_name VARCHAR NOT NULL UNIQUE,
+  phone VARCHAR,
+  location VARCHAR,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE product_components (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
@@ -50,6 +60,7 @@ CREATE TABLE product_components (
 CREATE TABLE internal_orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sale_number VARCHAR UNIQUE NOT NULL,
+  customer_id UUID REFERENCES customers(id),
   customer_name VARCHAR NOT NULL,
   customer_phone VARCHAR,
   promised_date DATE NOT NULL,
@@ -120,6 +131,7 @@ CREATE TABLE audit_logs (
 );
 
 CREATE INDEX idx_internal_orders_sale_number ON internal_orders(sale_number);
+CREATE INDEX idx_internal_orders_customer_id ON internal_orders(customer_id);
 CREATE INDEX idx_internal_orders_promised_date ON internal_orders(promised_date);
 CREATE INDEX idx_sold_items_internal_order_id ON sold_items(internal_order_id);
 CREATE INDEX idx_internal_tasks_sold_item_id ON internal_tasks(sold_item_id);
@@ -129,6 +141,7 @@ CREATE INDEX idx_shipment_volumes_sold_item_id ON shipment_volumes(sold_item_id)
 CREATE INDEX idx_shipment_volumes_shipment_code ON shipment_volumes(shipment_code);
 CREATE INDEX idx_shipment_volumes_label_status ON shipment_volumes(label_status);
 CREATE INDEX idx_products_type ON products(type);
+CREATE INDEX idx_customers_normalized_name ON customers(normalized_name);
 CREATE INDEX idx_sectors_slug ON sectors(slug);
 CREATE INDEX idx_audit_logs_entity_type ON audit_logs(entity_type);
 CREATE INDEX idx_audit_logs_entity_id ON audit_logs(entity_id);

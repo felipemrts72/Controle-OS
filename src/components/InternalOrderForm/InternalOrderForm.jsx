@@ -8,6 +8,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
   const toast = useToast();
   const [form, setForm] = useState(() => initialOrder ? {
     sale_number: initialOrder.sale_number || '',
+    customer_id: initialOrder.customer_id || '',
     customer_name: initialOrder.customer_name || '',
     customer_phone: initialOrder.customer_phone || '',
     promised_date: initialOrder.promised_date?.slice(0, 10) || '',
@@ -17,6 +18,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     destination_uf: initialOrder.destination_uf || '',
   } : {
     sale_number: '',
+    customer_id: '',
     customer_name: '',
     customer_phone: '',
     promised_date: '',
@@ -27,6 +29,9 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
   });
   const [itemForm, setItemForm] = useState({ quantity: 1 });
   const [productSearch, setProductSearch] = useState('');
+  const [customerResults, setCustomerResults] = useState([]);
+  const [showCustomerResults, setShowCustomerResults] = useState(false);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   const [productResults, setProductResults] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [includeSpareParts, setIncludeSpareParts] = useState(false);
@@ -54,8 +59,38 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     }
   }, [productSearch, selectedProduct]);
 
+  useEffect(() => {
+    const searchTerm = form.customer_name.trim();
+    if (form.customer_id || searchTerm.length < 2) {
+      setCustomerResults([]);
+      setShowCustomerResults(false);
+      setIsSearchingCustomers(false);
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setIsSearchingCustomers(true);
+        const response = await api.get('/internal-orders/customers', { params: { q: searchTerm } });
+        setCustomerResults(response.data);
+        setShowCustomerResults(document.activeElement?.name === 'customer_name' && response.data.length > 0);
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Nao foi possivel buscar clientes salvos.');
+      } finally {
+        setIsSearchingCustomers(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [form.customer_id, form.customer_name, toast]);
+
   function change(event) {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+    const { name, value } = event.target;
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+      ...(name === 'customer_name' ? { customer_id: '' } : {}),
+    }));
   }
 
   function changeItem(event) {
@@ -101,6 +136,18 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     const currentIndex = productResults.findIndex((product) => product.id === highlightedProductId);
     const nextIndex = (currentIndex + direction + productResults.length) % productResults.length;
     setHighlightedProductId(productResults[nextIndex].id);
+  }
+
+  function selectCustomer(customer) {
+    setForm((current) => ({
+      ...current,
+      customer_id: customer.id,
+      customer_name: customer.name || '',
+      customer_phone: customer.phone || '',
+      destination_city: customer.location || current.destination_city,
+    }));
+    setCustomerResults([]);
+    setShowCustomerResults(false);
   }
 
   function handleSearchKeyDown(event) {
@@ -163,6 +210,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     }
     onSubmit({
       sale_number: form.sale_number,
+      customer_id: form.customer_id || null,
       customer_name: form.customer_name,
       customer_phone: form.customer_phone,
       promised_date: form.promised_date,
@@ -181,9 +229,37 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
           <span className="field__label">Número da Venda</span>
           <input className="field__input" name="sale_number" value={form.sale_number} onChange={change} required />
         </label>
-        <label className="field">
+        <label className="field internal-order-form__customer-field">
           <span className="field__label">Cliente</span>
-          <input className="field__input" name="customer_name" value={form.customer_name} onChange={change} required />
+          <input
+            className="field__input"
+            name="customer_name"
+            value={form.customer_name}
+            onChange={change}
+            onFocus={() => setShowCustomerResults(!form.customer_id && customerResults.length > 0)}
+            onBlur={() => window.setTimeout(() => setShowCustomerResults(false), 120)}
+            autoComplete="off"
+            required
+          />
+          {showCustomerResults && (
+            <div className="internal-order-form__customer-results">
+              {customerResults.map((customer) => (
+                <button
+                  className="internal-order-form__customer-result"
+                  key={customer.id}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    selectCustomer(customer);
+                  }}
+                >
+                  <strong>{customer.name}</strong>
+                  <span>{[customer.phone, customer.location].filter(Boolean).join(' - ') || 'Cliente salvo'}</span>
+                </button>
+              ))}
+              {isSearchingCustomers && <p>Buscando clientes...</p>}
+            </div>
+          )}
         </label>
         <label className="field">
           <span className="field__label">Telefone</span>
