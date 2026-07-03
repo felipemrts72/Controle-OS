@@ -4,6 +4,11 @@ import { api } from '../../services/api.js';
 import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import './InternalOrderForm.css';
 
+function formatCustomerDetails(customer) {
+  const destination = [customer.location, customer.destination_uf].filter(Boolean).join('/');
+  return [customer.phone, destination, customer.carrier_name].filter(Boolean).join(' - ') || 'Cliente salvo';
+}
+
 export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar Ordem de Serviço Interna', isSubmitting = false }) {
   const toast = useToast();
   const [form, setForm] = useState(() => initialOrder ? {
@@ -144,7 +149,9 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
       customer_id: customer.id,
       customer_name: customer.name || '',
       customer_phone: customer.phone || '',
+      carrier_name: customer.carrier_name || current.carrier_name,
       destination_city: customer.location || current.destination_city,
+      destination_uf: customer.destination_uf || current.destination_uf,
     }));
     setCustomerResults([]);
     setShowCustomerResults(false);
@@ -255,7 +262,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
                   }}
                 >
                   <strong>{customer.name}</strong>
-                  <span>{[customer.phone, customer.location].filter(Boolean).join(' - ') || 'Cliente salvo'}</span>
+                  <span>{formatCustomerDetails(customer)}</span>
                 </button>
               ))}
               {isSearchingCustomers && <p>Buscando clientes...</p>}

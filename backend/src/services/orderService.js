@@ -25,6 +25,17 @@ function resolveCustomerLocation(payload) {
   return collapseSpaces(payload.destination_city || '') || null;
 }
 
+function resolveCustomerCarrier(payload) {
+  if (payload.delivery_type !== 'transportadora') return null;
+  return collapseSpaces(payload.carrier_name || '') || null;
+}
+
+function resolveCustomerUf(payload) {
+  if (payload.delivery_type === 'retirada') return null;
+  const uf = collapseSpaces(payload.destination_uf || '').toUpperCase();
+  return uf || null;
+}
+
 function isVerySimilarName(firstName, secondName) {
   const first = normalizeCustomerKey(firstName);
   const second = normalizeCustomerKey(secondName);
@@ -57,7 +68,7 @@ export async function searchCustomers(term) {
   if (normalizedTerm.length < 2) return [];
 
   const result = await query(
-    `SELECT id, name, phone, location
+    `SELECT id, name, phone, location, carrier_name, destination_uf
      FROM customers
      WHERE normalized_name LIKE $1
      ORDER BY
@@ -76,6 +87,8 @@ export async function upsertCustomerForOrder(client, payload) {
 
   const phone = collapseSpaces(payload.customer_phone) || null;
   const location = resolveCustomerLocation(payload);
+  const carrierName = resolveCustomerCarrier(payload);
+  const destinationUf = resolveCustomerUf(payload);
 
   if (payload.customer_id) {
     const current = await client.query('SELECT * FROM customers WHERE id = $1', [payload.customer_id]);
@@ -89,12 +102,14 @@ export async function upsertCustomerForOrder(client, payload) {
         const updatedDuplicate = await client.query(
           `UPDATE customers
            SET name = $1,
-            phone = $2,
-            location = $3,
+            phone = COALESCE($2, phone),
+            location = COALESCE($3, location),
+            carrier_name = COALESCE($4, carrier_name),
+            destination_uf = COALESCE($5, destination_uf),
             updated_at = NOW()
-           WHERE id = $4
+           WHERE id = $6
            RETURNING *`,
-          [name, phone, location, duplicate.rows[0].id],
+          [name, phone, location, carrierName, destinationUf, duplicate.rows[0].id],
         );
         return updatedDuplicate.rows[0];
       }
@@ -103,12 +118,14 @@ export async function upsertCustomerForOrder(client, payload) {
         `UPDATE customers
          SET name = $1,
           normalized_name = $2,
-          phone = $3,
-          location = $4,
+          phone = COALESCE($3, phone),
+          location = COALESCE($4, location),
+          carrier_name = COALESCE($5, carrier_name),
+          destination_uf = COALESCE($6, destination_uf),
           updated_at = NOW()
-         WHERE id = $5
+         WHERE id = $7
          RETURNING *`,
-        [name, normalizedName, phone, location, payload.customer_id],
+        [name, normalizedName, phone, location, carrierName, destinationUf, payload.customer_id],
       );
       return updated.rows[0];
     }
@@ -120,26 +137,30 @@ export async function upsertCustomerForOrder(client, payload) {
       `UPDATE customers
        SET name = $1,
         normalized_name = $2,
-        phone = $3,
-        location = $4,
+        phone = COALESCE($3, phone),
+        location = COALESCE($4, location),
+        carrier_name = COALESCE($5, carrier_name),
+        destination_uf = COALESCE($6, destination_uf),
         updated_at = NOW()
-       WHERE id = $5
+       WHERE id = $7
        RETURNING *`,
-      [name, normalizeCustomerName(name), phone, location, existingCustomer.id],
+      [name, normalizeCustomerName(name), phone, location, carrierName, destinationUf, existingCustomer.id],
     );
     return updated.rows[0];
   }
 
   const created = await client.query(
-    `INSERT INTO customers (name, normalized_name, phone, location)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO customers (name, normalized_name, phone, location, carrier_name, destination_uf)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (normalized_name) DO UPDATE
        SET name = EXCLUDED.name,
-        phone = EXCLUDED.phone,
-        location = EXCLUDED.location,
+        phone = COALESCE(EXCLUDED.phone, customers.phone),
+        location = COALESCE(EXCLUDED.location, customers.location),
+        carrier_name = COALESCE(EXCLUDED.carrier_name, customers.carrier_name),
+        destination_uf = COALESCE(EXCLUDED.destination_uf, customers.destination_uf),
         updated_at = NOW()
      RETURNING *`,
-    [name, normalizeCustomerName(name), phone, location],
+    [name, normalizeCustomerName(name), phone, location, carrierName, destinationUf],
   );
   return created.rows[0];
 }

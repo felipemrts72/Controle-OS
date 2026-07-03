@@ -41,6 +41,8 @@ CREATE TABLE customers (
   normalized_name VARCHAR NOT NULL UNIQUE,
   phone VARCHAR,
   location VARCHAR,
+  carrier_name VARCHAR,
+  destination_uf VARCHAR(2),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
