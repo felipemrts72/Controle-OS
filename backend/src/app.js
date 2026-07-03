@@ -11,6 +11,7 @@ import { shippingRoutes } from './routes/shippingRoutes.js';
 import { dashboardRoutes } from './routes/dashboardRoutes.js';
 import { qrRoutes } from './routes/qrRoutes.js';
 import { serviceRoutes } from './routes/serviceRoutes.js';
+import { roleRoutes } from './routes/roleRoutes.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
 
 export const app = express();
@@ -22,6 +23,7 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/api/ping', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/roles', roleRoutes);
 app.use('/api/sectors', sectorRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/internal-orders', internalOrderRoutes);

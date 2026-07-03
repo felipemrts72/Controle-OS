@@ -1,11 +1,38 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+CREATE TABLE roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR NOT NULL,
+  slug VARCHAR UNIQUE NOT NULL,
+  description TEXT,
+  is_system BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code VARCHAR UNIQUE NOT NULL,
+  name VARCHAR NOT NULL,
+  description TEXT,
+  group_name VARCHAR,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE role_permissions (
+  role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
+  permission_id UUID REFERENCES permissions(id) ON DELETE CASCADE,
+  PRIMARY KEY (role_id, permission_id)
+);
+
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR NOT NULL,
   username VARCHAR UNIQUE NOT NULL,
   password_hash VARCHAR NOT NULL,
   role VARCHAR NOT NULL CHECK (role IN ('admin', 'manager', 'shipping', 'viewer')),
+  role_id UUID REFERENCES roles(id),
   is_active BOOLEAN DEFAULT TRUE,
   approval_status VARCHAR DEFAULT 'approved' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
   approved_by UUID REFERENCES users(id),

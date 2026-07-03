@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getStoredUser } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './ServicesPage.css';
 
 function formatDate(date) {
@@ -15,7 +16,7 @@ function formatStatus(status) {
 export function ServicesPage() {
   const user = getStoredUser();
   const toast = useToast();
-  const canMarkReady = ['admin', 'manager'].includes(user?.role);
+  const canMarkReady = canAccessPermission(user, 'services.complete');
   const [orders, setOrders] = useState([]);
   const [selectedSectorSlug, setSelectedSectorSlug] = useState(null);
   const [isSectorMenuOpen, setIsSectorMenuOpen] = useState(false);

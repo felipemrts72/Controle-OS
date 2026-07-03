@@ -5,18 +5,19 @@ import { canAccessPermission, getDefaultRoute } from '../../utils/permissions.js
 import './Sidebar.css';
 
 const links = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
-  { to: '/os', label: 'Ordens de Serviço', icon: ClipboardList, permission: 'orders' },
-  { to: '/os/nova', label: 'Nova OS', icon: ClipboardList, permission: 'order-create' },
-  { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products' },
-  { to: '/setores', label: 'Setores', icon: Boxes, permission: 'sectors' },
-  { to: '/servicos', label: 'Serviços', icon: Wrench, permission: 'services' },
-  { to: '/fila-etiquetas', label: 'Fila de Etiquetas', icon: Tags, permission: 'labels' },
-  { to: '/expedicao', label: 'Expedição', icon: QrCode, permission: 'shipping' },
-  { to: '/auditoria-expedicoes', label: 'Auditoria de Expedições', icon: FileSearch, permission: 'shipping-audit' },
-  { to: '/tv', label: 'Painel de TV', icon: Tv, permission: 'tv' },
-  { to: '/historico-ordens', label: 'Histórico de Ordens', icon: History, permission: 'order-history' },
-  { to: '/usuarios', label: 'Usuários', icon: Users, permission: 'users' },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+  { to: '/os', label: 'Ordens de Serviço', icon: ClipboardList, permission: 'orders.view' },
+  { to: '/os/nova', label: 'Nova OS', icon: ClipboardList, permission: 'orders.create' },
+  { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products.view' },
+  { to: '/setores', label: 'Setores', icon: Boxes, permission: 'sectors.view' },
+  { to: '/servicos', label: 'Serviços', icon: Wrench, permission: 'services.view' },
+  { to: '/fila-etiquetas', label: 'Fila de Etiquetas', icon: Tags, permission: 'labels.view' },
+  { to: '/expedicao', label: 'Expedição', icon: QrCode, permission: 'shipping.view' },
+  { to: '/auditoria-expedicoes', label: 'Auditoria de Expedições', icon: FileSearch, permission: 'shipping.audit.view' },
+  { to: '/tv', label: 'Painel de TV', icon: Tv, permission: 'tv.view' },
+  { to: '/historico-ordens', label: 'Histórico de Ordens', icon: History, permission: 'orders.history.view' },
+  { to: '/usuarios', label: 'Usuários', icon: Users, permission: 'users.view' },
+  { to: '/roles', label: 'Roles/Permissões', icon: Users, permission: 'roles.view' },
 ];
 
 export function Sidebar({ onNavigate }) {

@@ -1,7 +1,7 @@
 import { StatusBadge } from '../StatusBadge/StatusBadge.jsx';
 import './ShippingResultCard.css';
 
-export function ShippingResultCard({ volumes, onConfirmCode, onConfirmSale }) {
+export function ShippingResultCard({ volumes, onConfirmCode, onConfirmSale, canConfirm = true }) {
   if (!volumes?.length) return null;
   const forced = volumes.some((volume) => !['label_generated', 'ready_without_label', 'shipped'].includes(volume.label_status));
   return (
@@ -15,10 +15,10 @@ export function ShippingResultCard({ volumes, onConfirmCode, onConfirmSale }) {
           <span>Volume {volume.volume_number}/{volume.total_volumes}</span>
           <span>{Number(volume.weight_kg).toLocaleString('pt-BR')} kg</span>
           <StatusBadge value={volume.label_status} />
-          {volumes.length === 1 && <button className="button button_primary" type="button" onClick={() => onConfirmCode(volume.shipment_code)}>Confirmar expedição</button>}
+          {canConfirm && volumes.length === 1 && <button className="button button_primary" type="button" onClick={() => onConfirmCode(volume.shipment_code)}>Confirmar expedição</button>}
         </div>
       ))}
-      {volumes.length > 1 && <button className="button button_primary shipping-result__button" type="button" onClick={() => onConfirmSale(volumes[0].sale_number)}>Confirmar venda inteira</button>}
+      {canConfirm && volumes.length > 1 && <button className="button button_primary shipping-result__button" type="button" onClick={() => onConfirmSale(volumes[0].sale_number)}>Confirmar venda inteira</button>}
     </section>
   );
 }

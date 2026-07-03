@@ -7,6 +7,7 @@ import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './ShippingPage.css';
 
 function formatDate(date) {
@@ -40,7 +41,8 @@ function getRemainingText(count) {
 export function ShippingPage() {
   const toast = useToast();
   const user = getStoredUser();
-  const isAdmin = user?.role === 'admin';
+  const canConfirm = canAccessPermission(user, 'shipping.confirm');
+  const canViewReadyOrders = canAccessPermission(user, 'shipping.ready_admin.view');
   const [volumes, setVolumes] = useState([]);
   const [saleSummary, setSaleSummary] = useState(null);
   const [currentSaleNumber, setCurrentSaleNumber] = useState('');
@@ -92,7 +94,7 @@ export function ShippingPage() {
   }
 
   const refreshReadyOrders = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!canViewReadyOrders) return;
     setReadyOrdersLoading(true);
     try {
       const response = await api.get('/shipping/ready');
@@ -102,7 +104,7 @@ export function ShippingPage() {
     } finally {
       setReadyOrdersLoading(false);
     }
-  }, [isAdmin, toast]);
+  }, [canViewReadyOrders, toast]);
 
   // Prevents duplicated processing when the same QR/code stays in front of the reader.
   function shouldIgnoreDuplicateCode(code) {
@@ -190,6 +192,7 @@ export function ShippingPage() {
   }
 
   async function confirmCode(code) {
+    if (!canConfirm) return;
     try {
       const response = await api.post(`/shipping/code/${code}/confirm`);
       const volume = response.data;
@@ -247,6 +250,7 @@ export function ShippingPage() {
   }
 
   async function confirmSale(sale) {
+    if (!canConfirm) return;
     const response = await api.post(`/shipping/sale/${sale}/confirm-all`);
     applyLookup(response.data);
     setCurrentSaleNumber(response.data.sale_summary?.sale_number || sale);
@@ -286,6 +290,11 @@ export function ShippingPage() {
         toast.warning('Volume pertence a outra venda.');
         return;
       }
+      if (!canConfirm) {
+        applyLookup(response.data);
+        toast.success('Volume localizado.');
+        return;
+      }
       await confirmCode(code);
     } catch {
       showFeedback({
@@ -312,7 +321,7 @@ export function ShippingPage() {
       </div>
       <QrScannerBox onScan={handleQrScan} />
       <ShippingLookup ref={lookupRef} onLookupCode={lookupCode} onLookupSale={lookupSale} />
-      {isAdmin && (
+      {canViewReadyOrders && (
         <section className="shipping-ready panel">
           <div className="shipping-ready__header">
             <div>
@@ -391,6 +400,7 @@ export function ShippingPage() {
         volumes={volumes}
         onConfirmCode={confirmCode}
         onConfirmSale={confirmSale}
+        canConfirm={canConfirm}
       />
 
       {feedback && (

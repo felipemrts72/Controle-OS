@@ -4,6 +4,7 @@ import { api, getStoredUser } from '../../services/api.js';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './InternalOrdersPage.css';
 
 const SHIPPED_PAGE_SIZE = 15;
@@ -24,7 +25,10 @@ function ProgressLine({ label, ready = 0, total = 0 }) {
 export function InternalOrdersPage() {
   const user = getStoredUser();
   const toast = useToast();
-  const canManage = ['admin', 'manager'].includes(user?.role);
+  const canCreate = canAccessPermission(user, 'orders.create');
+  const canEdit = canAccessPermission(user, 'orders.edit');
+  const canDelete = canAccessPermission(user, 'orders.delete');
+  const canViewHistory = canAccessPermission(user, 'orders.history.view');
   const [orders, setOrders] = useState([]);
   const [shippedOrders, setShippedOrders] = useState([]);
   const [shippedPage, setShippedPage] = useState(1);
@@ -37,6 +41,7 @@ export function InternalOrdersPage() {
   }
 
   async function loadShipped(nextPage = shippedPage) {
+    if (!canViewHistory) return;
     const response = await api.get('/internal-orders/history', {
       params: { page: nextPage, limit: SHIPPED_PAGE_SIZE, status: 'finalizadas' },
     });
@@ -47,7 +52,7 @@ export function InternalOrdersPage() {
 
   useEffect(() => {
     load();
-    loadShipped(1);
+    if (canViewHistory) loadShipped(1);
   }, []);
 
   async function deleteOrder() {
@@ -68,7 +73,7 @@ export function InternalOrdersPage() {
     <section className="page internal-orders-page">
       <div className="page__header">
         <h1 className="page__title">Ordens de Serviço</h1>
-        {canManage && <Link className="button button_primary" to="/os/nova">Nova OS</Link>}
+        {canCreate && <Link className="button button_primary" to="/os/nova">Nova OS</Link>}
       </div>
 
       <div className="internal-orders-page__list">
@@ -85,10 +90,10 @@ export function InternalOrdersPage() {
               <ProgressLine label="Tarefas" ready={order.ready_tasks} total={order.total_tasks} />
               <ProgressLine label="Volumes" ready={order.ready_volumes} total={order.total_volumes} />
             </Link>
-            {canManage && (
+            {(canEdit || canDelete) && (
               <div className="internal-orders-page__actions">
-                <Link className="button" to={`/os/${order.id}`}>Editar/atualizar</Link>
-                <button className="button button_danger" type="button" onClick={() => setOrderToDelete(order)}>Excluir</button>
+                {canEdit && <Link className="button" to={`/os/${order.id}`}>Editar/atualizar</Link>}
+                {canDelete && <button className="button button_danger" type="button" onClick={() => setOrderToDelete(order)}>Excluir</button>}
               </div>
             )}
           </article>
@@ -96,7 +101,7 @@ export function InternalOrdersPage() {
         {activeOrders.length === 0 && <div className="panel">Nenhuma OS encontrada.</div>}
       </div>
 
-      <section className="internal-orders-page__shipped">
+      {canViewHistory && <section className="internal-orders-page__shipped">
         <div className="internal-orders-page__section-header">
           <h2>Expedidas</h2>
           <span>{shippedOrders.length} registro(s)</span>
@@ -124,7 +129,7 @@ export function InternalOrdersPage() {
           <span>Página {shippedPage} de {shippedTotalPages}</span>
           <button className="button" type="button" disabled={shippedPage >= shippedTotalPages} onClick={() => loadShipped(shippedPage + 1)}>Próxima</button>
         </div>
-      </section>
+      </section>}
 
       <ConfirmModal
         open={Boolean(orderToDelete)}
