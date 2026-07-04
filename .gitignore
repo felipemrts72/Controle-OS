@@ -7,3 +7,6 @@ dist/
 build/
 
 .DS_Store
+
+# PDFs de teste de etiquetas
+label-test-*..pdf
