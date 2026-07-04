@@ -7,3 +7,6 @@ dist/
 build/
 
 .DS_Store
+
+git rm label-test-10x15.pdf
+.gitignore
