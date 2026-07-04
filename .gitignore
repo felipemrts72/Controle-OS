@@ -10,3 +10,5 @@ build/
 
 git rm label-test-10x15.pdf
 .gitignore
+# PDFs de teste de etiquetas
+label-test-*..pdf
