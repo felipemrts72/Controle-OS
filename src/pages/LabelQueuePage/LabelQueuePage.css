@@ -9,6 +9,7 @@
   border-radius: 8px;
   display: inline-flex;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .label-model-toggle__button {
@@ -39,6 +40,7 @@
   gap: 14px;
   grid-template-columns: 1.4fr 1fr auto;
   padding: 14px;
+  min-width: 0;
 }
 
 .label-queue-group__main,
@@ -121,6 +123,7 @@
   gap: 10px;
   grid-template-columns: 1fr auto 1fr auto;
   padding: 10px;
+  min-width: 0;
 }
 
 .label-volume-list__row span {
@@ -134,6 +137,7 @@
 
   .label-model-toggle__button {
     flex: 1;
+    min-height: 44px;
   }
 
   .label-queue-group,
@@ -150,6 +154,17 @@
   .label-modal__actions .button,
   .label-volume-list__row .button {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .label-model-toggle {
+    display: flex;
+  }
+
+  .label-model-toggle__button {
+    padding-left: 10px;
+    padding-right: 10px;
   }
 }
 

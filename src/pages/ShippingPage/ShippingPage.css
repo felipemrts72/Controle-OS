@@ -50,6 +50,7 @@
   display: grid;
   gap: 14px;
   padding: 14px;
+  min-width: 0;
 }
 
 .shipping-ready__card_warning {
@@ -106,6 +107,7 @@
 .shipping-page__status strong {
   display: block;
   font-size: 18px;
+  overflow-wrap: anywhere;
 }
 
 .shipping-page__remaining {
@@ -202,6 +204,14 @@
 }
 
 @media (max-width: 760px) {
+  .shipping-page__status {
+    gap: 10px;
+  }
+
+  .shipping-page__remaining strong {
+    font-size: 34px;
+  }
+
   .shipping-page__modal {
     align-items: flex-start;
     padding: 12px;
@@ -237,5 +247,11 @@
   .shipping-ready__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .shipping-ready__meta {
+    grid-template-columns: 1fr;
   }
 }

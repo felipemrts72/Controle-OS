@@ -16,3 +16,19 @@
   gap: 12px;
   margin-bottom: 14px;
 }
+
+@media (max-width: 760px) {
+  .internal-order-detail-page__summary {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .internal-order-detail-page__section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .internal-order-detail-page__section-header .button {
+    width: 100%;
+  }
+}

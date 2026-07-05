@@ -16,6 +16,7 @@
   flex-direction: column;
   gap: 8px;
   align-self: start;
+  min-width: 0;
 }
 
 .roles-page__role-button {
@@ -63,6 +64,11 @@
   gap: 8px;
 }
 
+.roles-page__status input,
+.roles-page__check input {
+  flex: 0 0 auto;
+}
+
 .roles-page__permissions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -73,6 +79,7 @@
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px;
+  min-width: 0;
 }
 
 .roles-page__permission-group h2 {
@@ -96,5 +103,34 @@
   .roles-page__form-grid,
   .roles-page__permissions {
     grid-template-columns: 1fr;
+  }
+
+  .roles-page__list {
+    max-height: 260px;
+    overflow: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .roles-page__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .roles-page__header .button,
+  .roles-page__actions,
+  .roles-page__actions .button {
+    width: 100%;
+  }
+
+  .roles-page__check,
+  .roles-page__status {
+    align-items: center;
+    min-height: 44px;
+    padding: 6px 0;
+  }
+
+  .roles-page__permission-group h2 {
+    font-size: 1rem;
   }
 }

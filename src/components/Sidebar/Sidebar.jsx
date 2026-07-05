@@ -25,7 +25,7 @@ export function Sidebar({ onNavigate }) {
   const visibleLinks = links.filter((link) => canAccessPermission(user, link.permission));
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" id="app-sidebar">
       <Link to={getDefaultRoute(user)} className="sidebar__brand" onClick={onNavigate}>Controle Interno</Link>
       <nav className="sidebar__nav">
         {visibleLinks.map(({ to, label, icon: Icon }) => (

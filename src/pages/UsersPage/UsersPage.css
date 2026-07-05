@@ -36,6 +36,8 @@
 
 .users-page__modal-content {
   width: min(440px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -62,6 +64,16 @@
 }
 
 @media (max-width: 760px) {
+  .users-page__modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .users-page__modal-content {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
   .users-page__actions,
   .users-page__actions .button,
   .users-page__role,

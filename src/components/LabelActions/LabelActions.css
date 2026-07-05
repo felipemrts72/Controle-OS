@@ -9,3 +9,10 @@
   display: inline-flex;
   gap: 7px;
 }
+
+@media (max-width: 760px) {
+  .label-actions,
+  .label-actions .button {
+    width: 100%;
+  }
+}

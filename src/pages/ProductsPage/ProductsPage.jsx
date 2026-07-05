@@ -143,9 +143,9 @@ export function ProductsPage() {
   }, [filters, products, sort]);
 
   const columns = [
-    { key: 'name', label: sortButton('name', 'Nome'), render: (row) => canEdit ? <Link to={`/produtos/${row.id}`}>{row.name}</Link> : row.name },
-    { key: 'type', label: sortButton('type', 'Tipo'), render: (row) => <StatusBadge value={row.type} /> },
-    { key: 'sector_name', label: sortButton('sector_name', 'Setor responsável'), render: (row) => row.sector_name || '-' },
+    { key: 'name', label: sortButton('name', 'Nome'), mobileLabel: 'Nome', render: (row) => canEdit ? <Link to={`/produtos/${row.id}`}>{row.name}</Link> : row.name },
+    { key: 'type', label: sortButton('type', 'Tipo'), mobileLabel: 'Tipo', render: (row) => <StatusBadge value={row.type} /> },
+    { key: 'sector_name', label: sortButton('sector_name', 'Setor responsável'), mobileLabel: 'Setor responsável', render: (row) => row.sector_name || '-' },
     { key: 'default_volume_quantity', label: 'Volumes' },
     { key: 'default_total_weight_kg', label: 'Peso total (kg)' },
     ...(canDelete ? [{

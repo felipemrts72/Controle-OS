@@ -62,4 +62,9 @@
   .products-page__filters {
     grid-template-columns: 1fr;
   }
+
+  .products-page__row-actions,
+  .products-page__row-actions .button {
+    width: 100%;
+  }
 }
