@@ -11,7 +11,7 @@ import './EmployeesPage.css';
 export function EmployeesPage() {
   const toast = useToast();
   const user = getStoredUser();
-  const canCreate = canAccessPermission(user, 'employees.create') || canAccessPermission(user, 'employees.manage');
+  const canCreate = canAccessPermission(user, 'employees.create');
   const canEdit = canAccessPermission(user, 'employees.edit') || canAccessPermission(user, 'employees.manage');
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,15 +76,15 @@ export function EmployeesPage() {
         <h1 className="page__title">Funcionários</h1>
         <div className="page__actions">
           {canCreate && (
-            <Link className="button button_primary" to="/funcionarios/cadastro-rapido">
-              <Zap size={18} />
-              <span>Cadastro rápido</span>
+            <Link className="button button_primary" to="/funcionarios/novo">
+              <Plus size={18} />
+              <span>Novo funcionário</span>
             </Link>
           )}
           {canCreate && (
             <Link className="button" to="/funcionarios/cadastro-rapido">
-              <Plus size={18} />
-              <span>Novo funcionário</span>
+              <Zap size={18} />
+              <span>Cadastro rápido</span>
             </Link>
           )}
         </div>

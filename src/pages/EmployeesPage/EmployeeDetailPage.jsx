@@ -12,12 +12,12 @@ const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'De
 const editableFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone', 'email',
   'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood', 'city', 'state',
-  'admission_date', 'job_title', 'employment_status', 'notes', 'ctps_number', 'ctps_series', 'ctps_state', 'pis_pasep',
-  'voter_registration', 'voter_zone', 'voter_section', 'military_certificate', 'profile_completed',
+  'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
+  'ctps_state', 'pis_pasep', 'voter_registration', 'voter_zone', 'voter_section', 'military_certificate',
 ];
 
 function emptyEmployeeForm() {
-  return Object.fromEntries(editableFields.map((field) => [field, field === 'profile_completed' ? false : '']));
+  return Object.fromEntries(editableFields.map((field) => [field, '']));
 }
 
 function SectionFields({ form, setField, disabled, fields }) {
@@ -60,6 +60,7 @@ export function EmployeeDetailPage() {
   const canAudit = canEdit;
 
   const [activeTab, setActiveTab] = useState(searchParams.get('complete') ? 'Dados pessoais' : 'Resumo');
+  const [completeMode, setCompleteMode] = useState(Boolean(searchParams.get('complete')));
   const [employee, setEmployee] = useState(null);
   const [form, setForm] = useState(emptyEmployeeForm());
   const [saving, setSaving] = useState(false);
@@ -79,10 +80,10 @@ export function EmployeeDetailPage() {
     setEmployee(response.data);
     setForm({
       ...emptyEmployeeForm(),
-      ...Object.fromEntries(editableFields.map((field) => [field, ['birth_date', 'rg_issue_date', 'admission_date'].includes(field) ? toDateInput(response.data[field]) : response.data[field] ?? (field === 'profile_completed' ? false : '')])),
+      ...Object.fromEntries(editableFields.map((field) => [field, ['birth_date', 'rg_issue_date', 'admission_date'].includes(field) ? toDateInput(response.data[field]) : response.data[field] ?? ''])),
     });
-    setSalaryForm((current) => ({ ...current, salary: response.data.current_salary || '' }));
-    setMealForm((current) => ({ ...current, amount: response.data.meal_allowance || '' }));
+    setSalaryForm((current) => ({ ...current, salary: response.data.current_salary ?? '' }));
+    setMealForm((current) => ({ ...current, amount: response.data.meal_allowance ?? '' }));
   }
 
   async function loadRelated() {
@@ -104,16 +105,40 @@ export function EmployeeDetailPage() {
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
   }
 
+  function buildEmployeePayload() {
+    const payload = { ...form };
+    if (!canSalaryManage) delete payload.current_salary;
+    if (!canMealManage) delete payload.meal_allowance;
+    return payload;
+  }
+
   async function saveEmployee(event) {
     event.preventDefault();
     setSaving(true);
     try {
-      const response = await api.put(`/employees/${id}`, form);
+      const response = await api.put(`/employees/${id}`, buildEmployeePayload());
       setEmployee(response.data);
-      toast.success(form.profile_completed ? 'Ficha cadastral salva e marcada como completa.' : 'Ficha cadastral salva.');
+      toast.success('Alterações salvas.');
       await loadRelated();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Não foi possível salvar a ficha.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function completeProfile(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const response = await api.post(`/employees/${id}/complete-profile`, buildEmployeePayload());
+      setEmployee(response.data);
+      setCompleteMode(false);
+      toast.success('Ficha cadastral concluída.');
+      await loadEmployee();
+      await loadRelated();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível concluir a ficha.');
     } finally {
       setSaving(false);
     }
@@ -225,6 +250,40 @@ export function EmployeeDetailPage() {
     return true;
   }), [canAudit, canDependentsView, canDocumentsView, canMealView, canSalaryView]);
 
+  const missingForCompletion = useMemo(() => {
+    const required = [
+      ['full_name', 'Nome completo'],
+      ['birth_date', 'Data de nascimento'],
+      ['cpf', 'CPF'],
+      ['phone', 'Telefone celular'],
+      ['marital_status', 'Estado civil'],
+      ['zip_code', 'CEP'],
+      ['street', 'Logradouro'],
+      ['address_number', 'Número'],
+      ['neighborhood', 'Bairro'],
+      ['city', 'Cidade'],
+      ['state', 'UF'],
+      ['admission_date', 'Data de admissão'],
+      ['job_title', 'Cargo'],
+      ['current_salary', 'Salário atual'],
+      ['meal_allowance', 'Vale alimentação informado'],
+      ['employment_status', 'Situação funcional'],
+      ['ctps_number', 'CTPS número'],
+      ['pis_pasep', 'PIS/PASEP'],
+      ['voter_registration', 'Título de eleitor'],
+      ['voter_zone', 'Zona eleitoral'],
+      ['voter_section', 'Seção eleitoral'],
+    ];
+    const missing = required.filter(([field]) => form[field] === null || form[field] === undefined || String(form[field]).trim() === '').map(([, label]) => label);
+    if ((form.marital_status === 'casado' || form.marital_status === 'união estável') && !form.spouse_name) missing.push('Nome do cônjuge');
+    const documentTypesForEmployee = documents.map((document) => String(document.document_type || '').toLowerCase());
+    const hasIdentity = documentTypesForEmployee.some((type) => type === 'rg' || type === 'cnh') || (form.rg && form.rg_issuer && form.rg_state);
+    const hasAddress = documentTypesForEmployee.some((type) => type.includes('comprovante') && type.includes('endereço'));
+    if (!hasIdentity) missing.push('RG completo ou documento RG/CNH anexado');
+    if (!hasAddress) missing.push('Comprovante de endereço anexado');
+    return missing;
+  }, [documents, form]);
+
   if (!employee) return <section className="page"><div className="panel">Carregando ficha...</div></section>;
 
   return (
@@ -239,10 +298,27 @@ export function EmployeeDetailPage() {
           </div>
         </div>
         <div className="page__actions">
-          {!employee.profile_completed && canEdit && <button className="button" type="button" onClick={() => setActiveTab('Dados pessoais')}>Completar ficha cadastral</button>}
-          {canPrint && <button className="button button_primary" type="button" onClick={printProfile}><Printer size={18} /><span>Imprimir ficha cadastral</span></button>}
+          {!employee.profile_completed && canEdit && <button className="button" type="button" onClick={() => { setCompleteMode(true); setActiveTab('Dados pessoais'); }}>Completar ficha cadastral</button>}
+          {canPrint && employee.profile_completed && <button className="button button_primary" type="button" onClick={printProfile}><Printer size={18} /><span>Imprimir ficha cadastral</span></button>}
+          {canPrint && !employee.profile_completed && <button className="button" type="button" disabled><Printer size={18} /><span>Ficha incompleta</span></button>}
         </div>
       </div>
+
+      {completeMode && !employee.profile_completed && (
+        <div className="panel employees-page__completion">
+          <h2>Faltam {missingForCompletion.length} itens para concluir a ficha</h2>
+          {missingForCompletion.length ? (
+            <ul>
+              {missingForCompletion.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          ) : (
+            <p>Todos os requisitos aparentes foram preenchidos. Confirme para validar no servidor.</p>
+          )}
+          <button className="button button_primary" type="button" onClick={completeProfile} disabled={saving}>
+            {saving ? 'Validando...' : 'Concluir ficha cadastral'}
+          </button>
+        </div>
+      )}
 
       <div className="employees-page__tabs" role="tablist">
         {visibleTabs.map((tab) => (
@@ -297,6 +373,8 @@ export function EmployeeDetailPage() {
               <SectionFields disabled={!canEdit} form={form} setField={setField} fields={[
                 { name: 'admission_date', label: 'Data de admissão', type: 'date' },
                 { name: 'job_title', label: 'Cargo' },
+                ...(canSalaryManage ? [{ name: 'current_salary', label: 'SalÃ¡rio atual', type: 'number' }] : []),
+                ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale alimentaÃ§Ã£o', type: 'number' }] : []),
                 { name: 'employment_status', label: 'Situação funcional', type: 'select', options: Object.entries(statusLabels).map(([value, label]) => ({ value, label })) },
                 { name: 'ctps_number', label: 'CTPS número' },
                 { name: 'ctps_series', label: 'CTPS série' },
@@ -308,10 +386,6 @@ export function EmployeeDetailPage() {
                 { name: 'military_certificate', label: 'Certificado militar' },
                 { name: 'notes', label: 'Observações', type: 'textarea' },
               ]} />
-              <div className="employees-page__checkline">
-                <input id="profile_completed" name="profile_completed" type="checkbox" checked={Boolean(form.profile_completed)} onChange={setField} disabled={!canEdit} />
-                <label htmlFor="profile_completed">Ficha cadastral completa</label>
-              </div>
             </>
           )}
           {canEdit && <button className="button button_primary employees-page__save" type="submit" disabled={saving}><Save size={18} /><span>{saving ? 'Salvando...' : 'Salvar ficha'}</span></button>}
@@ -408,6 +482,7 @@ export function EmployeeDetailPage() {
 
       {printPayload && (
         <div className="employees-page__print">
+          <img className="employees-page__print-logo" src="/logo-torneadora-universal.png" alt="Logo Torneadora Universal" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
           <h1>TORNEADORA UNIVERSAL</h1>
           <h2>FICHA CADASTRAL DE FUNCIONÁRIO</h2>
           <section><h3>1. Dados pessoais</h3><p>Nome: {printPayload.employee.full_name}</p><p>CPF: {formatCpf(printPayload.employee.cpf)} · RG: {printPayload.employee.rg || '-'}</p><p>Nascimento: {formatDate(printPayload.employee.birth_date)} · Telefone: {printPayload.employee.phone || '-'}</p></section>

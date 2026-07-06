@@ -25,7 +25,7 @@ const emptyForm = {
 
 export function EmployeeQuickCreatePage() {
   const user = getStoredUser();
-  const canCreate = canAccessPermission(user, 'employees.create') || canAccessPermission(user, 'employees.manage');
+  const canCreate = canAccessPermission(user, 'employees.create');
   const toast = useToast();
   const navigate = useNavigate();
   const [form, setForm] = useState(emptyForm);
@@ -74,14 +74,19 @@ export function EmployeeQuickCreatePage() {
             <h2>Dados básicos</h2>
             <div className="form-grid">
               <label className="field">
-                <span className="field__label">Nome completo</span>
+                <span className="field__label">Nome completo <span className="employees-page__required">*</span></span>
                 <input className="field__input" name="full_name" value={form.full_name} onChange={setField} required />
               </label>
               <label className="field">
-                <span className="field__label">CPF</span>
+                <span className="field__label">CPF <span className="employees-page__required">*</span></span>
                 <input className="field__input" name="cpf" value={form.cpf} onChange={setField} required />
               </label>
             </div>
+          </section>
+
+          <section className="employees-page__section">
+            <h2>Adicionar outros dados agora</h2>
+            <p className="employees-page__hint">Opcional. A ficha cadastral pode ser completada posteriormente.</p>
           </section>
 
           <section className="employees-page__section">
@@ -116,7 +121,7 @@ export function EmployeeQuickCreatePage() {
               ].map(([name, label]) => (
                 <label className="field" key={name}>
                   <span className="field__label">{label}</span>
-                  <input className="field__input" name={name} value={form[name]} onChange={setField} required={name !== 'complement'} maxLength={name === 'state' ? 2 : undefined} />
+                  <input className="field__input" name={name} value={form[name]} onChange={setField} maxLength={name === 'state' ? 2 : undefined} />
                 </label>
               ))}
             </div>
@@ -127,7 +132,7 @@ export function EmployeeQuickCreatePage() {
             <div className="form-grid">
               <label className="field">
                 <span className="field__label">Salário atual</span>
-                <input className="field__input" name="current_salary" type="number" step="0.01" min="0" value={form.current_salary} onChange={setField} required />
+                <input className="field__input" name="current_salary" type="number" step="0.01" min="0" value={form.current_salary} onChange={setField} />
               </label>
               <label className="field">
                 <span className="field__label">Valor do vale alimentação</span>

@@ -20,7 +20,29 @@ const employeeFields = [
   'military_certificate', 'registration_type', 'profile_completed',
 ];
 
-const quickRequired = ['full_name', 'cpf', 'zip_code', 'street', 'address_number', 'neighborhood', 'city', 'state', 'current_salary'];
+const completeRequiredFields = [
+  ['full_name', 'Nome completo'],
+  ['birth_date', 'Data de nascimento'],
+  ['cpf', 'CPF'],
+  ['phone', 'Telefone celular'],
+  ['marital_status', 'Estado civil'],
+  ['zip_code', 'CEP'],
+  ['street', 'Logradouro'],
+  ['address_number', 'Numero'],
+  ['neighborhood', 'Bairro'],
+  ['city', 'Cidade'],
+  ['state', 'UF'],
+  ['admission_date', 'Data de admissao'],
+  ['job_title', 'Cargo'],
+  ['current_salary', 'Salario atual'],
+  ['meal_allowance', 'Vale alimentacao'],
+  ['employment_status', 'Situacao funcional'],
+  ['ctps_number', 'CTPS numero'],
+  ['pis_pasep', 'PIS/PASEP'],
+  ['voter_registration', 'Titulo de eleitor'],
+  ['voter_zone', 'Zona eleitoral'],
+  ['voter_section', 'Secao eleitoral'],
+];
 
 export function normalizeCpf(value) {
   const digits = String(value || '').replace(/\D/g, '');
@@ -45,6 +67,59 @@ function cleanText(value) {
   return text || null;
 }
 
+function isFilled(value) {
+  return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+function normalizeDocumentType(value) {
+  return String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function validateQuickCreate(payload) {
+  if (!payload.full_name) throw httpError(400, 'Informe o nome completo.');
+  if (!payload.cpf) throw httpError(400, 'Informe o CPF.');
+}
+
+function getCompleteProfileMissing(employee, documentTypes = []) {
+  const missing = [];
+  for (const [field, label] of completeRequiredFields) {
+    if (!isFilled(employee[field])) missing.push(label);
+  }
+
+  const maritalStatus = normalizeDocumentType(employee.marital_status);
+  if (['casado', 'uniao estavel'].includes(maritalStatus) && !isFilled(employee.spouse_name)) {
+    missing.push('Nome do conjuge');
+  }
+
+  const hasRgData = isFilled(employee.rg) && isFilled(employee.rg_issuer) && isFilled(employee.rg_state);
+  const hasIdentityDocument = documentTypes.some((type) => ['rg', 'cnh'].includes(normalizeDocumentType(type)));
+  if (!hasRgData && !hasIdentityDocument) missing.push('Documento de identificacao: RG completo ou anexo RG/CNH');
+
+  const hasAddressDocument = documentTypes.some((type) => {
+    const normalized = normalizeDocumentType(type);
+    return normalized.includes('comprovante') && normalized.includes('endereco');
+  });
+  if (!hasAddressDocument) missing.push('Comprovante de endereco anexado');
+
+  return missing;
+}
+
+function validateCompleteCreate(payload) {
+  const missing = getCompleteProfileMissing(payload, ['rg', 'comprovante de endereco'])
+    .filter((item) => !item.includes('anexado'));
+  if (missing.length) throw httpError(400, `Preencha os campos obrigatorios: ${missing.join(', ')}.`);
+}
+
+async function getActiveDocumentTypes(client, employeeId) {
+  const result = await client.query(
+    `SELECT document_type
+     FROM employee_documents
+     WHERE employee_id = $1 AND deleted_at IS NULL`,
+    [employeeId],
+  );
+  return result.rows.map((row) => row.document_type);
+}
+
 function buildEmployeePayload(body, { quick = false } = {}) {
   const payload = {};
   for (const field of employeeFields) {
@@ -62,12 +137,6 @@ function buildEmployeePayload(body, { quick = false } = {}) {
   if (quick) {
     payload.registration_type = 'quick';
     payload.profile_completed = false;
-    for (const field of quickRequired) {
-      if (!payload[field]) throw httpError(400, 'Preencha nome, CPF, endereço e salário para o cadastro rápido.');
-    }
-    if (!payload.ctps_number && !payload.ctps_series && !payload.ctps_state) {
-      throw httpError(400, 'Informe ao menos um dado da Carteira de Trabalho.');
-    }
   }
   return payload;
 }
@@ -143,12 +212,15 @@ export async function getEmployee(id, user) {
   return transaction(async (client) => redactEmployee(await fetchEmployee(client, id), user));
 }
 
-export async function createEmployee(body, user, { quick = false } = {}) {
+export async function createEmployee(body, user, { quick = false, complete = false } = {}) {
   return transaction(async (client) => {
     const payload = buildEmployeePayload(body, { quick });
-    if (!quick) {
+    if (quick) {
+      validateQuickCreate(payload);
+    } else {
       payload.registration_type = payload.registration_type || 'complete';
-      payload.profile_completed = Boolean(payload.profile_completed);
+      payload.profile_completed = false;
+      if (complete) validateCompleteCreate(payload);
     }
     payload.created_by = user.id;
     payload.updated_by = user.id;
@@ -165,7 +237,7 @@ export async function createEmployee(body, user, { quick = false } = {}) {
     await logAudit(client, {
       entityType: 'employee',
       entityId: inserted.rows[0].id,
-      action: quick ? 'quick_create' : 'create',
+      action: quick ? 'quick_create' : 'complete_create',
       newValue: { id: inserted.rows[0].id, full_name: inserted.rows[0].full_name, registration_type: inserted.rows[0].registration_type },
       userId: user.id,
     });
@@ -177,11 +249,27 @@ export async function updateEmployee(id, body, user) {
   return transaction(async (client) => {
     const current = await fetchEmployee(client, id);
     const payload = buildEmployeePayload(body);
+    const salaryWasSent = Object.prototype.hasOwnProperty.call(payload, 'current_salary');
+    const mealWasSent = Object.prototype.hasOwnProperty.call(payload, 'meal_allowance');
+    const nextSalary = payload.current_salary;
+    const nextMealAllowance = payload.meal_allowance;
     delete payload.current_salary;
     delete payload.meal_allowance;
+    delete payload.registration_type;
+    delete payload.profile_completed;
     payload.updated_by = user.id;
     payload.updated_at = new Date();
-    if (payload.profile_completed) payload.registration_type = 'complete';
+
+    if (salaryWasSent && Number(nextSalary) !== Number(current.current_salary)) {
+      if (!can(user, 'employees.salary.manage', true)) throw httpError(403, 'Acesso não autorizado.');
+      payload.current_salary = nextSalary;
+    }
+
+    if (mealWasSent && Number(nextMealAllowance) !== Number(current.meal_allowance)) {
+      if (!can(user, 'employees.meal_allowance.manage', true)) throw httpError(403, 'Acesso não autorizado.');
+      payload.meal_allowance = nextMealAllowance;
+    }
+
     const columns = Object.keys(payload);
     if (!columns.length) return redactEmployee(current, user);
     const assignments = columns.map((column, index) => `${column} = $${index + 1}`);
@@ -189,15 +277,142 @@ export async function updateEmployee(id, body, user) {
       `UPDATE employees SET ${assignments.join(', ')} WHERE id = $${columns.length + 1} RETURNING *`,
       [...Object.values(payload), id],
     );
+
+    if (salaryWasSent && Number(nextSalary) !== Number(current.current_salary)) {
+      await client.query(
+        `INSERT INTO employee_salary_history (employee_id, salary, effective_from, previous_salary, reason, created_by)
+         VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)`,
+        [id, nextSalary, current.current_salary, 'Alteração cadastral', user.id],
+      );
+      await logAudit(client, {
+        entityType: 'employee',
+        entityId: id,
+        action: 'salary_change',
+        previousValue: { salary: current.current_salary },
+        newValue: { salary: nextSalary },
+        userId: user.id,
+      });
+    }
+
+    if (mealWasSent && Number(nextMealAllowance) !== Number(current.meal_allowance)) {
+      await client.query(
+        `INSERT INTO employee_meal_allowance_history (employee_id, previous_amount, new_amount, effective_from, reason, created_by)
+         VALUES ($1, $2, $3, CURRENT_DATE, $4, $5)`,
+        [id, current.meal_allowance, nextMealAllowance, 'Alteração cadastral', user.id],
+      );
+      await logAudit(client, {
+        entityType: 'employee',
+        entityId: id,
+        action: 'meal_allowance_change',
+        previousValue: { meal_allowance: current.meal_allowance },
+        newValue: { meal_allowance: nextMealAllowance },
+        userId: user.id,
+      });
+    }
+
     await logAudit(client, {
       entityType: 'employee',
       entityId: id,
-      action: payload.profile_completed && !current.profile_completed ? 'complete_profile' : 'update',
+      action: 'partial_update',
       previousValue: { id, full_name: current.full_name },
       newValue: { id, full_name: updated.rows[0].full_name, profile_completed: updated.rows[0].profile_completed },
       userId: user.id,
     });
     return redactEmployee(updated.rows[0], user);
+  });
+}
+
+export async function completeEmployeeProfile(id, body, user) {
+  return transaction(async (client) => {
+    const current = await fetchEmployee(client, id);
+    const payload = buildEmployeePayload(body);
+    const salaryWasSent = Object.prototype.hasOwnProperty.call(payload, 'current_salary');
+    const mealWasSent = Object.prototype.hasOwnProperty.call(payload, 'meal_allowance');
+    const nextSalary = payload.current_salary;
+    const nextMealAllowance = payload.meal_allowance;
+    delete payload.registration_type;
+    delete payload.profile_completed;
+    payload.updated_by = user.id;
+    payload.updated_at = new Date();
+
+    if (salaryWasSent && Number(nextSalary) !== Number(current.current_salary)) {
+      if (!can(user, 'employees.salary.manage', true)) throw httpError(403, 'Acesso não autorizado.');
+      payload.current_salary = nextSalary;
+    } else {
+      delete payload.current_salary;
+    }
+
+    if (mealWasSent && Number(nextMealAllowance) !== Number(current.meal_allowance)) {
+      if (!can(user, 'employees.meal_allowance.manage', true)) throw httpError(403, 'Acesso não autorizado.');
+      payload.meal_allowance = nextMealAllowance;
+    } else {
+      delete payload.meal_allowance;
+    }
+
+    let employee = current;
+    const columns = Object.keys(payload);
+    if (columns.length) {
+      const assignments = columns.map((column, index) => `${column} = $${index + 1}`);
+      const updated = await client.query(
+        `UPDATE employees SET ${assignments.join(', ')} WHERE id = $${columns.length + 1} RETURNING *`,
+        [...Object.values(payload), id],
+      );
+      employee = updated.rows[0];
+    }
+
+    if (salaryWasSent && Number(nextSalary) !== Number(current.current_salary)) {
+      await client.query(
+        `INSERT INTO employee_salary_history (employee_id, salary, effective_from, previous_salary, reason, created_by)
+         VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)`,
+        [id, nextSalary, current.current_salary, 'Conclusão da ficha cadastral', user.id],
+      );
+      await logAudit(client, {
+        entityType: 'employee',
+        entityId: id,
+        action: 'salary_change',
+        previousValue: { salary: current.current_salary },
+        newValue: { salary: nextSalary },
+        userId: user.id,
+      });
+    }
+
+    if (mealWasSent && Number(nextMealAllowance) !== Number(current.meal_allowance)) {
+      await client.query(
+        `INSERT INTO employee_meal_allowance_history (employee_id, previous_amount, new_amount, effective_from, reason, created_by)
+         VALUES ($1, $2, $3, CURRENT_DATE, $4, $5)`,
+        [id, current.meal_allowance, nextMealAllowance, 'Conclusão da ficha cadastral', user.id],
+      );
+      await logAudit(client, {
+        entityType: 'employee',
+        entityId: id,
+        action: 'meal_allowance_change',
+        previousValue: { meal_allowance: current.meal_allowance },
+        newValue: { meal_allowance: nextMealAllowance },
+        userId: user.id,
+      });
+    }
+
+    const documentTypes = await getActiveDocumentTypes(client, id);
+    const missing = getCompleteProfileMissing(employee, documentTypes);
+    if (missing.length) throw httpError(400, `Faltam ${missing.length} itens para concluir a ficha: ${missing.join(', ')}.`);
+
+    const completed = await client.query(
+      `UPDATE employees
+       SET profile_completed = TRUE, updated_by = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [user.id, id],
+    );
+
+    await logAudit(client, {
+      entityType: 'employee',
+      entityId: id,
+      action: 'complete_profile',
+      previousValue: { profile_completed: current.profile_completed },
+      newValue: { profile_completed: true },
+      userId: user.id,
+    });
+    return redactEmployee(completed.rows[0], user);
   });
 }
 
@@ -226,6 +441,7 @@ export async function updateSalary(id, body, user) {
   if (salary === null) throw httpError(400, 'Informe o salário.');
   return transaction(async (client) => {
     const current = await fetchEmployee(client, id);
+    if (Number(salary) === Number(current.current_salary)) return redactEmployee(current, user);
     const updated = await client.query(
       `UPDATE employees SET current_salary = $1, updated_by = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
       [salary, user.id, id],
@@ -238,7 +454,7 @@ export async function updateSalary(id, body, user) {
     await logAudit(client, {
       entityType: 'employee',
       entityId: id,
-      action: 'salary_update',
+      action: 'salary_change',
       previousValue: { salary: current.current_salary },
       newValue: { salary },
       userId: user.id,
@@ -252,6 +468,7 @@ export async function updateMealAllowance(id, body, user) {
   if (amount === null) throw httpError(400, 'Informe o valor do vale alimentação.');
   return transaction(async (client) => {
     const current = await fetchEmployee(client, id);
+    if (Number(amount) === Number(current.meal_allowance)) return redactEmployee(current, user);
     const updated = await client.query(
       `UPDATE employees SET meal_allowance = $1, updated_by = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
       [amount, user.id, id],
@@ -264,7 +481,7 @@ export async function updateMealAllowance(id, body, user) {
     await logAudit(client, {
       entityType: 'employee',
       entityId: id,
-      action: 'meal_allowance_update',
+      action: 'meal_allowance_change',
       previousValue: { meal_allowance: current.meal_allowance },
       newValue: { meal_allowance: amount },
       userId: user.id,
@@ -448,6 +665,9 @@ export async function removeDocument(employeeId, documentId, user) {
 export async function getPrintData(employeeId, user) {
   return transaction(async (client) => {
     const employee = await fetchEmployee(client, employeeId);
+    if (!employee.profile_completed) {
+      throw httpError(400, 'Complete a ficha cadastral antes de gerar a versão oficial.');
+    }
     const dependents = await client.query('SELECT * FROM employee_dependents WHERE employee_id = $1 AND is_active = TRUE ORDER BY full_name', [employeeId]);
     await logAudit(client, {
       entityType: 'employee',

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import {
+  completeEmployeeProfile,
   createEmployee,
   getDocument,
   getEmployee,
@@ -34,7 +35,16 @@ export async function show(req, res, next) {
 
 export async function store(req, res, next) {
   try {
-    res.status(201).json(await createEmployee(req.body, req.user));
+    res.status(201).json(await createEmployee(req.body, req.user, { complete: true }));
+  } catch (error) {
+    if (error.code === '23505') error.status = 409;
+    next(error);
+  }
+}
+
+export async function completeProfile(req, res, next) {
+  try {
+    res.json(await completeEmployeeProfile(req.params.id, req.body, req.user));
   } catch (error) {
     if (error.code === '23505') error.status = 409;
     next(error);

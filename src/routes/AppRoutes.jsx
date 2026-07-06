@@ -22,6 +22,7 @@ import { UsersPage } from '../pages/UsersPage/UsersPage.jsx';
 import { RolesPage } from '../pages/RolesPage/RolesPage.jsx';
 import { EmployeesPage } from '../pages/EmployeesPage/EmployeesPage.jsx';
 import { EmployeeQuickCreatePage } from '../pages/EmployeesPage/EmployeeQuickCreatePage.jsx';
+import { EmployeeCreatePage } from '../pages/EmployeesPage/EmployeeCreatePage.jsx';
 import { EmployeeDetailPage } from '../pages/EmployeesPage/EmployeeDetailPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
@@ -81,7 +82,8 @@ export function AppRoutes() {
         <Route path="/usuarios" element={<RoleRoute permission="users.view"><UsersPage /></RoleRoute>} />
         <Route path="/roles" element={<RoleRoute permission="roles.view"><RolesPage /></RoleRoute>} />
         <Route path="/funcionarios" element={<RoleRoute permission="employees.view"><EmployeesPage /></RoleRoute>} />
-        <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.view"><EmployeeQuickCreatePage /></RoleRoute>} />
+        <Route path="/funcionarios/novo" element={<RoleRoute permission="employees.create"><EmployeeCreatePage /></RoleRoute>} />
+        <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.create"><EmployeeQuickCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/:id" element={<RoleRoute permission="employees.view"><EmployeeDetailPage /></RoleRoute>} />
         <Route path="/acesso-negado" element={<AccessDenied />} />
       </Route>

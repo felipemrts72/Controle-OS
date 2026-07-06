@@ -82,6 +82,37 @@
   margin: 0;
 }
 
+.employees-page__subtitle,
+.employees-page__hint {
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
+}
+
+.employees-page__hint {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.employees-page__required {
+  color: #b91c1c;
+}
+
+.employees-page__completion {
+  display: grid;
+  gap: 12px;
+}
+
+.employees-page__completion h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.employees-page__completion ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
 .employees-page__form-actions {
   display: flex;
   flex-wrap: wrap;
@@ -211,6 +242,14 @@
   .employees-page__print h1,
   .employees-page__print h2 {
     text-align: center;
+  }
+
+  .employees-page__print-logo {
+    display: block;
+    margin: 0 auto 10px;
+    max-height: 70px;
+    max-width: 180px;
+    object-fit: contain;
   }
 
   .employees-page__print section {

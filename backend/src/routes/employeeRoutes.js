@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import {
   auditIndex,
+  completeProfile,
   dependentDestroy,
   dependentStore,
   dependentUpdate,
@@ -28,10 +29,11 @@ export const employeeRoutes = Router();
 employeeRoutes.use(authenticate);
 
 employeeRoutes.get('/', requirePermission('employees.view'), index);
-employeeRoutes.post('/', requireAnyPermission('employees.create', 'employees.manage'), store);
-employeeRoutes.post('/quick', requireAnyPermission('employees.create', 'employees.manage'), quickStore);
+employeeRoutes.post('/', requirePermission('employees.create'), store);
+employeeRoutes.post('/quick', requirePermission('employees.create'), quickStore);
 employeeRoutes.get('/:id', requirePermission('employees.view'), show);
 employeeRoutes.put('/:id', requireAnyPermission('employees.edit', 'employees.manage'), update);
+employeeRoutes.post('/:id/complete-profile', requireAnyPermission('employees.create', 'employees.edit', 'employees.manage'), completeProfile);
 employeeRoutes.patch('/:id/status', requireAnyPermission('employees.deactivate', 'employees.edit', 'employees.manage'), updateStatus);
 
 employeeRoutes.get('/:id/salary-history', requirePermission('employees.salary.view'), salaryHistory);
@@ -47,7 +49,7 @@ employeeRoutes.delete('/:id/dependents/:dependentId', requireAnyPermission('empl
 employeeRoutes.get('/:id/documents', requirePermission('employees.documents.view'), documentsIndex);
 employeeRoutes.post(
   '/:id/documents',
-  requireAnyPermission('employees.documents.manage', 'employees.manage'),
+  requireAnyPermission('employees.create', 'employees.documents.manage', 'employees.manage'),
   express.raw({ type: ['application/pdf', 'image/jpeg', 'image/png'], limit: process.env.EMPLOYEE_DOCUMENT_MAX_BYTES || '10mb' }),
   documentStore,
 );
