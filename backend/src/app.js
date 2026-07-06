@@ -11,6 +11,7 @@ import { shippingRoutes } from './routes/shippingRoutes.js';
 import { dashboardRoutes } from './routes/dashboardRoutes.js';
 import { qrRoutes } from './routes/qrRoutes.js';
 import { serviceRoutes } from './routes/serviceRoutes.js';
+import { employeeRoutes } from './routes/employeeRoutes.js';
 import { roleRoutes } from './routes/roleRoutes.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
 
@@ -32,6 +33,7 @@ app.use('/api/labels', labelRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/qr', qrRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/employees', employeeRoutes);
 app.use('/api', dashboardRoutes);
 
 app.use(errorMiddleware);

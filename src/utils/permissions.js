@@ -5,6 +5,7 @@ export const routeCandidates = [
   { path: '/expedicao', permission: 'shipping.view' },
   { path: '/servicos', permission: 'services.view' },
   { path: '/produtos', permission: 'products.view' },
+  { path: '/funcionarios', permission: 'employees.view' },
   { path: '/tv', permission: 'tv.view' },
   { path: '/usuarios', permission: 'users.view' },
   { path: '/roles', permission: 'roles.view' },

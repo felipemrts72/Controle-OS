@@ -1,0 +1,227 @@
+.employees-page__filters {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+}
+
+.employees-page__filter-button,
+.employees-page__save {
+  min-width: 140px;
+}
+
+.employees-page__name,
+.employees-page__meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.employees-page__name a {
+  color: var(--color-primary-dark);
+  font-weight: 800;
+}
+
+.employees-page__badge,
+.employees-page__status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 6px 9px;
+}
+
+.employees-page__badge {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+}
+
+.employees-page__status {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.employees-page__status_ativo {
+  background: rgba(22, 163, 74, 0.15);
+  color: #166534;
+}
+
+.employees-page__status_afastado {
+  background: rgba(37, 99, 235, 0.15);
+  color: #1d4ed8;
+}
+
+.employees-page__status_desligado {
+  background: rgba(185, 28, 28, 0.14);
+  color: #991b1b;
+}
+
+.employees-page__actions,
+.employees-page__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.employees-page__form,
+.employees-page__stack {
+  display: grid;
+  gap: 18px;
+}
+
+.employees-page__section {
+  display: grid;
+  gap: 14px;
+}
+
+.employees-page__section h2,
+.employees-page__success h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.employees-page__form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.employees-page__back {
+  color: var(--color-text-muted);
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 5px;
+}
+
+.employees-page__tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.employees-page__tab {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  flex: 0 0 auto;
+  font-weight: 800;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.employees-page__tab_active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.employees-page__summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+}
+
+.employees-page__summary div,
+.employees-page__row {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.employees-page__summary span,
+.employees-page__row span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.employees-page__row {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.employees-page__row div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.employees-page__inline-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+}
+
+.employees-page__checkline {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.employees-page__print {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .employees-page__detail-header {
+    gap: 12px;
+  }
+
+  .employees-page__row {
+    grid-template-columns: 1fr;
+  }
+
+  .employees-page__form-actions,
+  .employees-page__form-actions .button,
+  .employees-page__inline-form .button {
+    width: 100%;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .employees-page__print,
+  .employees-page__print * {
+    visibility: visible;
+  }
+
+  .employees-page__print {
+    color: #111;
+    display: block;
+    font-family: Arial, sans-serif;
+    left: 0;
+    padding: 24px;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+
+  .employees-page__print h1,
+  .employees-page__print h2 {
+    text-align: center;
+  }
+
+  .employees-page__print section {
+    border-top: 1px solid #222;
+    margin-top: 14px;
+    padding-top: 8px;
+  }
+
+  .employees-page__signatures {
+    display: grid;
+    gap: 28px;
+    margin-top: 32px;
+  }
+}
