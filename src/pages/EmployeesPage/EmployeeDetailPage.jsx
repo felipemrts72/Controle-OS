@@ -7,7 +7,7 @@ import { canAccessPermission } from '../../utils/permissions.js';
 import { documentTypes, formatCpf, formatDate, formatMoney, maritalStatusOptions, statusLabels, toDateInput } from './employeeUtils.js';
 import './EmployeesPage.css';
 
-const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'Dependentes', 'Documentos', 'Histórico salarial', 'Histórico de vale alimentação', 'Auditoria'];
+const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'Dependentes', 'Documentos', 'Histórico salarial', 'Histórico de vale alimentação', 'Vales', 'Auditoria'];
 
 const editableFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone', 'email',
@@ -57,6 +57,7 @@ export function EmployeeDetailPage() {
   const canDocumentsView = canAccessPermission(user, 'employees.documents.view');
   const canDocumentsManage = canAccessPermission(user, 'employees.documents.manage') || canAccessPermission(user, 'employees.manage');
   const canPrint = canAccessPermission(user, 'employees.profile.print');
+  const canAdvancesView = canAccessPermission(user, 'advances.view');
   const canAudit = canEdit;
 
   const [activeTab, setActiveTab] = useState(searchParams.get('complete') ? 'Dados pessoais' : 'Resumo');
@@ -69,6 +70,7 @@ export function EmployeeDetailPage() {
   const [dependents, setDependents] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [advanceProfile, setAdvanceProfile] = useState(null);
   const [dependentForm, setDependentForm] = useState({ full_name: '', birth_date: '', cpf: '', relationship: '', notes: '' });
   const [salaryForm, setSalaryForm] = useState({ salary: '', effective_from: '', reason: '' });
   const [mealForm, setMealForm] = useState({ amount: '', effective_from: '', reason: '' });
@@ -92,6 +94,7 @@ export function EmployeeDetailPage() {
     if (canMealView) calls.push(api.get(`/employees/${id}/meal-allowance-history`).then((response) => setMealHistory(response.data)));
     if (canDependentsView) calls.push(api.get(`/employees/${id}/dependents`).then((response) => setDependents(response.data)));
     if (canDocumentsView) calls.push(api.get(`/employees/${id}/documents`).then((response) => setDocuments(response.data)));
+    if (canAdvancesView) calls.push(api.get(`/employees/${id}/advances`).then((response) => setAdvanceProfile(response.data)));
     if (canAudit) calls.push(api.get(`/employees/${id}/audit`).then((response) => setAudit(response.data)));
     await Promise.all(calls);
   }
@@ -246,9 +249,10 @@ export function EmployeeDetailPage() {
     if (tab === 'Documentos') return canDocumentsView;
     if (tab === 'Histórico salarial') return canSalaryView;
     if (tab === 'Histórico de vale alimentação') return canMealView;
+    if (tab === 'Vales') return canAdvancesView;
     if (tab === 'Auditoria') return canAudit;
     return true;
-  }), [canAudit, canDependentsView, canDocumentsView, canMealView, canSalaryView]);
+  }), [canAdvancesView, canAudit, canDependentsView, canDocumentsView, canMealView, canSalaryView]);
 
   const missingForCompletion = useMemo(() => {
     const required = [
@@ -466,6 +470,31 @@ export function EmployeeDetailPage() {
             </form>
           )}
           {mealHistory.map((item) => <div className="employees-page__row" key={item.id}><div><strong>{formatMoney(item.new_amount)}</strong><span>Vigência: {formatDate(item.effective_from)} · Anterior: {formatMoney(item.previous_amount)}</span></div></div>)}
+        </div>
+      )}
+
+      {activeTab === 'Vales' && (
+        <div className="panel employees-page__stack">
+          {advanceProfile?.current_cycle ? (
+            <div className="employees-page__summary">
+              <div><span>Ciclo atual</span><strong>{advanceProfile.open_cycle ? `Aberto em ${formatDate(advanceProfile.open_cycle.opened_at)}` : '-'}</strong></div>
+              <div><span>Acumulado no ciclo</span><strong>{formatMoney(advanceProfile.current_cycle.accumulated)}</strong></div>
+              <div><span>Limite aplicável</span><strong>{formatMoney(advanceProfile.current_cycle.maximum_limit)} ({advanceProfile.current_cycle.maximum_percentage}%)</strong></div>
+              <div><span>Restante disponível</span><strong>{formatMoney(advanceProfile.current_cycle.remaining)}</strong></div>
+            </div>
+          ) : (
+            <p>Nenhum ciclo de vales aberto.</p>
+          )}
+
+          {advanceProfile?.history?.map((item) => (
+            <div className="employees-page__row" key={item.item_id}>
+              <div>
+                <strong>{formatMoney(item.amount)}</strong>
+                <span>{formatDate(item.list_date)} · {item.list_status === 'approved' ? 'Aprovada' : item.list_status === 'pending_approval' ? 'Aguardando aprovação' : 'Em edição'}{item.override_used ? ' · Limite ultrapassado por autorização' : ''}</span>
+              </div>
+            </div>
+          ))}
+          {advanceProfile && !advanceProfile.history?.length && <p>Nenhum vale lançado para este funcionário.</p>}
         </div>
       )}
 

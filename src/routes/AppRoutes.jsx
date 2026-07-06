@@ -24,6 +24,8 @@ import { EmployeesPage } from '../pages/EmployeesPage/EmployeesPage.jsx';
 import { EmployeeQuickCreatePage } from '../pages/EmployeesPage/EmployeeQuickCreatePage.jsx';
 import { EmployeeCreatePage } from '../pages/EmployeesPage/EmployeeCreatePage.jsx';
 import { EmployeeDetailPage } from '../pages/EmployeesPage/EmployeeDetailPage.jsx';
+import { AdvancesPage } from '../pages/AdvancesPage/AdvancesPage.jsx';
+import { AdvanceSummaryPage } from '../pages/AdvancesPage/AdvanceSummaryPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -56,6 +58,7 @@ export function AppRoutes() {
       <Route path="/tv" element={<RoleRoute permission="tv.view"><SectorTvPage /></RoleRoute>} />
       <Route path="/painel-tv" element={<Navigate to="/tv" replace />} />
       <Route path="/tv/:setorSlug" element={<RoleRoute permission="tv.view"><SectorTvPage /></RoleRoute>} />
+      <Route path="/vales/:id/resumo" element={<RoleRoute permission="advances.view"><AdvanceSummaryPage /></RoleRoute>} />
       <Route path="/" element={<ProtectedRoute><Navigate to={getDefaultRoute(getStoredUser())} replace /></ProtectedRoute>} />
       <Route
         element={(
@@ -85,6 +88,8 @@ export function AppRoutes() {
         <Route path="/funcionarios/novo" element={<RoleRoute permission="employees.create"><EmployeeCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.create"><EmployeeQuickCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/:id" element={<RoleRoute permission="employees.view"><EmployeeDetailPage /></RoleRoute>} />
+        <Route path="/vales" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
+        <Route path="/vales/:id" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
         <Route path="/acesso-negado" element={<AccessDenied />} />
       </Route>
     </Routes>

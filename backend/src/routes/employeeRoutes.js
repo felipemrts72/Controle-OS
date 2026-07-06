@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import {
   auditIndex,
+  advancesProfile,
   completeProfile,
   dependentDestroy,
   dependentStore,
@@ -58,3 +59,4 @@ employeeRoutes.delete('/:id/documents/:documentId', requireAnyPermission('employ
 
 employeeRoutes.get('/:id/profile-print-data', requirePermission('employees.profile.print'), printData);
 employeeRoutes.get('/:id/audit', requireAnyPermission('employees.edit', 'employees.manage'), auditIndex);
+employeeRoutes.get('/:id/advances', requirePermission('advances.view'), advancesProfile);

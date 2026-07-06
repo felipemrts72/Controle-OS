@@ -51,6 +51,14 @@ export const PERMISSIONS = [
   { code: 'employees.profile.print', name: 'Imprimir ficha de funcionário', group_name: 'Funcionários' },
   { code: 'advances.view', name: 'Ver vales', group_name: 'Vales' },
   { code: 'advances.manage', name: 'Gerenciar vales', group_name: 'Vales' },
+  { code: 'advances.create', name: 'Criar listas de vales', group_name: 'Vales' },
+  { code: 'advances.edit_own_list', name: 'Editar própria lista de vales', group_name: 'Vales' },
+  { code: 'advances.review', name: 'Revisar listas de vales', group_name: 'Vales' },
+  { code: 'advances.approve', name: 'Aprovar listas de vales', group_name: 'Vales' },
+  { code: 'advances.override_limits', name: 'Exceder limites de vales', group_name: 'Vales' },
+  { code: 'advances.cycles.view', name: 'Ver ciclos de vales', group_name: 'Vales' },
+  { code: 'advances.cycles.create', name: 'Iniciar ciclos de vales', group_name: 'Vales' },
+  { code: 'advances.cycles.close', name: 'Fechar ciclos de vales', group_name: 'Vales' },
 ];
 
 export const ALL_PERMISSION_CODES = PERMISSIONS.map((permission) => permission.code);

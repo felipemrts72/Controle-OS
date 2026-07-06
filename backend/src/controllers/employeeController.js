@@ -20,6 +20,7 @@ import {
   updateSalary,
   uploadDocument,
 } from '../services/employeeService.js';
+import { getEmployeeAdvanceProfile } from '../services/advanceService.js';
 
 export async function index(req, res, next) {
   try {
@@ -167,5 +168,11 @@ export async function printData(req, res, next) {
 export async function auditIndex(req, res, next) {
   try {
     res.json(await listEmployeeAudit(req.params.id));
+  } catch (error) { next(error); }
+}
+
+export async function advancesProfile(req, res, next) {
+  try {
+    res.json(await getEmployeeAdvanceProfile(req.params.id));
   } catch (error) { next(error); }
 }

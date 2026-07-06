@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Boxes, ClipboardList, FileSearch, History, IdCard, LayoutDashboard, Package, QrCode, Tags, Tv, Users, Wrench } from 'lucide-react';
+import { Boxes, ClipboardList, FileSearch, HandCoins, History, IdCard, LayoutDashboard, Package, QrCode, Tags, Tv, Users, Wrench } from 'lucide-react';
 import { getStoredUser } from '../../services/api.js';
 import { canAccessPermission, getDefaultRoute } from '../../utils/permissions.js';
 import './Sidebar.css';
@@ -10,6 +10,7 @@ const links = [
   { to: '/os/nova', label: 'Nova OS', icon: ClipboardList, permission: 'orders.create' },
   { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products.view' },
   { to: '/funcionarios', label: 'Funcionários', icon: IdCard, permission: 'employees.view' },
+  { to: '/vales', label: 'Vales', icon: HandCoins, permission: 'advances.view' },
   { to: '/setores', label: 'Setores', icon: Boxes, permission: 'sectors.view' },
   { to: '/servicos', label: 'Serviços', icon: Wrench, permission: 'services.view' },
   { to: '/fila-etiquetas', label: 'Fila de Etiquetas', icon: Tags, permission: 'labels.view' },
