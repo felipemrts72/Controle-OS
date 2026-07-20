@@ -11,6 +11,7 @@ const links = [
   { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products.view' },
   { to: '/funcionarios', label: 'Funcionários', icon: IdCard, permission: 'employees.view' },
   { to: '/vales', label: 'Vales', icon: HandCoins, permission: 'advances.view' },
+  { to: '/vales/relatorios', label: 'Relatórios de Vales', icon: FileSearch, permission: 'advances.reports.view' },
   { to: '/setores', label: 'Setores', icon: Boxes, permission: 'sectors.view' },
   { to: '/servicos', label: 'Serviços', icon: Wrench, permission: 'services.view' },
   { to: '/fila-etiquetas', label: 'Fila de Etiquetas', icon: Tags, permission: 'labels.view' },

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Check, FileText, Pencil, Plus, RotateCcw, Save, Trash2, XCircle } from 'lucide-react';
+import { Check, FileText, HandCoins, Layers, Pencil, Plus, RotateCcw, Save, Search, Trash2, XCircle } from 'lucide-react';
 import { api, getStoredUser } from '../../services/api.js';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
@@ -9,6 +9,10 @@ import { formatDate, formatMoney, toDateInput } from '../EmployeesPage/employeeU
 import './AdvancesPage.css';
 
 const emptyLine = { employee_id: '', amount: '' };
+const emptyLimitLookup = { open: false, search: '', results: [], searched: false, loading: false };
+const emptyIndividual = { open: false, search: '', results: [], selected: null, amount: '', receipt_at: '', source_bank: '', installments_enabled: false, installments_count: 2, loading: false };
+const emptyConvert = { open: false, search: '', results: [], selectedEmployee: null, eligible: [], selectedItem: null, installments_count: 2, loading: false };
+const banks = ['Sicoob', 'Sicredi', 'Asaas', 'Itaú'];
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -21,6 +25,25 @@ function statusClass(status) {
 function Percent({ value }) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
   return `${Number(value).toFixed(2).replace('.', ',')}%`;
+}
+
+function localDateTimeValue() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+}
+
+function resultLevelClass(level) {
+  return `advances-page__result-card advances-page__result-card_${level || 'normal'}`;
+}
+
+function splitPreview(total, count) {
+  const totalCents = Math.round(Number(total || 0) * 100);
+  if (!totalCents || !count) return [];
+  const base = Math.floor(totalCents / count);
+  const values = Array.from({ length: count }, () => base);
+  values[count - 1] += totalCents - (base * count);
+  return values.map((value) => value / 100);
 }
 
 function LimitFacts({ details }) {
@@ -49,6 +72,11 @@ export function AdvancesPage() {
   const canApprove = canAccessPermission(user, 'advances.approve') || canAccessPermission(user, 'advances.manage');
   const canCycleCreate = canAccessPermission(user, 'advances.cycles.create') || canAccessPermission(user, 'advances.manage');
   const canCycleClose = canAccessPermission(user, 'advances.cycles.close') || canAccessPermission(user, 'advances.manage');
+  const canLimitLookup = canAccessPermission(user, 'advances.limit_lookup') || canAccessPermission(user, 'advances.manage');
+  const canCreateIndividual = canAccessPermission(user, 'advances.create_individual') || canAccessPermission(user, 'advances.manage');
+  const canCreateInstallments = canAccessPermission(user, 'advances.installments.create') || canAccessPermission(user, 'advances.manage');
+  const canConvertInstallments = canAccessPermission(user, 'advances.installments.convert') || canAccessPermission(user, 'advances.manage');
+  const canReportsView = canAccessPermission(user, 'advances.reports.view') || canAccessPermission(user, 'advances.manage');
 
   const [home, setHome] = useState({ open_cycle: null, lists: [] });
   const [cycles, setCycles] = useState([]);
@@ -59,6 +87,10 @@ export function AdvancesPage() {
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [limitModal, setLimitModal] = useState(null);
+  const [limitLookup, setLimitLookup] = useState(emptyLimitLookup);
+  const [individual, setIndividual] = useState(emptyIndividual);
+  const [individualResult, setIndividualResult] = useState(null);
+  const [convertModal, setConvertModal] = useState(emptyConvert);
   const [closeModal, setCloseModal] = useState(false);
   const [approvalModal, setApprovalModal] = useState(null);
 
@@ -237,9 +269,135 @@ export function AdvancesPage() {
     window.open(`/vales/${listId}/resumo`, '_blank', 'noopener,noreferrer');
   }
 
+  async function searchLimits(event) {
+    event?.preventDefault();
+    const search = limitLookup.search.trim();
+    if (search.length < 3) {
+      toast.error('Digite ao menos 3 letras.');
+      return;
+    }
+    setLimitLookup((current) => ({ ...current, loading: true, searched: true }));
+    try {
+      const response = await api.get('/advances/limit-lookup', { params: { search } });
+      setLimitLookup((current) => ({ ...current, results: response.data.results || [] }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível consultar o limite.');
+    } finally {
+      setLimitLookup((current) => ({ ...current, loading: false }));
+    }
+  }
+
+  async function searchIndividualEmployees(event) {
+    event?.preventDefault();
+    const search = individual.search.trim();
+    if (search.length < 3) {
+      toast.error('Digite ao menos 3 letras.');
+      return;
+    }
+    setIndividual((current) => ({ ...current, loading: true }));
+    try {
+      const response = await api.get('/advances/limit-lookup', { params: { search } });
+      setIndividual((current) => ({ ...current, results: response.data.results || [] }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível buscar funcionários.');
+    } finally {
+      setIndividual((current) => ({ ...current, loading: false }));
+    }
+  }
+
+  async function searchConvertEmployees(event) {
+    event?.preventDefault();
+    const search = convertModal.search.trim();
+    if (search.length < 3) {
+      toast.error('Digite ao menos 3 letras.');
+      return;
+    }
+    setConvertModal((current) => ({ ...current, loading: true }));
+    try {
+      const response = await api.get('/advances/limit-lookup', { params: { search } });
+      setConvertModal((current) => ({ ...current, results: response.data.results || [] }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível buscar funcionários.');
+    } finally {
+      setConvertModal((current) => ({ ...current, loading: false }));
+    }
+  }
+
+  async function selectConvertEmployee(employee) {
+    setConvertModal((current) => ({ ...current, selectedEmployee: employee, selectedItem: null, eligible: [], loading: true }));
+    try {
+      const response = await api.get('/advances/installments/eligible', { params: { employee_id: employee.employee_id } });
+      setConvertModal((current) => ({ ...current, eligible: response.data.items || [] }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível carregar vales elegíveis.');
+    } finally {
+      setConvertModal((current) => ({ ...current, loading: false }));
+    }
+  }
+
+  function openIndividualModal() {
+    setIndividual({ ...emptyIndividual, open: true, receipt_at: localDateTimeValue() });
+  }
+
+  function openConvertModal() {
+    setConvertModal({ ...emptyConvert, open: true });
+  }
+
+  async function saveIndividualAdvance(event) {
+    event.preventDefault();
+    if (!individual.selected) {
+      toast.error('Selecione um funcionário.');
+      return;
+    }
+    setIndividual((current) => ({ ...current, loading: true }));
+    try {
+      const response = await api.post('/advances/individual', {
+        employee_id: individual.selected.employee_id,
+        amount: individual.amount,
+        receipt_at: individual.receipt_at,
+        source_bank: individual.source_bank,
+        installments_count: individual.installments_enabled ? individual.installments_count : 1,
+      });
+      setIndividual(emptyIndividual);
+      setIndividualResult(response.data.result);
+      await refreshAll();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível lançar o vale individual.');
+    } finally {
+      setIndividual((current) => ({ ...current, loading: false }));
+    }
+  }
+
+  async function convertIndividualAdvance(event) {
+    event.preventDefault();
+    if (!convertModal.selectedEmployee || !convertModal.selectedItem) {
+      toast.error('Selecione funcionário e vale elegível.');
+      return;
+    }
+    setConvertModal((current) => ({ ...current, loading: true }));
+    try {
+      const response = await api.post(`/advances/individual/${convertModal.selectedItem.id}/installments`, {
+        installments_count: convertModal.installments_count,
+      });
+      setConvertModal(emptyConvert);
+      setIndividualResult({ ...response.data.result, converted: true });
+      await refreshAll();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível parcelar o vale.');
+    } finally {
+      setConvertModal((current) => ({ ...current, loading: false }));
+    }
+  }
+
   const ownsCurrentList = list && String(list.created_by) === String(user?.id);
   const canEditCurrentList = list && list.cycle_status === 'open' && !['approved', 'cancelled'].includes(list.status)
     && (canReview || (ownsCurrentList && (canCreate || canAccessPermission(user, 'advances.edit_own_list'))));
+  const individualInstallmentPreview = individual.installments_enabled
+    ? splitPreview(individual.amount, Number(individual.installments_count))
+    : [];
+  const convertInstallmentPreview = convertModal.selectedItem
+    ? splitPreview(convertModal.selectedItem.amount, Number(convertModal.installments_count))
+    : [];
 
   if (id && !list) return <section className="page"><div className="panel">Carregando lista de vales...</div></section>;
 
@@ -251,6 +409,7 @@ export function AdvancesPage() {
           <p className="advances-page__subtitle">Listas de vales e adiantamentos por ciclo.</p>
         </div>
         <div className="page__actions">
+          {canReportsView && <Link className="button" to="/vales/relatorios"><FileText size={18} /><span>Ir para Relatórios de Vales</span></Link>}
           {id && <Link className="button" to="/vales"><RotateCcw size={18} /><span>Listas</span></Link>}
           {list && <button className="button" type="button" onClick={() => openSummary(list.id)}><FileText size={18} /><span>Visualizar resumo</span></button>}
           {home.open_cycle && canCycleClose && <button className="button button_danger" type="button" onClick={() => setCloseModal(true)}><XCircle size={18} /><span>Fechar ciclo</span></button>}
@@ -284,6 +443,21 @@ export function AdvancesPage() {
                 {canCycleCreate && <button className="button button_primary" type="button" onClick={startCycle} disabled={busy}>Iniciar ciclo de vales</button>}
               </>
             )}
+          </div>
+
+          <div className="panel advances-page__quick-actions">
+            <div>
+              <span className="advances-page__eyebrow">Ações rápidas</span>
+              <h2>Operação do ciclo atual</h2>
+            </div>
+            <div className="advances-page__quick-grid">
+              {canLimitLookup && <button className="button" type="button" onClick={() => setLimitLookup({ ...emptyLimitLookup, open: true })}><Search size={18} /><span>Consultar limite</span></button>}
+              {canCreateIndividual && <button className="button button_primary" type="button" onClick={openIndividualModal}><HandCoins size={18} /><span>Lançar vale individual</span></button>}
+              {canConvertInstallments && <button className="button" type="button" onClick={openConvertModal}><Layers size={18} /><span>Parcelar vale existente</span></button>}
+              {canCreate && home.open_cycle && (
+                <button className="button" type="button" onClick={createList} disabled={busy}><Plus size={18} /><span>Criar lista de vales</span></button>
+              )}
+            </div>
           </div>
 
           <div className="advances-page__grid">
@@ -384,6 +558,245 @@ export function AdvancesPage() {
             {canApprove && list.status === 'pending_approval' && <button className="button button_primary" type="button" onClick={() => setApprovalModal(true)}><Check size={18} /><span>Aprovar lista</span></button>}
           </div>
         </>
+      )}
+
+      {limitLookup.open && (
+        <div className="advances-page__modal" role="dialog" aria-modal="true">
+          <div className="advances-page__modal-content">
+            <div className="advances-page__modal-header">
+              <h2>Consultar limite</h2>
+              <button className="button advances-page__icon-button" type="button" onClick={() => setLimitLookup(emptyLimitLookup)}><XCircle size={18} /></button>
+            </div>
+            <form className="advances-page__search-form" onSubmit={searchLimits}>
+              <label className="field">
+                <span className="field__label">Buscar por nome</span>
+                <input className="field__input" value={limitLookup.search} onChange={(event) => setLimitLookup((current) => ({ ...current, search: event.target.value }))} placeholder="Digite ao menos 3 letras" autoFocus />
+              </label>
+              <button className="button button_primary" type="submit" disabled={limitLookup.loading}><Search size={18} /><span>Buscar</span></button>
+            </form>
+
+            <div className="advances-page__lookup-table">
+              <table>
+                <thead>
+                  <tr><th>Funcionário</th><th>Valor utilizado</th><th>Valor restante</th></tr>
+                </thead>
+                <tbody>
+                  {limitLookup.results.map((result) => (
+                    <tr key={result.employee_id}>
+                      <td>{result.employee_name}</td>
+                      <td>{formatMoney(result.used_amount)}</td>
+                      <td>{formatMoney(result.remaining)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="advances-page__lookup-cards">
+              {limitLookup.results.map((result) => (
+                <article className={resultLevelClass(result.status_level)} key={result.employee_id}>
+                  <h3>{result.employee_name}</h3>
+                  <dl>
+                    <div><dt>Valor utilizado</dt><dd>{formatMoney(result.used_amount)}</dd></div>
+                    <div><dt>Valor restante</dt><dd>{formatMoney(result.remaining)}</dd></div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            {limitLookup.searched && !limitLookup.loading && !limitLookup.results.length && <p>Nenhum funcionário encontrado.</p>}
+          </div>
+        </div>
+      )}
+
+      {individual.open && (
+        <div className="advances-page__modal" role="dialog" aria-modal="true">
+          <form className="advances-page__modal-content" onSubmit={saveIndividualAdvance}>
+            <div className="advances-page__modal-header">
+              <h2>Lançar vale individual</h2>
+              <button className="button advances-page__icon-button" type="button" onClick={() => setIndividual(emptyIndividual)}><XCircle size={18} /></button>
+            </div>
+
+            {!individual.selected ? (
+              <>
+                <div className="advances-page__search-form">
+                  <label className="field">
+                    <span className="field__label">Buscar funcionário</span>
+                    <input className="field__input" value={individual.search} onChange={(event) => setIndividual((current) => ({ ...current, search: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') searchIndividualEmployees(event); }} placeholder="Digite ao menos 3 letras" autoFocus />
+                  </label>
+                  <button className="button button_primary" type="button" onClick={searchIndividualEmployees} disabled={individual.loading}><Search size={18} /><span>Buscar</span></button>
+                </div>
+                <div className="advances-page__results-list">
+                  {individual.results.map((result) => (
+                    <button className="advances-page__employee-result" type="button" key={result.employee_id} onClick={() => setIndividual((current) => ({ ...current, selected: result }))}>
+                      <strong>{result.employee_name}</strong>
+                      <span>Utilizado: {formatMoney(result.used_amount)} · Restante: {formatMoney(result.remaining)}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="advances-page__selected-employee">
+                <div>
+                  <span className="field__label">Funcionário selecionado</span>
+                  <strong>{individual.selected.employee_name}</strong>
+                </div>
+                <button className="button" type="button" onClick={() => setIndividual((current) => ({ ...current, selected: null }))}>Trocar</button>
+              </div>
+            )}
+
+            <div className="advances-page__modal-grid">
+              <label className="field">
+                <span className="field__label">Valor</span>
+                <input className="field__input" type="number" min="0.01" step="0.01" value={individual.amount} onChange={(event) => setIndividual((current) => ({ ...current, amount: event.target.value }))} required />
+              </label>
+              <label className="field">
+                <span className="field__label">Data/hora do comprovante</span>
+                <input className="field__input" type="datetime-local" value={individual.receipt_at} onChange={(event) => setIndividual((current) => ({ ...current, receipt_at: event.target.value }))} required />
+              </label>
+              <label className="field">
+                <span className="field__label">Banco de origem</span>
+                <select className="field__input" value={individual.source_bank} onChange={(event) => setIndividual((current) => ({ ...current, source_bank: event.target.value }))}>
+                  <option value="">Não informado</option>
+                  {banks.map((bank) => <option key={bank} value={bank}>{bank}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {canCreateInstallments && (
+              <label className="advances-page__checkbox">
+                <input type="checkbox" checked={individual.installments_enabled} onChange={(event) => setIndividual((current) => ({ ...current, installments_enabled: event.target.checked }))} />
+                <span>Vale parcelado</span>
+              </label>
+            )}
+
+            {canCreateInstallments && individual.installments_enabled && (
+              <div className="advances-page__installment-preview">
+                <label className="field">
+                  <span className="field__label">Quantidade de parcelas</span>
+                  <select className="field__input" value={individual.installments_count} onChange={(event) => setIndividual((current) => ({ ...current, installments_count: Number(event.target.value) }))}>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((count) => <option key={count} value={count}>{count} vez{count > 1 ? 'es' : ''}</option>)}
+                  </select>
+                </label>
+                <dl className="advances-page__facts">
+                  <div><dt>Valor total</dt><dd>{formatMoney(individual.amount || 0)}</dd></div>
+                  <div><dt>Valor aproximado por parcela</dt><dd>{formatMoney(individualInstallmentPreview[0] || 0)}</dd></div>
+                  <div><dt>Valor da primeira parcela</dt><dd>{formatMoney(individualInstallmentPreview[0] || 0)}</dd></div>
+                  <div><dt>Parcelas futuras</dt><dd>{Math.max(0, Number(individual.installments_count) - 1)}</dd></div>
+                </dl>
+              </div>
+            )}
+
+            <div className="advances-page__modal-actions">
+              <button className="button" type="button" onClick={() => setIndividual(emptyIndividual)}>Cancelar</button>
+              <button className="button button_primary" type="submit" disabled={individual.loading || !individual.selected}>{individual.loading ? 'Salvando...' : 'Salvar vale'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {convertModal.open && (
+        <div className="advances-page__modal" role="dialog" aria-modal="true">
+          <form className="advances-page__modal-content" onSubmit={convertIndividualAdvance}>
+            <div className="advances-page__modal-header">
+              <h2>Parcelar vale existente</h2>
+              <button className="button advances-page__icon-button" type="button" onClick={() => setConvertModal(emptyConvert)}><XCircle size={18} /></button>
+            </div>
+
+            {!convertModal.selectedEmployee ? (
+              <>
+                <div className="advances-page__search-form">
+                  <label className="field">
+                    <span className="field__label">Buscar funcionário</span>
+                    <input className="field__input" value={convertModal.search} onChange={(event) => setConvertModal((current) => ({ ...current, search: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') searchConvertEmployees(event); }} placeholder="Digite ao menos 3 letras" autoFocus />
+                  </label>
+                  <button className="button button_primary" type="button" onClick={searchConvertEmployees} disabled={convertModal.loading}><Search size={18} /><span>Buscar</span></button>
+                </div>
+                <div className="advances-page__results-list">
+                  {convertModal.results.map((result) => (
+                    <button className="advances-page__employee-result" type="button" key={result.employee_id} onClick={() => selectConvertEmployee(result)}>
+                      <strong>{result.employee_name}</strong>
+                      <span>Utilizado: {formatMoney(result.used_amount)} · Restante: {formatMoney(result.remaining)}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="advances-page__selected-employee">
+                <div>
+                  <span className="field__label">Funcionário selecionado</span>
+                  <strong>{convertModal.selectedEmployee.employee_name}</strong>
+                </div>
+                <button className="button" type="button" onClick={() => setConvertModal((current) => ({ ...current, selectedEmployee: null, selectedItem: null, eligible: [] }))}>Trocar</button>
+              </div>
+            )}
+
+            {convertModal.selectedEmployee && (
+              <>
+                <div className="advances-page__results-list">
+                  {convertModal.eligible.map((item) => (
+                    <button className={`advances-page__employee-result ${convertModal.selectedItem?.id === item.id ? 'advances-page__employee-result_selected' : ''}`} type="button" key={item.id} onClick={() => setConvertModal((current) => ({ ...current, selectedItem: item }))}>
+                      <strong>{formatMoney(item.amount)}</strong>
+                      <span>{formatDate(item.receipt_at || item.list_date)} · {item.source_bank || 'Banco não informado'} · Ciclo atual</span>
+                    </button>
+                  ))}
+                  {!convertModal.loading && !convertModal.eligible.length && <p>Nenhum vale individual elegível encontrado no ciclo aberto.</p>}
+                </div>
+
+                <div className="advances-page__installment-preview">
+                  <label className="field">
+                    <span className="field__label">Quantidade de parcelas</span>
+                    <select className="field__input" value={convertModal.installments_count} onChange={(event) => setConvertModal((current) => ({ ...current, installments_count: Number(event.target.value) }))}>
+                      {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((count) => <option key={count} value={count}>{count} vezes</option>)}
+                    </select>
+                  </label>
+                  <dl className="advances-page__facts">
+                    <div><dt>Valor original</dt><dd>{formatMoney(convertModal.selectedItem?.amount || 0)}</dd></div>
+                    <div><dt>Valor da primeira parcela</dt><dd>{formatMoney(convertInstallmentPreview[0] || 0)}</dd></div>
+                    <div><dt>Parcelas futuras</dt><dd>{Math.max(0, Number(convertModal.installments_count) - 1)}</dd></div>
+                  </dl>
+                </div>
+              </>
+            )}
+
+            <div className="advances-page__modal-actions">
+              <button className="button" type="button" onClick={() => setConvertModal(emptyConvert)}>Cancelar</button>
+              <button className="button button_primary" type="submit" disabled={convertModal.loading || !convertModal.selectedItem}>Confirmar parcelamento</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {individualResult && (
+        <div className="advances-page__modal" role="dialog" aria-modal="true">
+          <div className="advances-page__modal-content">
+            <div className="advances-page__modal-header">
+              <h2>Vale lançado</h2>
+              <button className="button advances-page__icon-button" type="button" onClick={() => setIndividualResult(null)}><XCircle size={18} /></button>
+            </div>
+            <article className={resultLevelClass(individualResult.status_level)}>
+              <h3>{individualResult.employee_name}</h3>
+              <dl>
+                {individualResult.converted && <div><dt>Status</dt><dd>Vale parcelado</dd></div>}
+                {individualResult.installment ? (
+                  <>
+                    <div><dt>Valor total do vale</dt><dd>{formatMoney(individualResult.installment.original_amount)}</dd></div>
+                    <div><dt>Parcelamento</dt><dd>{individualResult.installment.current_installment_number} de {individualResult.installment.installments_count}</dd></div>
+                    <div><dt>Valor lançado neste ciclo</dt><dd>{formatMoney(individualResult.posted_amount)}</dd></div>
+                    <div><dt>Parcelas restantes</dt><dd>{individualResult.installment.remaining_installments}</dd></div>
+                  </>
+                ) : (
+                  <div><dt>Valor lançado</dt><dd>{formatMoney(individualResult.amount)}</dd></div>
+                )}
+                <div><dt>Total utilizado no ciclo</dt><dd>{formatMoney(individualResult.total_used)}</dd></div>
+                <div><dt>Valor restante</dt><dd>{formatMoney(individualResult.remaining)}</dd></div>
+                <div><dt>Percentual utilizado</dt><dd><Percent value={individualResult.used_percentage} /></dd></div>
+                {individualResult.exceeded && <div><dt>Status</dt><dd>Limite ultrapassado</dd></div>}
+              </dl>
+            </article>
+            <div className="advances-page__modal-actions">
+              <button className="button button_primary" type="button" onClick={() => setIndividualResult(null)}>Entendi</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ConfirmModal

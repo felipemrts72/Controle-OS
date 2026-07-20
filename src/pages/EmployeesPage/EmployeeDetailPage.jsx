@@ -12,7 +12,7 @@ const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'De
 const editableFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone', 'email',
   'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood', 'city', 'state',
-  'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
+  'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'pix_key', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
   'ctps_state', 'pis_pasep', 'voter_registration', 'voter_zone', 'voter_section', 'military_certificate',
 ];
 
@@ -339,6 +339,7 @@ export function EmployeeDetailPage() {
           <div><span>Admissão</span><strong>{formatDate(employee.admission_date)}</strong></div>
           <div><span>Salário atual</span><strong>{formatMoney(employee.current_salary)}</strong></div>
           <div><span>Vale alimentação</span><strong>{formatMoney(employee.meal_allowance)}</strong></div>
+          <div><span>Chave Pix</span><strong>{employee.pix_key || '-'}</strong></div>
           <div><span>Endereço</span><strong>{[employee.street, employee.address_number, employee.neighborhood, employee.city, employee.state].filter(Boolean).join(', ') || '-'}</strong></div>
         </div>
       )}
@@ -379,6 +380,7 @@ export function EmployeeDetailPage() {
                 { name: 'job_title', label: 'Cargo' },
                 ...(canSalaryManage ? [{ name: 'current_salary', label: 'SalÃ¡rio atual', type: 'number' }] : []),
                 ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale alimentaÃ§Ã£o', type: 'number' }] : []),
+                { name: 'pix_key', label: 'Chave Pix' },
                 { name: 'employment_status', label: 'Situação funcional', type: 'select', options: Object.entries(statusLabels).map(([value, label]) => ({ value, label })) },
                 { name: 'ctps_number', label: 'CTPS número' },
                 { name: 'ctps_series', label: 'CTPS série' },

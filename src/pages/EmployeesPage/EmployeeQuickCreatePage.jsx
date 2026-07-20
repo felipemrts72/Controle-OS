@@ -21,6 +21,7 @@ const emptyForm = {
   state: '',
   current_salary: '',
   meal_allowance: '',
+  pix_key: '',
 };
 
 export function EmployeeQuickCreatePage() {
@@ -137,6 +138,10 @@ export function EmployeeQuickCreatePage() {
               <label className="field">
                 <span className="field__label">Valor do vale alimentação</span>
                 <input className="field__input" name="meal_allowance" type="number" step="0.01" min="0" value={form.meal_allowance} onChange={setField} />
+              </label>
+              <label className="field">
+                <span className="field__label">Chave Pix</span>
+                <input className="field__input" name="pix_key" value={form.pix_key} onChange={setField} />
               </label>
             </div>
           </section>

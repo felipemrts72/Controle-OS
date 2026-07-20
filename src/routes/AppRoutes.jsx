@@ -26,6 +26,9 @@ import { EmployeeCreatePage } from '../pages/EmployeesPage/EmployeeCreatePage.js
 import { EmployeeDetailPage } from '../pages/EmployeesPage/EmployeeDetailPage.jsx';
 import { AdvancesPage } from '../pages/AdvancesPage/AdvancesPage.jsx';
 import { AdvanceSummaryPage } from '../pages/AdvancesPage/AdvanceSummaryPage.jsx';
+import { AdvancesReportsPage } from '../pages/AdvancesPage/AdvancesReportsPage.jsx';
+import { AdvanceGeneralReportPage } from '../pages/AdvancesPage/AdvanceGeneralReportPage.jsx';
+import { AdvanceIndividualReportPage } from '../pages/AdvancesPage/AdvanceIndividualReportPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -59,6 +62,8 @@ export function AppRoutes() {
       <Route path="/painel-tv" element={<Navigate to="/tv" replace />} />
       <Route path="/tv/:setorSlug" element={<RoleRoute permission="tv.view"><SectorTvPage /></RoleRoute>} />
       <Route path="/vales/:id/resumo" element={<RoleRoute permission="advances.view"><AdvanceSummaryPage /></RoleRoute>} />
+      <Route path="/vales/relatorios/geral" element={<RoleRoute permission="advances.reports.general"><AdvanceGeneralReportPage /></RoleRoute>} />
+      <Route path="/vales/relatorios/individual/:employeeId" element={<RoleRoute permission="advances.reports.individual"><AdvanceIndividualReportPage /></RoleRoute>} />
       <Route path="/" element={<ProtectedRoute><Navigate to={getDefaultRoute(getStoredUser())} replace /></ProtectedRoute>} />
       <Route
         element={(
@@ -89,6 +94,7 @@ export function AppRoutes() {
         <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.create"><EmployeeQuickCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/:id" element={<RoleRoute permission="employees.view"><EmployeeDetailPage /></RoleRoute>} />
         <Route path="/vales" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
+        <Route path="/vales/relatorios" element={<RoleRoute permission="advances.reports.view"><AdvancesReportsPage /></RoleRoute>} />
         <Route path="/vales/:id" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
         <Route path="/acesso-negado" element={<AccessDenied />} />
       </Route>

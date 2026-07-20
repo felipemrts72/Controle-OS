@@ -14,7 +14,7 @@ const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png'])
 
 const employeeFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone',
-  'email', 'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood',
+  'email', 'pix_key', 'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood',
   'city', 'state', 'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'employment_status', 'notes',
   'ctps_number', 'ctps_series', 'ctps_state', 'pis_pasep', 'voter_registration', 'voter_zone', 'voter_section',
   'military_certificate', 'registration_type', 'profile_completed',

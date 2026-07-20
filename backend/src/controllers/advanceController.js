@@ -2,10 +2,18 @@ import {
   approveAdvanceList,
   closeCycle,
   createAdvanceList,
+  createIndividualAdvance,
   createCycle,
+  convertIndividualAdvanceToInstallments,
+  getAdvanceAuditReport,
   getAdvanceList,
+  getClosedAdvanceCyclesReport,
+  getGeneralAdvanceReport,
   getAdvancesHome,
   getAdvanceSummary,
+  getIndividualAdvanceReport,
+  lookupAdvanceLimits,
+  listEligibleIndividualAdvances,
   listAdvanceEmployees,
   listCycles,
   removeAdvanceItem,
@@ -23,6 +31,54 @@ export async function home(req, res, next) {
 export async function employees(req, res, next) {
   try {
     res.json(await listAdvanceEmployees(req.query));
+  } catch (error) { next(error); }
+}
+
+export async function limitLookup(req, res, next) {
+  try {
+    res.json(await lookupAdvanceLimits(req.query));
+  } catch (error) { next(error); }
+}
+
+export async function individualStore(req, res, next) {
+  try {
+    res.status(201).json(await createIndividualAdvance(req.body, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function eligibleInstallments(req, res, next) {
+  try {
+    res.json(await listEligibleIndividualAdvances(req.query.employee_id, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function installmentConvert(req, res, next) {
+  try {
+    res.json(await convertIndividualAdvanceToInstallments(req.params.itemId, req.body, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function generalReport(req, res, next) {
+  try {
+    res.json(await getGeneralAdvanceReport(req.query, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function individualReport(req, res, next) {
+  try {
+    res.json(await getIndividualAdvanceReport(req.params.employeeId, req.query, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function closedCyclesReport(req, res, next) {
+  try {
+    res.json(await getClosedAdvanceCyclesReport(req.user));
+  } catch (error) { next(error); }
+}
+
+export async function auditReport(req, res, next) {
+  try {
+    res.json(await getAdvanceAuditReport(req.query, req.user));
   } catch (error) { next(error); }
 }
 

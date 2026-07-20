@@ -31,6 +31,7 @@ const emptyForm = {
   job_title: '',
   current_salary: '',
   meal_allowance: '0',
+  pix_key: '',
   employment_status: 'ativo',
   ctps_number: '',
   ctps_series: '',
@@ -162,6 +163,7 @@ export function EmployeeCreatePage() {
             <label className="field"><span className="field__label">Cargo <RequiredMark /></span><input className="field__input" name="job_title" value={form.job_title} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Salário atual <RequiredMark /></span><input className="field__input" name="current_salary" type="number" step="0.01" min="0" value={form.current_salary} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Vale alimentação <RequiredMark /></span><input className="field__input" name="meal_allowance" type="number" step="0.01" min="0" value={form.meal_allowance} onChange={setField} required /></label>
+            <label className="field"><span className="field__label">Chave Pix</span><input className="field__input" name="pix_key" value={form.pix_key} onChange={setField} /></label>
             <label className="field">
               <span className="field__label">Situação funcional <RequiredMark /></span>
               <select className="field__input" name="employment_status" value={form.employment_status} onChange={setField} required>
