@@ -5,8 +5,9 @@
 node_modules/
 dist/
 build/
+uploads/
 
 .DS_Store
 
 # PDFs de teste de etiquetas
-label-test-*..pdf
+label-test-*.pdf
