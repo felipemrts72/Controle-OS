@@ -5,6 +5,7 @@ import {
   createIndividualAdvance,
   createCycle,
   convertIndividualAdvanceToInstallments,
+  deleteAdvanceList,
   getAdvanceAuditReport,
   getAdvanceList,
   getClosedAdvanceCyclesReport,
@@ -115,6 +116,12 @@ export async function listShow(req, res, next) {
 export async function listUpdate(req, res, next) {
   try {
     res.json(await updateAdvanceList(req.params.id, req.body, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function listDestroy(req, res, next) {
+  try {
+    res.json(await deleteAdvanceList(req.params.id, req.user));
   } catch (error) { next(error); }
 }
 

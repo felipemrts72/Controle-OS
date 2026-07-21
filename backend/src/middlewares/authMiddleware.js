@@ -49,6 +49,15 @@ export function requirePermission(permissionCode) {
   };
 }
 
+export function requirePermissionOrAdmin(permissionCode, message = 'Acesso não autorizado.') {
+  return (req, _res, next) => {
+    if (req.user?.is_super_admin || req.user?.role_slug === 'admin' || req.user?.role === 'admin' || hasPermission(req.user, permissionCode)) {
+      return next();
+    }
+    return next(httpError(403, message));
+  };
+}
+
 export function requireAnyPermission(...permissionCodes) {
   return (req, _res, next) => {
     if (!permissionCodes.some((permissionCode) => hasPermission(req.user, permissionCode))) {

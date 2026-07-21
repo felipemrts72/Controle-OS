@@ -42,7 +42,10 @@ export function formatMoney(value) {
 
 export function formatDate(value) {
   if (!value) return '-';
-  return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString('pt-BR');
+  const text = String(value).slice(0, 10);
+  const [year, month, day] = text.split('-');
+  if (!year || !month || !day) return '-';
+  return `${day}/${month}/${year}`;
 }
 
 export function toDateInput(value) {

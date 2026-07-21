@@ -4,7 +4,7 @@ import { Check, FileText, HandCoins, Layers, Pencil, Plus, RotateCcw, Save, Sear
 import { api, getStoredUser } from '../../services/api.js';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
-import { canAccessPermission } from '../../utils/permissions.js';
+import { canAccessPermission, isSuperAdmin } from '../../utils/permissions.js';
 import { formatDate, formatMoney, toDateInput } from '../EmployeesPage/employeeUtils.js';
 import './AdvancesPage.css';
 
@@ -15,7 +15,11 @@ const emptyConvert = { open: false, search: '', results: [], selectedEmployee: n
 const banks = ['Sicoob', 'Sicredi', 'Asaas', 'Itaú'];
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function statusClass(status) {
@@ -29,12 +33,27 @@ function Percent({ value }) {
 
 function localDateTimeValue() {
   const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 16);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+  const minute = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
 function resultLevelClass(level) {
   return `advances-page__result-card advances-page__result-card_${level || 'normal'}`;
+}
+
+function apiErrorMessage(error, fallback = 'Não foi possível concluir a operação.') {
+  return error?.response?.data?.message
+    || error?.data?.message
+    || error?.message
+    || fallback;
+}
+
+function factClass(name) {
+  return ['amount', 'remaining', 'projected'].includes(name) ? `advances-page__fact advances-page__fact_${name}` : 'advances-page__fact';
 }
 
 function splitPreview(total, count) {
@@ -50,14 +69,14 @@ function LimitFacts({ details }) {
   if (!details) return null;
   return (
     <dl className="advances-page__facts">
-      <div><dt>Funcionário</dt><dd>{details.employee_name || '-'}</dd></div>
-      <div><dt>Salário atual</dt><dd>{details.salary ? formatMoney(details.salary) : 'Não cadastrado'}</dd></div>
-      {details.maximum_limit !== undefined && <div><dt>Limite máximo</dt><dd>{formatMoney(details.maximum_limit)} {details.maximum_percentage ? `(${details.maximum_percentage}%)` : ''}</dd></div>}
-      <div><dt>Já acumulado</dt><dd>{formatMoney(details.accumulated_before)}</dd></div>
-      <div><dt>Novo vale</dt><dd>{formatMoney(details.amount)}</dd></div>
-      <div><dt>Total projetado</dt><dd>{formatMoney(details.projected_total)}</dd></div>
-      {details.projected_percentage !== undefined && <div><dt>Percentual projetado</dt><dd><Percent value={details.projected_percentage} /></dd></div>}
-      <div><dt>Restante disponível</dt><dd>{formatMoney(details.remaining)}</dd></div>
+      <div className={factClass('employee')}><dt>Funcionário</dt><dd>{details.employee_name || '-'}</dd></div>
+      <div className={factClass('salary')}><dt>Salário atual</dt><dd>{details.salary ? formatMoney(details.salary) : 'Não cadastrado'}</dd></div>
+      {details.maximum_limit !== undefined && <div className={factClass('limit')}><dt>Limite máximo</dt><dd>{formatMoney(details.maximum_limit)} {details.maximum_percentage ? `(${details.maximum_percentage}%)` : ''}</dd></div>}
+      <div className={factClass('used')}><dt>Já acumulado</dt><dd>{formatMoney(details.accumulated_before)}</dd></div>
+      <div className={factClass('amount')}><dt>Novo vale</dt><dd>{formatMoney(details.amount)}</dd></div>
+      <div className={factClass('projected')}><dt>Total projetado</dt><dd>{formatMoney(details.projected_total)}</dd></div>
+      {details.projected_percentage !== undefined && <div className={factClass('percentage')}><dt>Percentual projetado</dt><dd><Percent value={details.projected_percentage} /></dd></div>}
+      <div className={factClass('remaining')}><dt>Restante disponível</dt><dd>{formatMoney(details.remaining)}</dd></div>
     </dl>
   );
 }
@@ -67,16 +86,18 @@ export function AdvancesPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const user = getStoredUser();
+  const isAdmin = isSuperAdmin(user);
   const canCreate = canAccessPermission(user, 'advances.create') || canAccessPermission(user, 'advances.manage');
   const canReview = canAccessPermission(user, 'advances.review') || canAccessPermission(user, 'advances.manage');
-  const canApprove = canAccessPermission(user, 'advances.approve') || canAccessPermission(user, 'advances.manage');
+  const canApprove = canAccessPermission(user, 'advances.approve');
   const canCycleCreate = canAccessPermission(user, 'advances.cycles.create') || canAccessPermission(user, 'advances.manage');
-  const canCycleClose = canAccessPermission(user, 'advances.cycles.close') || canAccessPermission(user, 'advances.manage');
+  const canCycleClose = canAccessPermission(user, 'advances.cycles.close');
   const canLimitLookup = canAccessPermission(user, 'advances.limit_lookup') || canAccessPermission(user, 'advances.manage');
   const canCreateIndividual = canAccessPermission(user, 'advances.create_individual') || canAccessPermission(user, 'advances.manage');
-  const canCreateInstallments = canAccessPermission(user, 'advances.installments.create') || canAccessPermission(user, 'advances.manage');
-  const canConvertInstallments = canAccessPermission(user, 'advances.installments.convert') || canAccessPermission(user, 'advances.manage');
+  const canCreateInstallments = canAccessPermission(user, 'advances.installments.create');
+  const canConvertInstallments = canAccessPermission(user, 'advances.installments.convert');
   const canReportsView = canAccessPermission(user, 'advances.reports.view') || canAccessPermission(user, 'advances.manage');
+  const canDeleteList = canAccessPermission(user, 'advances.lists.delete');
 
   const [home, setHome] = useState({ open_cycle: null, lists: [] });
   const [cycles, setCycles] = useState([]);
@@ -91,6 +112,8 @@ export function AdvancesPage() {
   const [individual, setIndividual] = useState(emptyIndividual);
   const [individualResult, setIndividualResult] = useState(null);
   const [convertModal, setConvertModal] = useState(emptyConvert);
+  const [deleteListModal, setDeleteListModal] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [closeModal, setCloseModal] = useState(false);
   const [approvalModal, setApprovalModal] = useState(null);
 
@@ -145,7 +168,7 @@ export function AdvancesPage() {
       toast.success('Ciclo de vales iniciado.');
       await loadHome();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível iniciar o ciclo.');
+      toast.error(apiErrorMessage(error, 'Não foi possível iniciar o ciclo.'));
     } finally {
       setBusy(false);
     }
@@ -160,7 +183,7 @@ export function AdvancesPage() {
       setCloseModal(false);
       await loadHome();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível fechar o ciclo.');
+      toast.error(apiErrorMessage(error, 'Não foi possível fechar o ciclo.'));
     } finally {
       setBusy(false);
     }
@@ -174,7 +197,7 @@ export function AdvancesPage() {
       navigate(`/vales/${response.data.id}`);
       await loadHome();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível criar a lista.');
+      toast.error(apiErrorMessage(error, 'Não foi possível criar a lista.'));
     } finally {
       setBusy(false);
     }
@@ -213,7 +236,7 @@ export function AdvancesPage() {
       await loadHome();
     } catch (error) {
       if (!handleLimitError(error, (nextFlags) => saveItem(itemId, values, nextFlags))) {
-        toast.error(error.response?.data?.message || 'Não foi possível confirmar a linha.');
+        toast.error(apiErrorMessage(error, 'Não foi possível confirmar a linha.'));
       }
     } finally {
       setBusy(false);
@@ -228,7 +251,7 @@ export function AdvancesPage() {
       toast.success('Funcionário removido da lista.');
       await loadHome();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível remover o funcionário.');
+      toast.error(apiErrorMessage(error, 'Não foi possível remover o funcionário.'));
     } finally {
       setBusy(false);
     }
@@ -242,7 +265,7 @@ export function AdvancesPage() {
       toast.success('Lista salva e enviada para aprovação.');
       await loadHome();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível salvar a lista.');
+      toast.error(apiErrorMessage(error, 'Não foi possível salvar a lista.'));
     } finally {
       setBusy(false);
     }
@@ -258,7 +281,7 @@ export function AdvancesPage() {
       await loadHome();
     } catch (error) {
       if (!handleLimitError(error, (nextFlags) => approveList(nextFlags))) {
-        toast.error(error.response?.data?.message || 'Não foi possível aprovar a lista.');
+        toast.error(apiErrorMessage(error, 'Não foi possível aprovar a lista.'));
       }
     } finally {
       setBusy(false);
@@ -267,6 +290,26 @@ export function AdvancesPage() {
 
   function openSummary(listId) {
     window.open(`/vales/${listId}/resumo`, '_blank', 'noopener,noreferrer');
+  }
+
+  async function deleteList() {
+    if (!deleteListModal) return;
+    setBusy(true);
+    try {
+      await api.delete(`/advances/lists/${deleteListModal.id}`);
+      setHome((current) => ({
+        ...current,
+        lists: current.lists.filter((advanceList) => advanceList.id !== deleteListModal.id),
+      }));
+      setDeleteConfirmation('');
+      setDeleteListModal(null);
+      toast.success('Lista excluída com sucesso.');
+      await loadHome();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Não foi possível excluir a lista.'));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function searchLimits(event) {
@@ -281,7 +324,7 @@ export function AdvancesPage() {
       const response = await api.get('/advances/limit-lookup', { params: { search } });
       setLimitLookup((current) => ({ ...current, results: response.data.results || [] }));
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível consultar o limite.');
+      toast.error(apiErrorMessage(error, 'Não foi possível consultar o limite.'));
     } finally {
       setLimitLookup((current) => ({ ...current, loading: false }));
     }
@@ -299,7 +342,7 @@ export function AdvancesPage() {
       const response = await api.get('/advances/limit-lookup', { params: { search } });
       setIndividual((current) => ({ ...current, results: response.data.results || [] }));
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível buscar funcionários.');
+      toast.error(apiErrorMessage(error, 'Não foi possível buscar funcionários.'));
     } finally {
       setIndividual((current) => ({ ...current, loading: false }));
     }
@@ -317,7 +360,7 @@ export function AdvancesPage() {
       const response = await api.get('/advances/limit-lookup', { params: { search } });
       setConvertModal((current) => ({ ...current, results: response.data.results || [] }));
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível buscar funcionários.');
+      toast.error(apiErrorMessage(error, 'Não foi possível buscar funcionários.'));
     } finally {
       setConvertModal((current) => ({ ...current, loading: false }));
     }
@@ -329,7 +372,7 @@ export function AdvancesPage() {
       const response = await api.get('/advances/installments/eligible', { params: { employee_id: employee.employee_id } });
       setConvertModal((current) => ({ ...current, eligible: response.data.items || [] }));
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível carregar vales elegíveis.');
+      toast.error(apiErrorMessage(error, 'Não foi possível carregar vales elegíveis.'));
     } finally {
       setConvertModal((current) => ({ ...current, loading: false }));
     }
@@ -362,7 +405,7 @@ export function AdvancesPage() {
       setIndividualResult(response.data.result);
       await refreshAll();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível lançar o vale individual.');
+      toast.error(apiErrorMessage(error, 'Não foi possível lançar o vale individual.'));
     } finally {
       setIndividual((current) => ({ ...current, loading: false }));
     }
@@ -383,7 +426,7 @@ export function AdvancesPage() {
       setIndividualResult({ ...response.data.result, converted: true });
       await refreshAll();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível parcelar o vale.');
+      toast.error(apiErrorMessage(error, 'Não foi possível parcelar o vale.'));
     } finally {
       setConvertModal((current) => ({ ...current, loading: false }));
     }
@@ -398,6 +441,13 @@ export function AdvancesPage() {
   const convertInstallmentPreview = convertModal.selectedItem
     ? splitPreview(convertModal.selectedItem.amount, Number(convertModal.installments_count))
     : [];
+  const deleteNeedsStrongWarning = Boolean(deleteListModal && (deleteListModal.status === 'approved' || deleteListModal.cycle_status === 'closed'));
+  const deleteNeedsTypedConfirmation = Boolean(deleteListModal?.status === 'approved');
+  const canConfirmDeleteList = !deleteNeedsTypedConfirmation || deleteConfirmation.trim().toUpperCase() === 'EXCLUIR';
+  const canShowDeleteList = (advanceList) => {
+    if (isAdmin) return true;
+    return canDeleteList && advanceList.status === 'draft' && advanceList.cycle_status !== 'closed';
+  };
 
   if (id && !list) return <section className="page"><div className="panel">Carregando lista de vales...</div></section>;
 
@@ -462,18 +512,32 @@ export function AdvancesPage() {
 
           <div className="advances-page__grid">
             {home.lists.map((advanceList) => (
-              <Link className="advances-page__card" to={`/vales/${advanceList.id}`} key={advanceList.id}>
+              <article className="advances-page__card" key={advanceList.id}>
                 <div>
-                  <span className="advances-page__eyebrow">Lista de vales</span>
+                  <span className="advances-page__eyebrow">{advanceList.card_type === 'individual' ? 'Vale individual' : advanceList.card_type === 'installment' ? 'Parcela de vale' : 'Lista de vales'}</span>
                   <h2>{formatDate(advanceList.list_date)}</h2>
                 </div>
-                <div className="advances-page__card-metrics">
-                  <span>{advanceList.employee_count} funcionários</span>
-                  <strong>{formatMoney(advanceList.total_amount)}</strong>
-                </div>
+                {advanceList.card_type === 'individual' || advanceList.card_type === 'installment' ? (
+                  <div className="advances-page__card-metrics advances-page__card-metrics_individual">
+                    <span><small>Funcionário</small><strong>{advanceList.single_employee_name || 'Funcionário'}</strong></span>
+                    <span><small>Valor</small><strong>{formatMoney(advanceList.total_amount)}</strong></span>
+                  </div>
+                ) : (
+                  <div className="advances-page__card-metrics">
+                    <span><small>Funcionários</small><strong>{advanceList.employee_count}</strong></span>
+                    <span><small>Total</small><strong>{formatMoney(advanceList.total_amount)}</strong></span>
+                  </div>
+                )}
                 <span className={statusClass(advanceList.status)}>{advanceList.status_label}</span>
                 {advanceList.created_by_name && <small>Criada por {advanceList.created_by_name}</small>}
-              </Link>
+                <div className="advances-page__card-actions">
+                  <Link className="button" to={`/vales/${advanceList.id}`}><span>Abrir lista</span></Link>
+                  <button className="button" type="button" onClick={() => openSummary(advanceList.id)}><FileText size={16} /><span>Visualizar resumo</span></button>
+                  {canShowDeleteList(advanceList) && (
+                    <button className="button button_danger" type="button" onClick={() => { setDeleteConfirmation(''); setDeleteListModal(advanceList); }}><Trash2 size={16} /><span>Excluir lista</span></button>
+                  )}
+                </div>
+              </article>
             ))}
             {!home.lists.length && <div className="panel">Nenhuma lista de vales cadastrada.</div>}
           </div>
@@ -504,9 +568,9 @@ export function AdvancesPage() {
                 await loadHome();
               }} />
             </label>
-            <div><span className="field__label">Status</span><strong className={statusClass(list.status)}>{list.status_label}</strong></div>
-            <div><span className="field__label">Funcionários</span><strong>{list.employee_count}</strong></div>
-            <div><span className="field__label">Total</span><strong>{formatMoney(list.total_amount)}</strong></div>
+            <div className="advances-page__metric"><span className="field__label">Status</span><strong className={statusClass(list.status)}>{list.status_label}</strong></div>
+            <div className="advances-page__metric"><span className="field__label">Funcionários</span><strong>{list.employee_count}</strong></div>
+            <div className="advances-page__metric"><span className="field__label">Total</span><strong>{formatMoney(list.total_amount)}</strong></div>
           </div>
 
           <div className="panel advances-page__items">
@@ -524,7 +588,7 @@ export function AdvancesPage() {
                       {employeeOptions.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}
                     </select>
                     <input className="field__input" type="number" min="0.01" step="0.01" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: event.target.value })} />
-                    <button className="button button_primary advances-page__icon-button" title="Confirmar" type="button" onClick={() => saveItem(item.id, editing)} disabled={busy}><Check size={18} /></button>
+                    <button className="button button_primary advances-page__confirm-button" title="Confirmar linha" type="button" onClick={() => saveItem(item.id, editing)} disabled={busy}><Check size={18} /><span>Confirmar</span></button>
                   </>
                 ) : (
                   <>
@@ -548,7 +612,7 @@ export function AdvancesPage() {
                   {employeeOptions.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}
                 </select>
                 <input className="field__input" type="number" min="0.01" step="0.01" placeholder="R$ 0,00" value={line.amount} onChange={(event) => setLine({ ...line, amount: event.target.value })} />
-                <button className="button button_primary advances-page__icon-button" title="Confirmar" type="button" onClick={() => saveItem(null, line)} disabled={busy}><Check size={18} /></button>
+                <button className="button button_primary advances-page__confirm-button" title="Confirmar linha" type="button" onClick={() => saveItem(null, line)} disabled={busy}><Check size={18} /><span>Confirmar linha</span></button>
               </div>
             )}
           </div>
@@ -733,9 +797,14 @@ export function AdvancesPage() {
               <>
                 <div className="advances-page__results-list">
                   {convertModal.eligible.map((item) => (
-                    <button className={`advances-page__employee-result ${convertModal.selectedItem?.id === item.id ? 'advances-page__employee-result_selected' : ''}`} type="button" key={item.id} onClick={() => setConvertModal((current) => ({ ...current, selectedItem: item }))}>
+                    <button className={`advances-page__employee-result advances-page__eligible-advance ${convertModal.selectedItem?.id === item.id ? 'advances-page__employee-result_selected' : ''}`} type="button" key={item.id} onClick={() => setConvertModal((current) => ({ ...current, selectedItem: item }))}>
                       <strong>{formatMoney(item.amount)}</strong>
-                      <span>{formatDate(item.receipt_at || item.list_date)} · {item.source_bank || 'Banco não informado'} · Ciclo atual</span>
+                      <dl>
+                        <div><dt>Data</dt><dd>{formatDate(item.list_date || item.receipt_at)}</dd></div>
+                        <div><dt>Banco</dt><dd>{item.source_bank || 'Não informado'}</dd></div>
+                        <div><dt>Situação</dt><dd>{item.status || 'active'}</dd></div>
+                        <div><dt>Ciclo</dt><dd>{item.cycle_status === 'open' ? 'Atual aberto' : item.cycle_status || '-'}</dd></div>
+                      </dl>
                     </button>
                   ))}
                   {!convertModal.loading && !convertModal.eligible.length && <p>Nenhum vale individual elegível encontrado no ciclo aberto.</p>}
@@ -819,6 +888,31 @@ export function AdvancesPage() {
         actions={<button className="button button_primary" type="button" onClick={() => approveList()}>Aprovar lista</button>}
       >
         <p>O backend vai recalcular todos os itens, checar duplicidades e registrar aprovação com data e usuário.</p>
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={Boolean(deleteListModal)}
+        title="Excluir lista de vales?"
+        onCancel={() => { setDeleteConfirmation(''); setDeleteListModal(null); }}
+        cancelLabel="Cancelar"
+        actions={<button className="button button_danger" type="button" onClick={deleteList} disabled={busy || !canConfirmDeleteList}>Excluir lista</button>}
+      >
+        <p>{deleteNeedsStrongWarning ? 'Esta lista já foi aprovada ou pertence a um ciclo fechado. A exclusão será registrada na auditoria.' : 'Excluir esta lista de vales?'}</p>
+        <p>A lista deixará de aparecer nos relatórios e telas operacionais, sem excluir o ciclo ou apagar o histórico de auditoria.</p>
+        <dl className="advances-page__facts">
+          <div><dt>Data da lista</dt><dd>{formatDate(deleteListModal?.list_date)}</dd></div>
+          <div><dt>Funcionários</dt><dd>{deleteListModal?.employee_count || 0}</dd></div>
+          <div><dt>Valor total</dt><dd>{formatMoney(deleteListModal?.total_amount || 0)}</dd></div>
+          <div><dt>Criador</dt><dd>{deleteListModal?.created_by_name || '-'}</dd></div>
+          <div><dt>Status</dt><dd>{deleteListModal?.status_label || '-'}</dd></div>
+          <div><dt>Ciclo</dt><dd>{deleteListModal?.cycle_status === 'closed' ? 'Fechado' : deleteListModal?.cycle_status === 'open' ? 'Aberto' : '-'}</dd></div>
+        </dl>
+        {deleteNeedsTypedConfirmation && (
+          <label className="field">
+            <span className="field__label">Digite EXCLUIR para confirmar</span>
+            <input className="field__input" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" />
+          </label>
+        )}
       </ConfirmModal>
 
       <ConfirmModal

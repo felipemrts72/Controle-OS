@@ -8,12 +8,23 @@ import './AdvancesPage.css';
 const emptyEmployeeSearch = { search: '', results: [], selected: null, loading: false };
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function openReport(path, params) {
   const query = new URLSearchParams(params);
   window.open(`${path}?${query.toString()}`, '_blank', 'noopener,noreferrer');
+}
+
+function apiErrorMessage(error, fallback = 'Não foi possível concluir a operação.') {
+  return error?.response?.data?.message
+    || error?.data?.message
+    || error?.message
+    || fallback;
 }
 
 export function AdvancesReportsPage() {
@@ -40,7 +51,7 @@ export function AdvancesReportsPage() {
       const response = await api.get('/advances/employees', { params: { search } });
       setEmployeeSearch((current) => ({ ...current, results: response.data || [] }));
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Nao foi possivel buscar funcionarios.');
+      toast.error(apiErrorMessage(error, 'Nao foi possivel buscar funcionarios.'));
     } finally {
       setEmployeeSearch((current) => ({ ...current, loading: false }));
     }
@@ -51,7 +62,7 @@ export function AdvancesReportsPage() {
       const response = await api.get('/advances/reports/cycles');
       setCycles(response.data || []);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Nao foi possivel carregar ciclos anteriores.');
+      toast.error(apiErrorMessage(error, 'Nao foi possivel carregar ciclos anteriores.'));
     }
   }
 
@@ -61,7 +72,7 @@ export function AdvancesReportsPage() {
       const response = await api.get('/advances/audit', { params: auditFilters });
       setAudit(response.data || []);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Nao foi possivel carregar auditoria.');
+      toast.error(apiErrorMessage(error, 'Nao foi possivel carregar auditoria.'));
     }
   }
 

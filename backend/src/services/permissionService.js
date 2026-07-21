@@ -52,6 +52,7 @@ export const PERMISSIONS = [
   { code: 'advances.view', name: 'Ver vales', group_name: 'Vales' },
   { code: 'advances.manage', name: 'Gerenciar vales', group_name: 'Vales' },
   { code: 'advances.create', name: 'Criar listas de vales', group_name: 'Vales' },
+  { code: 'advances.lists.delete', name: 'Excluir listas de vales', group_name: 'Vales' },
   { code: 'advances.edit_own_list', name: 'Editar própria lista de vales', group_name: 'Vales' },
   { code: 'advances.review', name: 'Revisar listas de vales', group_name: 'Vales' },
   { code: 'advances.approve', name: 'Aprovar listas de vales', group_name: 'Vales' },

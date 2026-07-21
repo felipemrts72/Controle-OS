@@ -26,11 +26,11 @@ export function AdvanceSummaryPage() {
         <h1>LISTA DE VALES</h1>
         <p>Data: {formatDate(summary.list_date)}</p>
         <table>
-          <thead><tr><th>Funcionário</th><th>Valor solicitado</th></tr></thead>
+          <thead><tr><th>Funcionário</th><th>Chave Pix</th><th>Valor</th></tr></thead>
           <tbody>
-            {summary.items.map((item) => <tr key={item.id}><td>{item.employee_name}</td><td>{formatMoney(item.amount)}</td></tr>)}
+            {summary.items.map((item) => <tr key={item.id}><td>{item.employee_name}</td><td>{item.pix_key || '-'}</td><td>{formatMoney(item.amount)}</td></tr>)}
           </tbody>
-          <tfoot><tr><th>TOTAL</th><th>{formatMoney(summary.total_amount)}</th></tr></tfoot>
+          <tfoot><tr><th colSpan="2">TOTAL</th><th>{formatMoney(summary.total_amount)}</th></tr></tfoot>
         </table>
       </section>
 
@@ -41,10 +41,6 @@ export function AdvanceSummaryPage() {
             <tr>
               <th>Funcionário</th>
               <th>Valor desta lista</th>
-              <th>Chave Pix</th>
-              <th>Salário atual</th>
-              <th>Limite máximo aplicável</th>
-              <th>Acumulado no ciclo</th>
               <th>Restante disponível</th>
               <th>Observação</th>
             </tr>
@@ -54,10 +50,6 @@ export function AdvanceSummaryPage() {
               <tr key={item.id}>
                 <td>{item.employee_name}</td>
                 <td>{formatMoney(item.amount)}</td>
-                <td>{item.pix_key || '-'}</td>
-                <td>{formatMoney(item.salary)}</td>
-                <td>{formatMoney(item.maximum_limit)} ({item.maximum_percentage}%)</td>
-                <td>{formatMoney(item.accumulated_current_cycle)}</td>
                 <td>{formatMoney(item.remaining)}</td>
                 <td>{observation(item)}</td>
               </tr>
@@ -71,12 +63,8 @@ export function AdvanceSummaryPage() {
               <h3>{item.employee_name}</h3>
               <dl>
                 <div><dt>Valor desta lista</dt><dd>{formatMoney(item.amount)}</dd></div>
-                <div><dt>Chave Pix</dt><dd>{item.pix_key || '-'}</dd></div>
-                <div><dt>Salário atual</dt><dd>{formatMoney(item.salary)}</dd></div>
-                <div><dt>Limite máximo aplicável</dt><dd>{formatMoney(item.maximum_limit)} ({item.maximum_percentage}%)</dd></div>
-                <div><dt>Acumulado no ciclo</dt><dd>{formatMoney(item.accumulated_current_cycle)}</dd></div>
                 <div><dt>Restante disponível</dt><dd>{formatMoney(item.remaining)}</dd></div>
-                <div><dt>Observação/override</dt><dd>{observation(item)}</dd></div>
+                <div><dt>Observação</dt><dd>{observation(item)}</dd></div>
               </dl>
             </article>
           ))}

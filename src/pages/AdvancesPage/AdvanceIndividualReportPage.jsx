@@ -43,7 +43,7 @@ export function AdvanceIndividualReportPage() {
       <section className="advance-print-page__entries">
         {report.entries.map((entry) => (
           <article className="advance-print-page__entry" key={entry.id}>
-            <strong>{formatDate(entry.receipt_at || entry.created_at || entry.list_date)}</strong>
+            <strong>{formatDate(entry.list_date || entry.receipt_at || entry.created_at)}</strong>
             <dl>
               <div><dt>Valor</dt><dd>{formatMoney(entry.amount)}</dd></div>
               <div><dt>Origem</dt><dd>{originLabel(entry)}</dd></div>

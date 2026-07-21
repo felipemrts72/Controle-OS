@@ -52,7 +52,7 @@ export const legacyRolePermissions = {
 };
 
 export function isSuperAdmin(user) {
-  return user?.is_super_admin || user?.username === 'admin';
+  return user?.is_super_admin || user?.username === 'admin' || user?.role_slug === 'admin' || user?.role === 'admin';
 }
 
 export function getDefaultRoute(user) {

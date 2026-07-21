@@ -18,16 +18,44 @@ function assertCan(user, permission) {
   if (!can(user, permission)) throw httpError(403, 'Acesso nao autorizado.');
 }
 
+function isAdvanceAdmin(user) {
+  return user?.is_super_admin || user?.role_slug === 'admin' || user?.role === 'admin';
+}
+
+function assertSpecificAdvancePermission(user, permission, message) {
+  if (isAdvanceAdmin(user)) return;
+  if (hasPermission(user, permission)) return;
+  throw httpError(403, message || 'Acesso nao autorizado.');
+}
+
 function money(value, field = 'valor') {
   const number = Number(String(value ?? '').replace(',', '.'));
   if (!Number.isFinite(number) || number <= 0) throw httpError(400, `Informe um ${field} valido.`);
   return Math.round(number * 100) / 100;
 }
 
+function localDateFromDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function dateOrToday(value) {
-  if (!value) return new Date().toISOString().slice(0, 10);
+  if (!value) return localDateFromDate();
   const text = String(value).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw httpError(400, 'Data da lista invalida.');
+  return text;
+}
+
+function assertValidCivilDate(value, message = 'Data invalida.') {
+  const text = String(value || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw httpError(400, message);
+  const [year, month, day] = text.split('-').map(Number);
+  const checked = new Date(Date.UTC(year, month - 1, day));
+  if (checked.getUTCFullYear() !== year || checked.getUTCMonth() !== month - 1 || checked.getUTCDate() !== day) {
+    throw httpError(400, message);
+  }
   return text;
 }
 
@@ -102,7 +130,7 @@ async function fetchList(client, listId, lock = false) {
     `SELECT al.*, ac.status AS cycle_status, ac.opened_at, ac.closed_at
      FROM advance_lists al
      JOIN advance_cycles ac ON ac.id = al.cycle_id
-     WHERE al.id = $1
+     WHERE al.id = $1 AND al.deleted_at IS NULL
      ${lock ? 'FOR UPDATE OF al' : ''}`,
     [listId],
   );
@@ -138,6 +166,7 @@ async function accumulatedInCycle(client, cycleId, employeeId, excludingItemId =
      WHERE al.cycle_id = $1
        AND ali.employee_id = $2
        AND al.status <> 'cancelled'
+       AND al.deleted_at IS NULL
        AND ali.status = 'active'
        AND ali.removed_at IS NULL
        AND ali.confirmed = TRUE
@@ -261,7 +290,7 @@ async function hydrateList(client, listId) {
      LEFT JOIN users creator ON creator.id = al.created_by
      LEFT JOIN users approver ON approver.id = al.approved_by
      LEFT JOIN advance_list_items ali ON ali.list_id = al.id
-     WHERE al.id = $1
+     WHERE al.id = $1 AND al.deleted_at IS NULL
      GROUP BY al.id, ac.id, creator.name, approver.name`,
     [listId],
   );
@@ -309,7 +338,7 @@ export async function getAdvancesHome() {
         COALESCE(SUM(ali.amount) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL AND al.status <> 'cancelled'), 0)::numeric AS total_amount
        FROM advance_cycles ac
        LEFT JOIN users opener ON opener.id = ac.opened_by
-       LEFT JOIN advance_lists al ON al.cycle_id = ac.id
+       LEFT JOIN advance_lists al ON al.cycle_id = ac.id AND al.deleted_at IS NULL
        LEFT JOIN advance_list_items ali ON ali.list_id = al.id
        WHERE ac.status = 'open'
        GROUP BY ac.id, opener.name`,
@@ -319,11 +348,23 @@ export async function getAdvancesHome() {
         ac.status AS cycle_status,
         creator.name AS created_by_name,
         COALESCE(COUNT(ali.id) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL), 0)::int AS employee_count,
-        COALESCE(SUM(ali.amount) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL), 0)::numeric AS total_amount
+        COALESCE(SUM(ali.amount) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL), 0)::numeric AS total_amount,
+        CASE
+          WHEN COUNT(ali.id) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL) = 1
+            AND BOOL_AND(COALESCE(ali.entry_type, 'list') = 'individual') FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL)
+          THEN 'individual'
+          WHEN COUNT(ali.id) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL) = 1
+            AND BOOL_AND(COALESCE(ali.entry_type, 'list') = 'installment') FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL)
+          THEN 'installment'
+          ELSE 'list'
+        END AS card_type,
+        MIN(e.full_name) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL) AS single_employee_name
        FROM advance_lists al
        JOIN advance_cycles ac ON ac.id = al.cycle_id
        LEFT JOIN users creator ON creator.id = al.created_by
        LEFT JOIN advance_list_items ali ON ali.list_id = al.id
+       LEFT JOIN employees e ON e.id = ali.employee_id
+       WHERE al.deleted_at IS NULL
        GROUP BY al.id, ac.id, creator.name
        ORDER BY al.list_date DESC, al.created_at DESC
        LIMIT 80`,
@@ -348,7 +389,7 @@ export async function listCycles() {
        FROM advance_cycles ac
        LEFT JOIN users opener ON opener.id = ac.opened_by
        LEFT JOIN users closer ON closer.id = ac.closed_by
-       LEFT JOIN advance_lists al ON al.cycle_id = ac.id
+       LEFT JOIN advance_lists al ON al.cycle_id = ac.id AND al.deleted_at IS NULL
        LEFT JOIN advance_list_items ali ON ali.list_id = al.id
        GROUP BY ac.id, opener.name, closer.name
        ORDER BY ac.opened_at DESC`,
@@ -381,7 +422,7 @@ export async function createCycle(user) {
 }
 
 export async function closeCycle(cycleId, body, user) {
-  assertCan(user, 'advances.cycles.close');
+  assertSpecificAdvancePermission(user, 'advances.cycles.close', 'Você não possui permissão para fechar ciclos de vales.');
   return transaction(async (client) => {
     const current = await client.query("SELECT * FROM advance_cycles WHERE id = $1 FOR UPDATE", [cycleId]);
     const cycle = current.rows[0];
@@ -640,6 +681,113 @@ export async function removeAdvanceItem(listId, itemId, user) {
   });
 }
 
+export async function deleteAdvanceList(listId, user) {
+  assertSpecificAdvancePermission(user, 'advances.lists.delete', 'Você não possui permissão para excluir listas de vales.');
+  return transaction(async (client) => {
+    const list = await fetchList(client, listId, true);
+    await client.query('SELECT id FROM advance_cycles WHERE id = $1 FOR UPDATE', [list.cycle_id]);
+    const admin = isAdvanceAdmin(user);
+
+    if (!admin && list.cycle_status !== 'open') {
+      throw httpError(400, 'Nao e possivel excluir lista de ciclo fechado.');
+    }
+    if (!admin && list.status !== 'draft') {
+      throw httpError(400, 'Apenas listas em edicao podem ser excluidas.');
+    }
+
+    const linkedInstallments = await client.query(
+      `SELECT COUNT(*)::int AS total
+       FROM advance_installments ai
+       JOIN advance_list_items ali ON ali.id = ai.posted_advance_item_id
+       WHERE ali.list_id = $1
+         AND ai.status <> 'cancelled'`,
+      [listId],
+    );
+    if (!admin && linkedInstallments.rows[0].total > 0) {
+      throw httpError(400, 'Esta lista possui parcelas vinculadas e nao pode ser excluida.');
+    }
+
+    const blockedEntries = await client.query(
+      `SELECT COUNT(*)::int AS total
+       FROM advance_list_items
+       WHERE list_id = $1
+         AND status = 'active'
+         AND removed_at IS NULL
+         AND COALESCE(entry_type, 'list') <> 'list'`,
+      [listId],
+    );
+    if (!admin && blockedEntries.rows[0].total > 0) {
+      throw httpError(400, 'Esta lista possui lancamentos individuais ou parcelas e nao pode ser excluida.');
+    }
+
+    const itemSummary = await client.query(
+      `SELECT COUNT(*)::int AS item_count,
+        COALESCE(COUNT(DISTINCT employee_id), 0)::int AS employee_count,
+        COALESCE(SUM(amount) FILTER (WHERE status = 'active' AND removed_at IS NULL), 0)::numeric AS total_amount,
+        COALESCE(COUNT(*) FILTER (WHERE COALESCE(entry_type, 'list') <> 'list' AND status = 'active' AND removed_at IS NULL), 0)::int AS special_entries
+       FROM advance_list_items
+       WHERE list_id = $1`,
+      [listId],
+    );
+
+    const items = await client.query(
+      `UPDATE advance_list_items
+       SET status = 'removed',
+           removed_at = NOW(),
+           removed_by = $1,
+           updated_by = $1,
+           updated_at = NOW()
+       WHERE list_id = $2
+         AND status = 'active'
+         AND removed_at IS NULL
+       RETURNING id, employee_id, amount`,
+      [user.id, listId],
+    );
+
+    const deleted = await client.query(
+      `UPDATE advance_lists
+       SET status = 'cancelled',
+           deleted_at = NOW(),
+           deleted_by = $1,
+           updated_by = $1,
+           updated_at = NOW()
+       WHERE id = $2
+         AND deleted_at IS NULL
+       RETURNING *`,
+      [user.id, listId],
+    );
+    if (!deleted.rows[0]) throw httpError(404, 'Lista de vales nao encontrada.');
+
+    await logAudit(client, {
+      entityType: 'advance_list',
+      entityId: listId,
+      action: 'soft_delete',
+      previousValue: {
+        list_id: listId,
+        status: list.status,
+        cycle_id: list.cycle_id,
+        cycle_status: list.cycle_status,
+        list_date: list.list_date,
+        total_amount: itemSummary.rows[0].total_amount,
+        item_count: itemSummary.rows[0].item_count,
+        employee_count: itemSummary.rows[0].employee_count,
+        linked_installments: linkedInstallments.rows[0].total,
+        special_entries: itemSummary.rows[0].special_entries,
+        items: items.rows,
+      },
+      newValue: {
+        status: deleted.rows[0].status,
+        deleted_at: deleted.rows[0].deleted_at,
+        deleted_by: user.id,
+        admin_override: admin,
+      },
+      userId: user.id,
+    });
+
+    return { ok: true, id: listId };
+  });
+}
+
 export async function submitAdvanceList(listId, user) {
   return transaction(async (client) => {
     const list = await fetchList(client, listId, true);
@@ -708,7 +856,7 @@ async function assertApprovalConsistency(client, list, user, overrideConfirmed) 
 }
 
 export async function approveAdvanceList(listId, body, user) {
-  assertCan(user, 'advances.approve');
+  assertSpecificAdvancePermission(user, 'advances.approve', 'Você não possui permissão para aprovar listas de vales.');
   return transaction(async (client) => {
     const list = await fetchList(client, listId, true);
     if (list.cycle_status !== 'open') throw httpError(400, 'Ciclo fechado nao permite aprovacao.');
@@ -779,6 +927,7 @@ export async function getEmployeeAdvanceProfile(employeeId) {
        WHERE ali.employee_id = $1
          AND ali.status = 'active'
          AND ali.removed_at IS NULL
+         AND al.deleted_at IS NULL
        ORDER BY al.list_date DESC, ali.created_at DESC
        LIMIT 80`,
       [employeeId],
@@ -829,13 +978,21 @@ export async function lookupAdvanceLimits({ search = '' }) {
 
 function parseReceiptAt(value) {
   if (!value) throw httpError(400, 'Informe a data/hora do comprovante.');
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw httpError(400, 'Data/hora do comprovante invalida.');
-  return date;
+  const text = String(value).trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) throw httpError(400, 'Data/hora do comprovante invalida.');
+  const dateOnly = assertValidCivilDate(match[1], 'Data/hora do comprovante invalida.');
+  const hour = Number(match[2]);
+  const minute = Number(match[3]);
+  const second = Number(match[4] || '0');
+  if (hour > 23 || minute > 59 || second > 59) throw httpError(400, 'Data/hora do comprovante invalida.');
+  return {
+    dateOnly,
+    timestamp: `${dateOnly} ${match[2]}:${match[3]}:${String(second).padStart(2, '0')}`,
+  };
 }
 
-async function findOrCreateIndividualList(client, cycle, user, receiptAt) {
-  const listDate = receiptAt.toISOString().slice(0, 10);
+async function findOrCreateIndividualList(client, cycle, user, listDate) {
   const created = await client.query(
     `INSERT INTO advance_lists (cycle_id, list_date, status, created_by, updated_by, approved_by, approved_at)
      VALUES ($1, $2, 'approved', $3, $3, $3, NOW())
@@ -878,10 +1035,10 @@ function buildAdvanceSnapshot(employee, accumulatedBefore, amount) {
   };
 }
 
-async function insertAdvanceItem(client, { cycle, employee, amount, receiptAt, sourceBank, entryType, user, excludingItemId = null, list = null }) {
+async function insertAdvanceItem(client, { cycle, employee, amount, receiptAt, receiptDate, sourceBank, entryType, user, excludingItemId = null, list = null }) {
   const accumulatedBefore = await accumulatedInCycle(client, cycle.id, employee.id, excludingItemId);
   const snapshot = buildAdvanceSnapshot(employee, accumulatedBefore, amount);
-  const targetList = list || await findOrCreateIndividualList(client, cycle, user, receiptAt);
+  const targetList = list || await findOrCreateIndividualList(client, cycle, user, receiptDate || localDateFromDate());
   const saved = await client.query(
     `INSERT INTO advance_list_items (
       list_id, employee_id, amount, status, confirmed, threshold_warning_confirmed, override_used, override_by,
@@ -921,7 +1078,7 @@ async function createInstallmentRows(client, planId, amounts) {
   }
 }
 
-async function postInstallment(client, { cycle, installment, employee, user, receiptAt = new Date(), sourceBank = null, reuseItemId = null }) {
+async function postInstallment(client, { cycle, installment, employee, user, receiptAt = null, receiptDate = null, sourceBank = null, reuseItemId = null }) {
   let item;
   let snapshot;
   let list = null;
@@ -930,7 +1087,7 @@ async function postInstallment(client, { cycle, installment, employee, user, rec
       `SELECT ali.*, al.cycle_id, al.status AS list_status
        FROM advance_list_items ali
        JOIN advance_lists al ON al.id = ali.list_id
-       WHERE ali.id = $1 AND ali.employee_id = $2 AND al.cycle_id = $3 FOR UPDATE`,
+       WHERE ali.id = $1 AND ali.employee_id = $2 AND al.cycle_id = $3 AND al.deleted_at IS NULL FOR UPDATE`,
       [reuseItemId, employee.id, cycle.id],
     );
     item = current.rows[0];
@@ -969,11 +1126,14 @@ async function postInstallment(client, { cycle, installment, employee, user, rec
     );
     item = updated.rows[0];
   } else {
+    const effectiveReceiptAt = receiptAt || `${localDateFromDate()} 00:00:00`;
+    const effectiveReceiptDate = receiptDate || dateOrToday(effectiveReceiptAt);
     const inserted = await insertAdvanceItem(client, {
       cycle,
       employee,
       amount: Number(installment.installment_amount),
-      receiptAt,
+      receiptAt: effectiveReceiptAt,
+      receiptDate: effectiveReceiptDate,
       sourceBank,
       entryType: 'installment',
       user,
@@ -1077,12 +1237,14 @@ async function postPendingInstallmentsForCycle(client, cycle, user) {
       continue;
     }
 
+    const todayDate = localDateFromDate();
     const posted = await postInstallment(client, {
       cycle,
       installment,
       employee: plan,
       user,
-      receiptAt: new Date(),
+      receiptAt: `${todayDate} 00:00:00`,
+      receiptDate: todayDate,
       sourceBank: null,
     });
     await logAudit(client, {
@@ -1112,7 +1274,7 @@ export async function createIndividualAdvance(body, user) {
     if (!employeeId) throw httpError(400, 'Selecione um funcionario.');
     const employee = await fetchEmployeeForAdvance(client, employeeId, true);
     const amount = money(body.amount);
-    const receiptAt = parseReceiptAt(body.receipt_at);
+    const receipt = parseReceiptAt(body.receipt_at);
     const sourceBank = String(body.source_bank || '').trim();
     if (sourceBank && !['Sicoob', 'Sicredi', 'Asaas', 'Itaú', 'ItaÃº'].includes(sourceBank)) throw httpError(400, 'Banco de origem invalido.');
     const installmentsCount = validateInstallmentsCount(body.installments_count || 1);
@@ -1122,7 +1284,7 @@ export async function createIndividualAdvance(body, user) {
     let snapshot;
     let installmentInfo = null;
     if (installmentsCount > 1) {
-      assertCan(user, 'advances.installments.create');
+      assertSpecificAdvancePermission(user, 'advances.installments.create', 'Você não possui permissão para criar parcelamentos de vales.');
       const planData = await createInstallmentPlan(client, {
         employee,
         originalAmount: amount,
@@ -1135,7 +1297,8 @@ export async function createIndividualAdvance(body, user) {
         installment: firstInstallment,
         employee,
         user,
-        receiptAt,
+        receiptAt: receipt.timestamp,
+        receiptDate: receipt.dateOnly,
         sourceBank,
       });
       saved = { rows: [posted.item] };
@@ -1163,7 +1326,8 @@ export async function createIndividualAdvance(body, user) {
         cycle: openCycle,
         employee,
         amount,
-        receiptAt,
+        receiptAt: receipt.timestamp,
+        receiptDate: receipt.dateOnly,
         sourceBank,
         entryType: 'individual',
         user,
@@ -1182,7 +1346,7 @@ export async function createIndividualAdvance(body, user) {
         employee_id: employee.id,
         employee_name: employee.full_name,
         amount,
-        receipt_at: receiptAt,
+        receipt_at: receipt.timestamp,
         source_bank: sourceBank,
         projected_percentage: snapshot.projectedPercentage,
         exceeded: snapshot.exceeded,
@@ -1209,7 +1373,7 @@ export async function createIndividualAdvance(body, user) {
 }
 
 export async function listEligibleIndividualAdvances(employeeId, user) {
-  assertCan(user, 'advances.installments.convert');
+  assertSpecificAdvancePermission(user, 'advances.installments.convert', 'Você não possui permissão para parcelar vales.');
   return transaction(async (client) => {
     if (!employeeId) throw httpError(400, 'Selecione um funcionario.');
     await fetchEmployeeForAdvance(client, employeeId, false);
@@ -1227,6 +1391,7 @@ export async function listEligibleIndividualAdvances(employeeId, user) {
          AND ac.id = $2
          AND ac.status = 'open'
          AND al.status <> 'cancelled'
+         AND al.deleted_at IS NULL
          AND ali.status = 'active'
          AND ali.removed_at IS NULL
          AND ali.confirmed = TRUE
@@ -1240,7 +1405,7 @@ export async function listEligibleIndividualAdvances(employeeId, user) {
 }
 
 export async function convertIndividualAdvanceToInstallments(itemId, body, user) {
-  assertCan(user, 'advances.installments.convert');
+  assertSpecificAdvancePermission(user, 'advances.installments.convert', 'Você não possui permissão para parcelar vales.');
   return transaction(async (client) => {
     const installmentsCount = validateInstallmentsCount(body.installments_count, { min: 2 });
     const current = await client.query(
@@ -1257,6 +1422,7 @@ export async function convertIndividualAdvanceToInstallments(itemId, body, user)
          AND ali.confirmed = TRUE
          AND ali.entry_type = 'individual'
          AND al.status <> 'cancelled'
+         AND al.deleted_at IS NULL
          AND ac.status = 'open'
          AND aip.id IS NULL
        FOR UPDATE OF ali`,
@@ -1279,7 +1445,8 @@ export async function convertIndividualAdvanceToInstallments(itemId, body, user)
       installment: firstInstallment,
       employee: item,
       user,
-      receiptAt: item.receipt_at || new Date(),
+      receiptAt: item.receipt_at,
+      receiptDate: item.list_date,
       sourceBank: item.source_bank,
       reuseItemId: item.id,
     });
@@ -1329,11 +1496,13 @@ export async function convertIndividualAdvanceToInstallments(itemId, body, user)
 
 function reportDateRange({ from, to }) {
   if (!from || !to) throw httpError(400, 'Informe data inicial e final.');
-  const start = new Date(`${String(from).slice(0, 10)}T00:00:00`);
-  const end = new Date(`${String(to).slice(0, 10)}T23:59:59.999`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) throw httpError(400, 'Periodo invalido.');
-  if (end < start) throw httpError(400, 'A data final nao pode ser anterior a inicial.');
-  return { start, end };
+  const startDate = assertValidCivilDate(from, 'Periodo invalido.');
+  const endDate = assertValidCivilDate(to, 'Periodo invalido.');
+  if (endDate < startDate) throw httpError(400, 'A data final nao pode ser anterior a inicial.');
+  return {
+    start: `${startDate} 00:00:00`,
+    end: `${endDate} 23:59:59.999`,
+  };
 }
 
 async function resolveReportFilter(client, query) {
@@ -1381,6 +1550,7 @@ export async function getGeneralAdvanceReport(query, user) {
        JOIN employees e ON e.id = ali.employee_id
        WHERE ${filter.where}
          AND al.status <> 'cancelled'
+         AND al.deleted_at IS NULL
          AND ali.status = 'active'
          AND ali.removed_at IS NULL
          AND ali.confirmed = TRUE
@@ -1412,6 +1582,7 @@ export async function getIndividualAdvanceReport(employeeId, query, user) {
        WHERE ${filter.where}
          AND ali.employee_id = $${employeeParam}
          AND al.status <> 'cancelled'
+         AND al.deleted_at IS NULL
          AND ali.status = 'active'
          AND ali.removed_at IS NULL
          AND ali.confirmed = TRUE
@@ -1448,7 +1619,7 @@ export async function getClosedAdvanceCyclesReport(user) {
        FROM advance_cycles ac
        LEFT JOIN users opener ON opener.id = ac.opened_by
        LEFT JOIN users closer ON closer.id = ac.closed_by
-       LEFT JOIN advance_lists al ON al.cycle_id = ac.id
+       LEFT JOIN advance_lists al ON al.cycle_id = ac.id AND al.deleted_at IS NULL
        LEFT JOIN advance_list_items ali ON ali.list_id = al.id
        WHERE ac.status = 'closed'
        GROUP BY ac.id, opener.name, closer.name

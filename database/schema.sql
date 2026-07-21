@@ -636,6 +636,8 @@ CREATE TABLE IF NOT EXISTS advance_lists (
   updated_by UUID REFERENCES users(id),
   approved_by UUID REFERENCES users(id),
   approved_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
+  deleted_by UUID REFERENCES users(id),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   CONSTRAINT advance_lists_status_check CHECK (status IN ('draft', 'pending_approval', 'approved', 'cancelled'))
@@ -644,6 +646,12 @@ CREATE TABLE IF NOT EXISTS advance_lists (
 CREATE INDEX IF NOT EXISTS idx_advance_lists_cycle ON advance_lists(cycle_id);
 CREATE INDEX IF NOT EXISTS idx_advance_lists_status ON advance_lists(status);
 CREATE INDEX IF NOT EXISTS idx_advance_lists_date ON advance_lists(list_date DESC);
+
+ALTER TABLE advance_lists
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL,
+  ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id);
+
+CREATE INDEX IF NOT EXISTS idx_advance_lists_deleted_at ON advance_lists(deleted_at);
 
 CREATE TABLE IF NOT EXISTS advance_list_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -893,6 +901,7 @@ VALUES
   ('advances.view', 'Ver vales', NULL, 'Vales'),
   ('advances.manage', 'Gerenciar vales', 'Compatibilidade com permissao antiga de vales.', 'Vales'),
   ('advances.create', 'Criar listas de vales', NULL, 'Vales'),
+  ('advances.lists.delete', 'Excluir listas de vales', NULL, 'Vales'),
   ('advances.edit_own_list', 'Editar propria lista de vales', NULL, 'Vales'),
   ('advances.review', 'Revisar listas de vales', NULL, 'Vales'),
   ('advances.approve', 'Aprovar listas de vales', NULL, 'Vales'),

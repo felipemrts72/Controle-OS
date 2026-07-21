@@ -83,10 +83,14 @@ input:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  line-height: 1.15;
   min-height: 40px;
   padding: 10px 14px;
   font-weight: 700;
+  min-width: 0;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .button svg {
