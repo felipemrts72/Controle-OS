@@ -56,9 +56,14 @@ function AccessDenied() {
 
 function SessionLoading() {
   return (
-    <main className="page">
-      <div className="panel">
-        <h1 className="page__title">Carregando...</h1>
+    <main className="session-loading" aria-live="polite" aria-busy="true">
+      <div className="session-loading__card">
+        <div className="session-loading__mark" aria-hidden="true">OS</div>
+        <div>
+          <strong className="session-loading__brand">Controle Interno</strong>
+          <p className="session-loading__text">Validando sessao...</p>
+        </div>
+        <span className="session-loading__spinner" aria-hidden="true" />
       </div>
     </main>
   );

@@ -157,6 +157,74 @@ input:focus-visible {
   min-width: 0;
 }
 
+.session-loading {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(11, 31, 68, 0.08), transparent 42%),
+    var(--color-bg);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.session-loading__card {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  max-width: 420px;
+  min-width: 0;
+  padding: 20px;
+  width: 100%;
+}
+
+.session-loading__mark {
+  align-items: center;
+  background: var(--color-primary-deep);
+  border-radius: 8px;
+  color: #ffffff;
+  display: flex;
+  font-size: 15px;
+  font-weight: 800;
+  height: 44px;
+  justify-content: center;
+  letter-spacing: 0;
+  width: 44px;
+}
+
+.session-loading__brand {
+  display: block;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.session-loading__text {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 6px 0 0;
+}
+
+.session-loading__spinner {
+  animation: session-loading-spin 900ms linear infinite;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  height: 28px;
+  width: 28px;
+}
+
+@keyframes session-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (min-width: 1600px) {
   .page {
     gap: 22px;
@@ -212,5 +280,21 @@ input:focus-visible {
 
   .panel {
     padding: 14px;
+  }
+
+  .session-loading {
+    padding: 18px;
+  }
+
+  .session-loading__card {
+    gap: 12px;
+    grid-template-columns: auto 1fr;
+    padding: 16px;
+  }
+
+  .session-loading__spinner {
+    grid-column: 1 / -1;
+    justify-self: center;
+    margin-top: 2px;
   }
 }
