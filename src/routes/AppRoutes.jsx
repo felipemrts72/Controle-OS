@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout/AppLayout.jsx';
-import { getStoredUser } from '../services/api.js';
+import { api, clearSession, getStoredToken, getStoredUser, onSessionCleared, setSession } from '../services/api.js';
 import { LoginPage } from '../pages/LoginPage/LoginPage.jsx';
 import { RegisterPage } from '../pages/RegisterPage/RegisterPage.jsx';
 import { DashboardPage } from '../pages/DashboardPage/DashboardPage.jsx';
@@ -53,7 +54,52 @@ function AccessDenied() {
   );
 }
 
+function SessionLoading() {
+  return (
+    <main className="page">
+      <div className="panel">
+        <h1 className="page__title">Carregando...</h1>
+      </div>
+    </main>
+  );
+}
+
 export function AppRoutes() {
+  const [isCheckingSession, setIsCheckingSession] = useState(() => Boolean(getStoredToken()));
+  const didCheckSession = useRef(false);
+
+  useEffect(() => {
+    const removeSessionListener = onSessionCleared(() => {
+      setIsCheckingSession(false);
+    });
+
+    if (didCheckSession.current) return removeSessionListener;
+    didCheckSession.current = true;
+
+    async function validateStoredSession() {
+      const token = getStoredToken();
+      if (!token) {
+        clearSession();
+        setIsCheckingSession(false);
+        return;
+      }
+
+      try {
+        const response = await api.get('/auth/me');
+        setSession(token, response.data.user);
+      } catch {
+        clearSession();
+      } finally {
+        setIsCheckingSession(false);
+      }
+    }
+
+    validateStoredSession();
+    return removeSessionListener;
+  }, []);
+
+  if (isCheckingSession) return <SessionLoading />;
+
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />

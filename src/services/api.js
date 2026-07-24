@@ -4,6 +4,9 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
 });
 
+const AUTH_CLEARED_EVENT = 'controle-os-auth-cleared';
+let isRedirectingToLogin = false;
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
 
@@ -14,7 +17,24 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const token = getStoredToken();
+    const url = error.config?.url || '';
+    const isLoginRequest = url.includes('/auth/login');
+
+    if ((status === 401 || status === 403) && token && !isLoginRequest) {
+      handleUnauthorizedSession();
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 export function setSession(token, user) {
+  isRedirectingToLogin = false;
   localStorage.setItem('token', token);
   localStorage.setItem('user', JSON.stringify(user));
 }
@@ -22,14 +42,35 @@ export function setSession(token, user) {
 export function clearSession() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
+}
+
+export function getStoredToken() {
+  return localStorage.getItem('token');
 }
 
 export function logout(navigate) {
   clearSession();
-  navigate('/entrar');
+  navigate('/entrar', { replace: true });
 }
 
 export function getStoredUser() {
   const raw = localStorage.getItem('user');
   return raw ? JSON.parse(raw) : null;
+}
+
+export function onSessionCleared(callback) {
+  window.addEventListener(AUTH_CLEARED_EVENT, callback);
+  return () => window.removeEventListener(AUTH_CLEARED_EVENT, callback);
+}
+
+function handleUnauthorizedSession() {
+  clearSession();
+
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+
+  if (window.location.pathname !== '/entrar') {
+    window.location.replace('/entrar');
+  }
 }
