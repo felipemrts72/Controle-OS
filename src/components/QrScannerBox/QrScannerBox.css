@@ -29,3 +29,14 @@
   color: #b91c1c;
   margin: 0;
 }
+
+@media (max-width: 640px) {
+  .qr-scanner-box__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .qr-scanner-box__header .button {
+    width: 100%;
+  }
+}

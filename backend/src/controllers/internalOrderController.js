@@ -1,5 +1,5 @@
 import { query, transaction } from '../database/pool.js';
-import { createInternalOrder, normalizeDeliveryPayload } from '../services/orderService.js';
+import { createInternalOrder, normalizeDeliveryPayload, searchCustomers, upsertCustomerForOrder } from '../services/orderService.js';
 import { logAudit } from '../services/auditService.js';
 import { refreshInternalOrderStatus } from '../services/statusService.js';
 import { copyProductRouteToSoldItemTasks } from '../services/manufacturingRouteService.js';
@@ -118,6 +118,12 @@ export async function createOrder(req, res, next) {
   } catch (error) { next(error); }
 }
 
+export async function listCustomers(req, res, next) {
+  try {
+    res.json(await searchCustomers(req.query.q || ''));
+  } catch (error) { next(error); }
+}
+
 export async function getInternalOrder(req, res, next) {
   try {
     const order = await query(
@@ -194,20 +200,23 @@ export async function updateInternalOrder(req, res, next) {
         });
       }
       const delivery = normalizeDeliveryPayload(req.body);
+      const customer = await upsertCustomerForOrder(client, { ...req.body, ...delivery });
       const order = await client.query(
         `UPDATE internal_orders
          SET sale_number = $1,
-          customer_name = $2,
-          customer_phone = $3,
-          promised_date = $4,
-          delivery_type = $5,
-          carrier_name = $6,
-          destination_city = $7,
-          destination_uf = $8,
+          customer_id = $2,
+          customer_name = $3,
+          customer_phone = $4,
+          promised_date = $5,
+          delivery_type = $6,
+          carrier_name = $7,
+          destination_city = $8,
+          destination_uf = $9,
           updated_at = NOW()
-         WHERE id = $9 RETURNING *`,
+         WHERE id = $10 RETURNING *`,
         [
           req.body.sale_number,
+          customer?.id || null,
           req.body.customer_name,
           req.body.customer_phone,
           req.body.promised_date,

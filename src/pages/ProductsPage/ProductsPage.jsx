@@ -5,12 +5,16 @@ import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './ProductsPage.css';
 
 export function ProductsPage() {
   const user = getStoredUser();
   const toast = useToast();
-  const canManage = ['admin', 'manager'].includes(user?.role);
+  const canCreate = canAccessPermission(user, 'products.create');
+  const canEdit = canAccessPermission(user, 'products.edit');
+  const canDelete = canAccessPermission(user, 'products.delete');
+  const canManageTypes = canAccessPermission(user, 'products.types.manage');
   const [products, setProducts] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [sectors, setSectors] = useState([]);
@@ -29,7 +33,7 @@ export function ProductsPage() {
         const [productsResponse, productTypesResponse, sectorsResponse] = await Promise.all([
           api.get('/products'),
           api.get('/products/types'),
-          api.get('/sectors'),
+          api.get('/sectors').catch(() => ({ data: [] })),
         ]);
         if (active) {
           setProducts(productsResponse.data);
@@ -139,12 +143,12 @@ export function ProductsPage() {
   }, [filters, products, sort]);
 
   const columns = [
-    { key: 'name', label: sortButton('name', 'Nome'), render: (row) => <Link to={`/produtos/${row.id}`}>{row.name}</Link> },
-    { key: 'type', label: sortButton('type', 'Tipo'), render: (row) => <StatusBadge value={row.type} /> },
-    { key: 'sector_name', label: sortButton('sector_name', 'Setor responsável'), render: (row) => row.sector_name || '-' },
+    { key: 'name', label: sortButton('name', 'Nome'), mobileLabel: 'Nome', render: (row) => canEdit ? <Link to={`/produtos/${row.id}`}>{row.name}</Link> : row.name },
+    { key: 'type', label: sortButton('type', 'Tipo'), mobileLabel: 'Tipo', render: (row) => <StatusBadge value={row.type} /> },
+    { key: 'sector_name', label: sortButton('sector_name', 'Setor responsável'), mobileLabel: 'Setor responsável', render: (row) => row.sector_name || '-' },
     { key: 'default_volume_quantity', label: 'Volumes' },
     { key: 'default_total_weight_kg', label: 'Peso total (kg)' },
-    ...(canManage ? [{
+    ...(canDelete ? [{
       key: 'actions',
       label: 'Ações',
       render: (row) => (
@@ -162,8 +166,8 @@ export function ProductsPage() {
       <div className="page__header">
         <h1 className="page__title">Produtos</h1>
         <div className="page__actions">
-          <Link className="button" to="/produtos/tipos">Tipos de produto</Link>
-          <Link className="button button_primary" to="/produtos/novo">Novo produto</Link>
+          {canManageTypes && <Link className="button" to="/produtos/tipos">Tipos de produto</Link>}
+          {canCreate && <Link className="button button_primary" to="/produtos/novo">Novo produto</Link>}
         </div>
       </div>
       <div className="panel">

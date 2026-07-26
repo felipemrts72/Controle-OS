@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../services/api.js';
+import { api, getStoredUser } from '../../services/api.js';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './LabelQueuePage.css';
 
 const labelModels = ['15x10', '10x5'];
@@ -50,6 +51,9 @@ function deliveryRequiresInvoice(deliveryType) {
 
 export function LabelQueuePage() {
   const toast = useToast();
+  const user = getStoredUser();
+  const canPrint = canAccessPermission(user, 'labels.print');
+  const canReprint = canAccessPermission(user, 'labels.reprint');
   const [volumes, setVolumes] = useState([]);
   const [confirmGroupId, setConfirmGroupId] = useState(null);
   const [individualGroupId, setIndividualGroupId] = useState(null);
@@ -189,15 +193,19 @@ export function LabelQueuePage() {
               <span>Pendentes: <strong>{group.pending}</strong></span>
             </div>
             <div className="label-queue-group__actions">
-              <button className="button button_primary" type="button" onClick={() => {
-                setConfirmGroupId(group.sold_item_id);
-                setInvoiceNumber(group.invoice_number || '');
-              }}>
-                Imprimir etiquetas
-              </button>
-              <button className="button" type="button" onClick={() => setIndividualGroupId(group.sold_item_id)}>
-                Imprimir etiqueta individual
-              </button>
+              {(group.generated > 0 ? canReprint : canPrint) && (
+                <button className="button button_primary" type="button" onClick={() => {
+                  setConfirmGroupId(group.sold_item_id);
+                  setInvoiceNumber(group.invoice_number || '');
+                }}>
+                  Imprimir etiquetas
+                </button>
+              )}
+              {(canPrint || canReprint) && (
+                <button className="button" type="button" onClick={() => setIndividualGroupId(group.sold_item_id)}>
+                  Imprimir etiqueta individual
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -242,9 +250,11 @@ export function LabelQueuePage() {
                   <strong>Volume {volume.volume_number}/{volume.total_volumes}</strong>
                   <StatusBadge value={volume.label_status} />
                   <span>Código: {volume.shipment_code || '-'}</span>
-                  <button className="button button_primary" type="button" onClick={() => printSingle(volume)} disabled={isPrinting}>
-                    {volume.label_status === 'label_generated' ? 'Reimprimir' : 'Imprimir'}
-                  </button>
+                  {(volume.label_status === 'label_generated' ? canReprint : canPrint) && (
+                    <button className="button button_primary" type="button" onClick={() => printSingle(volume)} disabled={isPrinting}>
+                      {volume.label_status === 'label_generated' ? 'Reimprimir' : 'Imprimir'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

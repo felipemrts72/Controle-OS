@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { createSector, deactivateSector, listSectors, updateSector } from '../controllers/basicControllers.js';
-import { authenticate, authorize } from '../middlewares/authMiddleware.js';
+import { authenticate, requirePermission } from '../middlewares/authMiddleware.js';
 
 export const sectorRoutes = Router();
 sectorRoutes.use(authenticate);
-sectorRoutes.get('/', listSectors);
-sectorRoutes.post('/', authorize('admin', 'manager'), createSector);
-sectorRoutes.put('/:id', authorize('admin', 'manager'), updateSector);
-sectorRoutes.patch('/:id/deactivate', authorize('admin', 'manager'), deactivateSector);
+sectorRoutes.get('/', requirePermission('sectors.view'), listSectors);
+sectorRoutes.post('/', requirePermission('sectors.manage'), createSector);
+sectorRoutes.put('/:id', requirePermission('sectors.manage'), updateSector);
+sectorRoutes.patch('/:id/deactivate', requirePermission('sectors.manage'), deactivateSector);

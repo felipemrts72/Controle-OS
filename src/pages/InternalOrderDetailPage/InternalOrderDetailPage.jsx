@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useParams } from 'react-router-dom';
-import { api } from '../../services/api.js';
+import { Link, useParams } from 'react-router-dom';
+import { api, getStoredUser } from '../../services/api.js';
 import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { VolumeEditor } from '../../components/VolumeEditor/VolumeEditor.jsx';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './InternalOrderDetailPage.css';
 
 export function InternalOrderDetailPage() {
   const { id } = useParams();
   const toast = useToast();
+  const user = getStoredUser();
+  const canEdit = canAccessPermission(user, 'orders.edit');
+  const canCompleteServices = canAccessPermission(user, 'services.complete');
+  const canPrintLabels = canAccessPermission(user, 'labels.print');
+  const canMarkWithoutLabel = canAccessPermission(user, 'labels.mark_without_label');
   const [order, setOrder] = useState(null);
   const [modalVolumeIds, setModalVolumeIds] = useState([]);
 
@@ -26,6 +31,7 @@ export function InternalOrderDetailPage() {
   const readyVolumes = useMemo(() => order?.volumes?.filter((volume) => volume.label_status === 'released_for_label') || [], [order]);
 
   async function markReady(taskId) {
+    if (!canCompleteServices) return;
     try {
       await api.patch(`/tasks/${taskId}/ready`);
       const nextOrder = await load();
@@ -41,6 +47,7 @@ export function InternalOrderDetailPage() {
   }
 
   async function saveVolumes() {
+    if (!canEdit) return;
     try {
       await api.put(`/internal-orders/${id}`, order);
       await load();
@@ -51,18 +58,43 @@ export function InternalOrderDetailPage() {
   }
 
   async function generateModalLabels() {
+    if (!canPrintLabels) return;
     for (const volumeId of modalVolumeIds) await api.post(`/labels/${volumeId}/generate`);
     setModalVolumeIds([]);
     await load();
   }
 
   async function markModalWithoutLabel() {
+    if (!canMarkWithoutLabel) return;
     for (const volumeId of modalVolumeIds) await api.post(`/labels/${volumeId}/without-label`);
     setModalVolumeIds([]);
     await load();
   }
 
   if (!order) return <div className="panel">Carregando...</div>;
+
+  const taskColumns = [
+    { key: 'task_name', label: 'Tarefa' },
+    { key: 'sector_name', label: 'Setor' },
+    { key: 'status', label: 'Status', render: (row) => <StatusBadge value={row.status} /> },
+    {
+      key: 'waiting_dependencies',
+      label: 'Liberação',
+      render: (row) => {
+        const waiting = row.waiting_dependencies || [];
+        if (row.is_released || row.status === 'ready') return 'Liberada';
+        if (waiting.length === 1) return `Aguardando: ${waiting[0].name}`;
+        return `Aguardando ${waiting.length} etapas: ${waiting.map((dependency) => dependency.name).join(', ')}`;
+      },
+    },
+    ...(canCompleteServices ? [{
+      key: 'actions',
+      label: 'Ações',
+      render: (row) => row.status === 'pending'
+        ? <button className="button button_primary" type="button" disabled={row.is_released === false} onClick={() => markReady(row.id)}>Marcar pronto</button>
+        : <button className="button" type="button" onClick={() => api.patch(`/tasks/${row.id}/pending`).then(load)}>Voltar pendente</button>,
+    }] : []),
+  ];
 
   return (
     <section className="page internal-order-detail-page">
@@ -72,7 +104,7 @@ export function InternalOrderDetailPage() {
           <p className="internal-order-detail-page__subtitle">{order.customer_name} · {order.customer_phone || '-'}</p>
         </div>
         <div className="page__actions">
-          <Link className="button" to={`/os/${order.id}/editar`}>Editar OS</Link>
+          {canEdit && <Link className="button" to={`/os/${order.id}/editar`}>Editar OS</Link>}
           <StatusBadge value={order.status} />
         </div>
       </div>
@@ -101,31 +133,13 @@ export function InternalOrderDetailPage() {
 
       <div className="panel">
         <h2>Tarefas internas</h2>
-        <DataTable
-          columns={[
-            { key: 'task_name', label: 'Tarefa' },
-            { key: 'sector_name', label: 'Setor' },
-            { key: 'status', label: 'Status', render: (row) => <StatusBadge value={row.status} /> },
-            {
-              key: 'waiting_dependencies',
-              label: 'Liberação',
-              render: (row) => {
-                const waiting = row.waiting_dependencies || [];
-                if (row.is_released || row.status === 'ready') return 'Liberada';
-                if (waiting.length === 1) return `Aguardando: ${waiting[0].name}`;
-                return `Aguardando ${waiting.length} etapas: ${waiting.map((dependency) => dependency.name).join(', ')}`;
-              },
-            },
-            { key: 'actions', label: 'Ações', render: (row) => row.status === 'pending' ? <button className="button button_primary" type="button" disabled={row.is_released === false} onClick={() => markReady(row.id)}>Marcar pronto</button> : <button className="button" type="button" onClick={() => api.patch(`/tasks/${row.id}/pending`).then(load)}>Voltar pendente</button> },
-          ]}
-          rows={order.tasks}
-        />
+        <DataTable columns={taskColumns} rows={order.tasks} />
       </div>
 
       <div className="panel">
         <div className="internal-order-detail-page__section-header">
           <h2>Volumes de expedição</h2>
-          <button className="button button_primary" type="button" onClick={saveVolumes}>Salvar volumes</button>
+          {canEdit && <button className="button button_primary" type="button" onClick={saveVolumes}>Salvar volumes</button>}
         </div>
         <VolumeEditor volumes={order.volumes} onChange={(volumes) => setOrder({ ...order, volumes })} />
       </div>
@@ -136,8 +150,8 @@ export function InternalOrderDetailPage() {
         onCancel={() => setModalVolumeIds([])}
         actions={(
           <>
-            <button className="button button_primary" type="button" onClick={generateModalLabels}>Gerar Etiquetas em PDF</button>
-            <button className="button" type="button" onClick={markModalWithoutLabel}>Marcar Pronto sem Etiqueta</button>
+            {canPrintLabels && <button className="button button_primary" type="button" onClick={generateModalLabels}>Gerar Etiquetas em PDF</button>}
+            {canMarkWithoutLabel && <button className="button" type="button" onClick={markModalWithoutLabel}>Marcar Pronto sem Etiqueta</button>}
           </>
         )}
       >

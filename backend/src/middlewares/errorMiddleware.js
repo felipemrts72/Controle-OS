@@ -3,6 +3,7 @@ export function errorMiddleware(error, req, res, _next) {
   let message = status === 500 ? 'Erro interno do servidor.' : error.message;
   let code = error.code;
   let field = error.field;
+  let details = error.details;
 
   if (error.code === '23505') {
     status = 409;
@@ -33,5 +34,6 @@ export function errorMiddleware(error, req, res, _next) {
     message,
     ...(code ? { code } : {}),
     ...(field ? { field } : {}),
+    ...(details ? { details } : {}),
   });
 }

@@ -3,13 +3,35 @@ import { query, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from '../services/auditService.js';
 import { getProductManufacturingSteps, saveProductManufacturingSteps } from '../services/manufacturingRouteService.js';
+import { hasPermission, isSuperAdmin } from '../services/permissionService.js';
+
+const LEGACY_ROLES = ['admin', 'manager', 'shipping', 'viewer'];
+
+async function getRoleAssignment(client, roleId, fallbackRole = 'viewer') {
+  if (!roleId) return { roleId: null, legacyRole: fallbackRole };
+  const role = await client.query('SELECT id, slug, name FROM roles WHERE id = $1 AND is_active = TRUE', [roleId]);
+  if (!role.rows[0]) throw httpError(400, 'Role inválida ou inativa.');
+  return {
+    roleId: role.rows[0].id,
+    legacyRole: LEGACY_ROLES.includes(role.rows[0].slug) ? role.rows[0].slug : fallbackRole,
+    role: role.rows[0],
+  };
+}
+
+function assertAdminCanBeChanged(user) {
+  if (user?.username === 'admin') {
+    throw httpError(400, 'O usuário admin principal não pode ser excluído ou desativado.');
+  }
+}
 
 export async function listUsers(_req, res, next) {
   try {
     const result = await query(
-      `SELECT u.id, u.name, u.username, u.role, u.is_active, u.approval_status, u.approved_by,
-        u.approved_at, u.created_at, approver.name AS approved_by_name
+      `SELECT u.id, u.name, u.username, u.role, u.role_id, r.slug AS role_slug, r.name AS role_name,
+        u.is_active, u.approval_status, u.approved_by, u.approved_at, u.created_at,
+        approver.name AS approved_by_name
        FROM users u
+       LEFT JOIN roles r ON r.id = u.role_id
        LEFT JOIN users approver ON approver.id = u.approved_by
        ORDER BY u.created_at DESC, u.name`,
     );
@@ -19,14 +41,25 @@ export async function listUsers(_req, res, next) {
 
 export async function createUser(req, res, next) {
   try {
-    const hash = await bcrypt.hash(req.body.password, 10);
-    const result = await query(
-      `INSERT INTO users (name, username, password_hash, role, is_active, approval_status)
-       VALUES ($1, $2, $3, $4, TRUE, 'approved')
-       RETURNING id, name, username, role, is_active, approval_status`,
-      [req.body.name, req.body.username, hash, req.body.role],
-    );
-    res.status(201).json(result.rows[0]);
+    const user = await transaction(async (client) => {
+      const hash = await bcrypt.hash(req.body.password, 10);
+      const assignment = await getRoleAssignment(client, req.body.role_id, LEGACY_ROLES.includes(req.body.role) ? req.body.role : 'viewer');
+      const result = await client.query(
+        `INSERT INTO users (name, username, password_hash, role, role_id, is_active, approval_status)
+         VALUES ($1, $2, $3, $4, $5, TRUE, 'approved')
+         RETURNING id, name, username, role, role_id, is_active, approval_status`,
+        [req.body.name, req.body.username, hash, assignment.legacyRole, assignment.roleId],
+      );
+      await logAudit(client, {
+        entityType: 'user',
+        entityId: result.rows[0].id,
+        action: 'create',
+        newValue: result.rows[0],
+        userId: req.user.id,
+      });
+      return result.rows[0];
+    });
+    res.status(201).json(user);
   } catch (error) {
     if (error.code === '23505') return next(httpError(409, 'Usuário já cadastrado.'));
     next(error);

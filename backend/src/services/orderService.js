@@ -1,10 +1,235 @@
-import { transaction } from '../database/pool.js';
+import { query, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
 import { refreshInternalOrderStatus, refreshSoldItemStatus } from './statusService.js';
 import { copyProductRouteToSoldItemTasks } from './manufacturingRouteService.js';
 
 const DELIVERY_TYPES = new Set(['transportadora', 'retirada', 'frota_propria']);
+
+function collapseSpaces(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeCustomerName(value) {
+  return collapseSpaces(value).toLowerCase();
+}
+
+function normalizeCustomerKey(value) {
+  return normalizeCustomerName(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function resolveCustomerLocation(payload) {
+  return collapseSpaces(payload.destination_city || '') || null;
+}
+
+function resolveCustomerCarrier(payload) {
+  if (payload.delivery_type !== 'transportadora') return null;
+  return collapseSpaces(payload.carrier_name || '') || null;
+}
+
+function resolveCustomerUf(payload) {
+  if (payload.delivery_type === 'retirada') return null;
+  const uf = collapseSpaces(payload.destination_uf || '').toUpperCase();
+  return uf || null;
+}
+
+function isVerySimilarName(firstName, secondName) {
+  const first = normalizeCustomerKey(firstName);
+  const second = normalizeCustomerKey(secondName);
+  if (!first || !second) return false;
+  if (first === second) return true;
+  if (first.length < 5 || second.length < 5) return false;
+  return first.startsWith(second) || second.startsWith(first);
+}
+
+async function findSimilarCustomer(client, name) {
+  const normalizedName = normalizeCustomerName(name);
+  const firstToken = normalizedName.split(' ')[0] || normalizedName;
+  if (!firstToken) return null;
+
+  const result = await client.query(
+    `SELECT *
+     FROM customers
+     WHERE normalized_name = $1
+        OR normalized_name LIKE $2
+     ORDER BY updated_at DESC
+     LIMIT 25`,
+    [normalizedName, `${firstToken}%`],
+  );
+
+  return result.rows.find((customer) => isVerySimilarName(customer.name, name)) || null;
+}
+
+export async function searchCustomers(term) {
+  const normalizedTerm = normalizeCustomerName(term);
+  if (normalizedTerm.length < 2) return [];
+
+  const result = await query(
+    `SELECT id, name, phone, location, carrier_name, destination_uf
+     FROM customers
+     WHERE normalized_name LIKE $1
+     ORDER BY
+       CASE WHEN normalized_name = $2 THEN 0 ELSE 1 END,
+       updated_at DESC,
+       name ASC
+     LIMIT 8`,
+    [`%${normalizedTerm}%`, normalizedTerm],
+  );
+  return result.rows;
+}
+
+export async function upsertCustomerForOrder(client, payload) {
+  const name = collapseSpaces(payload.customer_name);
+  if (!name) return null;
+
+  const phone = collapseSpaces(payload.customer_phone) || null;
+  const location = resolveCustomerLocation(payload);
+  const carrierName = resolveCustomerCarrier(payload);
+  const destinationUf = resolveCustomerUf(payload);
+
+  if (payload.customer_id) {
+    const current = await client.query('SELECT * FROM customers WHERE id = $1', [payload.customer_id]);
+    if (current.rows[0]) {
+      const normalizedName = normalizeCustomerName(name);
+      const duplicate = await client.query(
+        'SELECT * FROM customers WHERE normalized_name = $1 AND id <> $2 LIMIT 1',
+        [normalizedName, payload.customer_id],
+      );
+      if (duplicate.rows[0]) {
+        const updatedDuplicate = await client.query(
+          `UPDATE customers
+           SET name = $1,
+            phone = COALESCE($2, phone),
+            location = COALESCE($3, location),
+            carrier_name = COALESCE($4, carrier_name),
+            destination_uf = COALESCE($5, destination_uf),
+            updated_at = NOW()
+           WHERE id = $6
+           RETURNING *`,
+          [name, phone, location, carrierName, destinationUf, duplicate.rows[0].id],
+        );
+        return updatedDuplicate.rows[0];
+      }
+
+      const updated = await client.query(
+        `UPDATE customers
+         SET name = $1,
+          normalized_name = $2,
+          phone = COALESCE($3, phone),
+          location = COALESCE($4, location),
+          carrier_name = COALESCE($5, carrier_name),
+          destination_uf = COALESCE($6, destination_uf),
+          updated_at = NOW()
+         WHERE id = $7
+         RETURNING *`,
+        [name, normalizedName, phone, location, carrierName, destinationUf, payload.customer_id],
+      );
+      return updated.rows[0];
+    }
+  }
+
+  const existingCustomer = await findSimilarCustomer(client, name);
+  if (existingCustomer) {
+    const updated = await client.query(
+      `UPDATE customers
+       SET name = $1,
+        normalized_name = $2,
+        phone = COALESCE($3, phone),
+        location = COALESCE($4, location),
+        carrier_name = COALESCE($5, carrier_name),
+        destination_uf = COALESCE($6, destination_uf),
+        updated_at = NOW()
+       WHERE id = $7
+       RETURNING *`,
+      [name, normalizeCustomerName(name), phone, location, carrierName, destinationUf, existingCustomer.id],
+    );
+    return updated.rows[0];
+  }
+
+  const created = await client.query(
+    `INSERT INTO customers (name, normalized_name, phone, location, carrier_name, destination_uf)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (normalized_name) DO UPDATE
+       SET name = EXCLUDED.name,
+        phone = COALESCE(EXCLUDED.phone, customers.phone),
+        location = COALESCE(EXCLUDED.location, customers.location),
+        carrier_name = COALESCE(EXCLUDED.carrier_name, customers.carrier_name),
+        destination_uf = COALESCE(EXCLUDED.destination_uf, customers.destination_uf),
+        updated_at = NOW()
+     RETURNING *`,
+    [name, normalizeCustomerName(name), phone, location, carrierName, destinationUf],
+  );
+  return created.rows[0];
+}
+
+async function markOrderGoodsReady(client, orderId, userId) {
+  const previousTasks = await client.query(
+    `SELECT it.*
+     FROM internal_tasks it
+     JOIN sold_items si ON si.id = it.sold_item_id
+     WHERE si.internal_order_id = $1
+       AND it.status <> 'ready'`,
+    [orderId],
+  );
+
+  const updatedTasks = await client.query(
+    `UPDATE internal_tasks it
+     SET status = 'ready',
+      completed_by = $2,
+      completed_at = NOW(),
+      updated_at = NOW()
+     FROM sold_items si
+     WHERE si.id = it.sold_item_id
+       AND si.internal_order_id = $1
+       AND it.status <> 'ready'
+     RETURNING it.*`,
+    [orderId, userId],
+  );
+
+  const previousById = new Map(previousTasks.rows.map((task) => [task.id, task]));
+  for (const task of updatedTasks.rows) {
+    await logAudit(client, {
+      entityType: 'internal_task',
+      entityId: task.id,
+      action: 'mark_ready_auto',
+      previousValue: previousById.get(task.id) || null,
+      newValue: task,
+      userId,
+    });
+  }
+
+  await client.query(
+    `UPDATE shipment_volumes sv
+     SET label_status = 'released_for_label',
+      updated_at = NOW()
+     FROM sold_items si
+     WHERE si.id = sv.sold_item_id
+       AND si.internal_order_id = $1
+       AND sv.label_status = 'waiting_tasks'`,
+    [orderId],
+  );
+
+  const soldItems = await client.query('SELECT id FROM sold_items WHERE internal_order_id = $1', [orderId]);
+  for (const soldItem of soldItems.rows) {
+    await refreshSoldItemStatus(client, soldItem.id);
+  }
+  await refreshInternalOrderStatus(client, orderId);
+
+  await logAudit(client, {
+    entityType: 'internal_order',
+    entityId: orderId,
+    action: 'create_ready_for_label',
+    newValue: {
+      goods_ready: true,
+      message: 'OS criada como mercadoria pronta. Tarefas marcadas como prontas automaticamente.',
+      marked_tasks: updatedTasks.rows.length,
+    },
+    userId,
+  });
+}
 
 export function normalizeDeliveryPayload(payload) {
   const deliveryType = payload.delivery_type || 'transportadora';
@@ -24,6 +249,7 @@ export async function createInternalOrder(payload, userId) {
   return transaction(async (client) => {
     if (!payload.items?.length) throw httpError(400, 'Informe ao menos um item na OS.');
     const delivery = normalizeDeliveryPayload(payload);
+    const customer = await upsertCustomerForOrder(client, { ...payload, ...delivery });
 
     const duplicate = await client.query('SELECT id FROM internal_orders WHERE sale_number = $1', [payload.sale_number]);
     if (duplicate.rows[0]) {
@@ -35,12 +261,13 @@ export async function createInternalOrder(payload, userId) {
 
     const orderResult = await client.query(
       `INSERT INTO internal_orders (
-        sale_number, customer_name, customer_phone, promised_date,
+        sale_number, customer_id, customer_name, customer_phone, promised_date,
         delivery_type, carrier_name, destination_city, destination_uf, created_by
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         payload.sale_number,
+        customer?.id || null,
         payload.customer_name,
         payload.customer_phone,
         payload.promised_date,
@@ -120,7 +347,11 @@ export async function createInternalOrder(payload, userId) {
     }
 
     await logAudit(client, { entityType: 'internal_order', entityId: order.id, action: 'create', newValue: payload, userId });
+    if (payload.goods_ready === true) {
+      await markOrderGoodsReady(client, order.id, userId);
+    }
     await refreshInternalOrderStatus(client, order.id);
-    return order;
+    const finalOrder = await client.query('SELECT * FROM internal_orders WHERE id = $1', [order.id]);
+    return finalOrder.rows[0] || order;
   });
 }

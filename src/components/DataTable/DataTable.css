@@ -2,6 +2,7 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   max-width: 100%;
+  min-width: 0;
 }
 
 .data-table__table {
@@ -31,16 +32,51 @@
 
 @media (max-width: 760px) {
   .data-table {
-    margin-left: -2px;
-    padding-bottom: 4px;
+    overflow: visible;
   }
 
   .data-table__table {
-    min-width: 640px;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+    min-width: 0;
+  }
+
+  .data-table__table thead {
+    display: none;
+  }
+
+  .data-table__table,
+  .data-table__table tbody,
+  .data-table__table tr,
+  .data-table__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table__table tr {
+    background: var(--color-white);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 10px;
   }
 
   .data-table__table th,
   .data-table__table td {
-    padding: 10px;
+    border-bottom: 0;
+    padding: 8px 4px;
+  }
+
+  .data-table__table td::before {
+    color: var(--color-text-muted);
+    content: attr(data-label);
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .data-table__empty::before {
+    content: none;
   }
 }

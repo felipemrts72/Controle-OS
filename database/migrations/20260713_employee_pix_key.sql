@@ -1,0 +1,2 @@
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS pix_key VARCHAR;

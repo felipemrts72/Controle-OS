@@ -46,6 +46,7 @@
   position: absolute;
   top: calc(100% + 10px);
   z-index: 10;
+  max-width: min(360px, calc(100vw - 28px));
 }
 
 .services-page__menu button {
@@ -179,9 +180,14 @@
 }
 
 @media (max-width: 700px) {
+  .services-page {
+    gap: 14px;
+  }
+
   .services-page__header {
     align-items: flex-start;
     flex-direction: column;
+    gap: 10px;
   }
 
   .services-page__header h1 {
@@ -192,6 +198,12 @@
   .services-page__task,
   .services-page__modal-header {
     grid-template-columns: 1fr;
+  }
+
+  .services-page__order-card,
+  .services-page__task {
+    align-items: stretch;
+    padding: 14px;
   }
 
   .services-page__modal-header {
@@ -209,7 +221,20 @@
   }
 
   .services-page__modal-header .button,
-  .services-page__task .button {
+  .services-page__task .button,
+  .services-page__order-card .button {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .services-page__header h1 {
+    font-size: 24px;
+  }
+
+  .services-page__menu {
+    left: auto;
+    right: 0;
+    width: calc(100vw - 24px);
   }
 }

@@ -12,6 +12,12 @@
 
 .header > div {
   min-width: 0;
+  text-align: right;
+}
+
+.header strong {
+  display: block;
+  overflow-wrap: anywhere;
 }
 
 .header__role {
@@ -35,8 +41,16 @@
 
 @media (max-width: 760px) {
   .header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     min-height: 58px;
-    padding: 8px 14px 8px 66px;
+    padding: 8px 10px 8px 66px;
+    gap: 8px;
+  }
+
+  .header > div {
+    justify-self: end;
+    max-width: 100%;
   }
 
   .header strong,
@@ -49,5 +63,16 @@
   .header__button {
     height: 44px;
     width: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .header {
+    padding-left: 60px;
+  }
+
+  .header__button {
+    height: 42px;
+    width: 42px;
   }
 }

@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../services/api.js';
+import { api, getStoredUser } from '../../services/api.js';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { SectorForm } from '../../components/SectorForm/SectorForm.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
+import { canAccessPermission } from '../../utils/permissions.js';
 import './SectorsPage.css';
 
 export function SectorsPage() {
   const toast = useToast();
+  const user = getStoredUser();
+  const canManage = canAccessPermission(user, 'sectors.manage');
   const [sectors, setSectors] = useState([]);
 
   async function load() {
@@ -41,16 +44,18 @@ export function SectorsPage() {
       <div className="page__header">
         <h1 className="page__title">Setores</h1>
       </div>
-      <div className="panel">
-        <SectorForm onSubmit={create} />
-      </div>
+      {canManage && (
+        <div className="panel">
+          <SectorForm onSubmit={create} />
+        </div>
+      )}
       <div className="panel">
         <DataTable
           columns={[
             { key: 'name', label: 'Nome' },
             { key: 'slug', label: 'Slug' },
             { key: 'is_active', label: 'Status', render: (row) => row.is_active ? 'Ativo' : 'Inativo' },
-            { key: 'actions', label: 'Ações', render: (row) => row.is_active && <button className="button" type="button" onClick={() => deactivate(row.id)}>Desativar</button> },
+            ...(canManage ? [{ key: 'actions', label: 'Ações', render: (row) => row.is_active && <button className="button" type="button" onClick={() => deactivate(row.id)}>Desativar</button> }] : []),
           ]}
           rows={sectors}
         />

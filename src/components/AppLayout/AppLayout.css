@@ -12,6 +12,7 @@
 .app-layout__content {
   min-width: 0;
   padding: clamp(14px, 2vw, 28px);
+  width: 100%;
 }
 
 .app-layout__sidebar-toggle,
@@ -46,6 +47,11 @@
     z-index: 18;
   }
 
+  .app-layout_sidebar-open .app-layout__sidebar-toggle {
+    opacity: 0;
+    pointer-events: none;
+  }
+
   .app-layout__backdrop {
     background: rgba(15, 23, 42, 0.45);
     border: 0;
@@ -60,5 +66,16 @@
 
   .app-layout__main {
     padding-top: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-layout__content {
+    padding: 12px;
+  }
+
+  .app-layout__sidebar-toggle {
+    left: 10px;
+    top: 7px;
   }
 }

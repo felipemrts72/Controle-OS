@@ -1,7 +1,7 @@
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import './ConfirmModal.css';
 
-export function ConfirmModal({ open, title, children, onCancel, actions }) {
+export function ConfirmModal({ open, title, children, onCancel, actions, showCancel = true, cancelLabel = 'Cancelar' }) {
   useEscapeKey(open, onCancel);
 
   if (!open) return null;
@@ -12,7 +12,7 @@ export function ConfirmModal({ open, title, children, onCancel, actions }) {
         <div className="confirm-modal__body">{children}</div>
         <div className="confirm-modal__actions">
           {actions}
-          <button className="button" type="button" onClick={onCancel}>Cancelar</button>
+          {showCancel && <button className="button" type="button" onClick={onCancel}>{cancelLabel}</button>}
         </div>
       </div>
     </div>
