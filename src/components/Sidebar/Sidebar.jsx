@@ -29,7 +29,7 @@ export function Sidebar({ onNavigate }) {
 
   return (
     <aside className="sidebar" id="app-sidebar">
-      <Link to={getDefaultRoute(user)} className="sidebar__brand" onClick={onNavigate}>Controle Interno</Link>
+      <Link to={getDefaultRoute(user)} className="sidebar__brand" onClick={onNavigate}>OliMen Gestão</Link>
       <nav className="sidebar__nav">
         {visibleLinks.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `sidebar__link ${isActive ? 'sidebar__link_active' : ''}`}>

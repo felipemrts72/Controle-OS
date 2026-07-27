@@ -1,4 +1,4 @@
-# Arquitetura do Sistema
+# Arquitetura do OliMen Gestão
 
 ## 1. Visão geral
 

@@ -60,7 +60,7 @@ function SessionLoading() {
       <div className="session-loading__card">
         <div className="session-loading__mark" aria-hidden="true">OS</div>
         <div>
-          <strong className="session-loading__brand">Controle Interno</strong>
+          <strong className="session-loading__brand">OliMen Gestão</strong>
           <p className="session-loading__text">Validando sessao...</p>
         </div>
         <span className="session-loading__spinner" aria-hidden="true" />

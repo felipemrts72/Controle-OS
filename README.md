@@ -1,8 +1,8 @@
-# Sistema de Gestão Operacional
+# OliMen Gestão
 
 Sistema web para controle de ordens de serviço, produção, etiquetagem, expedição, funcionários e vales.
 
-O repositório ainda utiliza internamente o nome **Controle-OS**. A identidade final do produto será definida posteriormente.
+Alguns identificadores técnicos legados ainda utilizam o nome `Controle-OS` e são preservados para evitar impactos em integrações e dados locais.
 
 ## Visão geral
 
