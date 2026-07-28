@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Download, Printer, Save, Upload } from 'lucide-react';
+import { Download, Save, Upload } from 'lucide-react';
 import { api, getStoredUser } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission } from '../../utils/permissions.js';
+import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import { documentTypes, formatCpf, formatDate, formatMoney, maritalStatusOptions, statusLabels, toDateInput } from './employeeUtils.js';
 import './EmployeesPage.css';
 
@@ -12,7 +13,7 @@ const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'De
 const editableFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone', 'email',
   'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood', 'city', 'state',
-  'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'pix_key', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
+  'admission_date', 'job_title', 'sector_id', 'current_salary', 'meal_allowance', 'pix_key', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
   'ctps_state', 'pis_pasep', 'voter_registration', 'voter_zone', 'voter_section', 'military_certificate',
 ];
 
@@ -75,6 +76,7 @@ export function EmployeeDetailPage() {
   const [salaryForm, setSalaryForm] = useState({ salary: '', effective_from: '', reason: '' });
   const [mealForm, setMealForm] = useState({ amount: '', effective_from: '', reason: '' });
   const [documentForm, setDocumentForm] = useState({ document_type: 'RG', dependent_id: '', file: null });
+  const [sectors, setSectors] = useState([]);
 
   async function loadEmployee() {
     const response = await api.get(`/employees/${id}`);
@@ -102,6 +104,12 @@ export function EmployeeDetailPage() {
     Promise.all([loadEmployee(), loadRelated()]).catch(() => toast.error('Não foi possível carregar a ficha do funcionário.'));
   }, [id]);
 
+  useEffect(() => {
+    api.get('/sectors')
+      .then((response) => setSectors(response.data))
+      .catch(() => toast.error('Não foi possível carregar os setores.'));
+  }, []);
+
   function setField(event) {
     const { name, value, type, checked } = event.target;
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
@@ -120,6 +128,7 @@ export function EmployeeDetailPage() {
     try {
       const response = await api.put(`/employees/${id}`, buildEmployeePayload());
       setEmployee(response.data);
+      await loadEmployee();
       toast.success('Alterações salvas.');
       await loadRelated();
     } catch (error) {
@@ -235,10 +244,7 @@ export function EmployeeDetailPage() {
 
   async function printProfile() {
     try {
-      const response = await api.get(`/employees/${id}/profile-pdf`, { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
-      window.open(url, '_blank', 'noopener,noreferrer');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      await downloadAuthenticatedFile(`/employees/${id}/profile-pdf`, 'ficha-cadastral-funcionario.pdf');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Não foi possível gerar a ficha para impressão.');
     }
@@ -303,8 +309,8 @@ export function EmployeeDetailPage() {
         </div>
         <div className="page__actions">
           {!employee.profile_completed && canEdit && <button className="button" type="button" onClick={() => { setCompleteMode(true); setActiveTab('Dados pessoais'); }}>Completar ficha cadastral</button>}
-          {canPrint && employee.profile_completed && <button className="button button_primary" type="button" onClick={printProfile}><Printer size={18} /><span>Imprimir ficha cadastral</span></button>}
-          {canPrint && !employee.profile_completed && <button className="button" type="button" disabled><Printer size={18} /><span>Ficha incompleta</span></button>}
+          {canPrint && employee.profile_completed && <button className="button button_primary" type="button" onClick={printProfile}><Download size={18} /><span>Baixar ficha cadastral</span></button>}
+          {canPrint && !employee.profile_completed && <button className="button" type="button" disabled><Download size={18} /><span>Ficha incompleta</span></button>}
         </div>
       </div>
 
@@ -336,6 +342,7 @@ export function EmployeeDetailPage() {
         <div className="panel employees-page__summary">
           <div><span>CPF</span><strong>{formatCpf(employee.cpf)}</strong></div>
           <div><span>Cargo</span><strong>{employee.job_title || '-'}</strong></div>
+          <div><span>Setor</span><strong>{employee.sector_name || '-'}</strong></div>
           <div><span>Admissão</span><strong>{formatDate(employee.admission_date)}</strong></div>
           <div><span>Salário atual</span><strong>{formatMoney(employee.current_salary)}</strong></div>
           <div><span>Vale alimentação</span><strong>{formatMoney(employee.meal_allowance)}</strong></div>
@@ -378,6 +385,7 @@ export function EmployeeDetailPage() {
               <SectionFields disabled={!canEdit} form={form} setField={setField} fields={[
                 { name: 'admission_date', label: 'Data de admissão', type: 'date' },
                 { name: 'job_title', label: 'Cargo' },
+                { name: 'sector_id', label: 'Setor', type: 'select', options: sectors.map((sector) => ({ value: sector.id, label: `${sector.name}${sector.is_active === false ? ' (inativo)' : ''}` })) },
                 ...(canSalaryManage ? [{ name: 'current_salary', label: 'SalÃ¡rio atual', type: 'number' }] : []),
                 ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale alimentaÃ§Ã£o', type: 'number' }] : []),
                 { name: 'pix_key', label: 'Chave Pix' },

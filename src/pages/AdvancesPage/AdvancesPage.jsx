@@ -6,6 +6,7 @@ import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission, isSuperAdmin } from '../../utils/permissions.js';
 import { formatDate, formatMoney, toDateInput } from '../EmployeesPage/employeeUtils.js';
+import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import './AdvancesPage.css';
 
 const emptyLine = { employee_id: '', amount: '' };
@@ -290,10 +291,7 @@ export function AdvancesPage() {
 
   async function openSummary(listId) {
     try {
-      const response = await api.get(`/advances/lists/${listId}/summary/pdf`, { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
-      window.open(url, '_blank', 'noopener,noreferrer');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      await downloadAuthenticatedFile(`/advances/lists/${listId}/summary/pdf`, 'resumo-lista-vales.pdf');
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Não foi possível gerar o resumo da lista.'));
     }

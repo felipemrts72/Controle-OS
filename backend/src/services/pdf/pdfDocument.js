@@ -45,6 +45,12 @@ export function formatCpfBR(value) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+export function formatCnpjBR(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length !== 14) return safeText(value);
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
 export function formatPhoneBR(value) {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
@@ -66,14 +72,57 @@ function contentWidth(context) {
   return context.doc.page.width - context.margins.left - context.margins.right;
 }
 
+function companyAddress(company = {}) {
+  return [
+    [company.endereco, company.numero].filter(Boolean).join(', '),
+    company.complemento,
+    company.bairro,
+    [company.cidade, company.estado].filter(Boolean).join(' - '),
+    company.cep ? `CEP ${String(company.cep).replace(/^(\d{5})(\d{3})$/, '$1-$2')}` : null,
+  ].filter(Boolean).join(' | ');
+}
+
 export function addDocumentHeader(context) {
-  const { doc, margins, title, subtitle, institutionalName, emittedAt } = context;
+  const { doc, margins, title, subtitle, company = {}, emittedAt } = context;
   const width = contentWidth(context);
   let y = margins.top;
 
-  doc.fillColor(COLORS.primary).font('Helvetica-Bold').fontSize(9)
-    .text(safeText(institutionalName || PRODUCT_NAME), margins.left, y, { width });
-  y += 17;
+  const companyName = company.nome_fantasia || company.razao_social || '';
+  const companyDetails = [
+    company.cnpj ? `CNPJ ${formatCnpjBR(company.cnpj)}` : null,
+    company.telefone ? formatPhoneBR(company.telefone) : null,
+    company.email,
+  ].filter(Boolean).join(' | ');
+  const address = companyAddress(company);
+  const hasCompanyHeader = Boolean(company.logo || companyName || companyDetails || address);
+  if (hasCompanyHeader) {
+    let textX = margins.left;
+    let textWidth = width;
+    if (company.logo) {
+      try {
+        doc.image(company.logo, margins.left, y, { fit: [70, 42], align: 'left', valign: 'center' });
+        textX += 82;
+        textWidth -= 82;
+      } catch {
+        // A ausência de uma imagem renderizável não impede a geração do documento.
+      }
+    }
+    if (companyName) {
+      doc.fillColor(COLORS.primary).font('Helvetica-Bold').fontSize(9.5)
+        .text(companyName, textX, y, { width: textWidth, lineBreak: false });
+    }
+    let companyTextY = companyName ? y + 14 : y;
+    if (companyDetails) {
+      doc.fillColor(COLORS.muted).font('Helvetica').fontSize(7.5)
+        .text(companyDetails, textX, companyTextY, { width: textWidth, lineBreak: false });
+      companyTextY += 11;
+    }
+    if (address) {
+      doc.fillColor(COLORS.muted).font('Helvetica').fontSize(7.5)
+        .text(address, textX, companyTextY, { width: textWidth, lineBreak: false });
+    }
+    y += 50;
+  }
 
   doc.fillColor(COLORS.text).font('Helvetica-Bold').fontSize(17)
     .text(safeText(title), margins.left, y, { width });
@@ -100,7 +149,7 @@ export function addDocumentHeader(context) {
 export function createPdfDocument({
   title,
   subtitle = '',
-  institutionalName = '',
+  company = {},
   orientation = 'portrait',
   margins = DEFAULT_MARGINS,
   emittedAt = new Date(),
@@ -131,7 +180,7 @@ export function createPdfDocument({
     finished,
     title: safeText(title, 'Documento administrativo'),
     subtitle,
-    institutionalName,
+    company,
     emittedAt,
     margins: normalizedMargins,
     orientation: layout,
@@ -209,6 +258,34 @@ export function addKeyValueRows(context, rows) {
   doc.y += 8;
 }
 
+export function addKeyValueGrid(context, rows, columnsCount = 2) {
+  const { doc, margins } = context;
+  const width = contentWidth(context);
+  const gap = 16;
+  const columnWidth = (width - gap * (columnsCount - 1)) / columnsCount;
+  for (let index = 0; index < rows.length; index += columnsCount) {
+    const group = rows.slice(index, index + columnsCount);
+    const heights = group.map((row) => {
+      doc.font('Helvetica').fontSize(8.5);
+      return doc.heightOfString(safeText(row.value), { width: columnWidth });
+    });
+    const rowHeight = Math.max(26, ...heights.map((height) => height + 14));
+    ensurePageSpace(context, rowHeight);
+    const y = doc.y;
+    group.forEach((row, columnIndex) => {
+      const x = margins.left + columnIndex * (columnWidth + gap);
+      doc.fillColor(COLORS.muted).font('Helvetica-Bold').fontSize(7.5)
+        .text(safeText(row.label), x, y, { width: columnWidth, lineBreak: false });
+      doc.fillColor(COLORS.text).font('Helvetica').fontSize(8.5)
+        .text(safeText(row.value), x, y + 11, { width: columnWidth });
+      doc.strokeColor(COLORS.border).lineWidth(0.4)
+        .moveTo(x, y + rowHeight - 3).lineTo(x + columnWidth, y + rowHeight - 3).stroke();
+    });
+    doc.y = y + rowHeight;
+  }
+  doc.y += 5;
+}
+
 function normalizedColumns(columns, width) {
   const total = columns.reduce((sum, column) => sum + Number(column.width || 1), 0);
   return columns.map((column) => ({ ...column, renderedWidth: width * (Number(column.width || 1) / total) }));
@@ -251,6 +328,7 @@ function drawTableRow(context, columns, row, { header = false, shaded = false } 
     doc.fillColor(header ? COLORS.white : COLORS.text).font(font).fontSize(fontSize)
       .text(safeText(rawValue), x + padding, y + padding, {
         width: column.renderedWidth - padding * 2,
+        height: rowHeight - padding * 2,
         align: column.align || 'left',
       });
     x += column.renderedWidth;
@@ -259,7 +337,12 @@ function drawTableRow(context, columns, row, { header = false, shaded = false } 
   return rowHeight;
 }
 
-export function addTable(context, { columns, rows = [], emptyMessage = 'Nenhum registro encontrado.' }) {
+export function addTable(context, {
+  columns,
+  rows = [],
+  emptyMessage = 'Nenhum registro encontrado.',
+  keepWithNextHeight = 0,
+}) {
   const width = contentWidth(context);
   const renderedColumns = normalizedColumns(columns, width);
   ensurePageSpace(context, 30);
@@ -272,7 +355,8 @@ export function addTable(context, { columns, rows = [], emptyMessage = 'Nenhum r
 
   rows.forEach((row, index) => {
     const estimatedHeight = tableRowHeight(context.doc, renderedColumns, row, 'Helvetica', 8.5, 6);
-    if (ensurePageSpace(context, estimatedHeight)) {
+    const requiredHeight = estimatedHeight + (index === rows.length - 1 ? keepWithNextHeight : 0);
+    if (ensurePageSpace(context, requiredHeight)) {
       drawTableRow(context, renderedColumns, {}, { header: true });
     }
     drawTableRow(context, renderedColumns, row, { shaded: index % 2 === 1 });
@@ -334,9 +418,11 @@ export function sanitizePdfFilename(filename) {
 }
 
 export function sendPdfResponse(res, pdf, filename) {
+  if (res.headersSent) return false;
   const safeFilename = sanitizePdfFilename(filename);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
   res.setHeader('Content-Length', pdf.length);
   res.send(pdf);
+  return true;
 }

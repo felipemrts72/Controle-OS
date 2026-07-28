@@ -49,6 +49,8 @@ export const PERMISSIONS = [
   { code: 'employees.dependents.view', name: 'Ver dependentes', group_name: 'Funcionários' },
   { code: 'employees.dependents.manage', name: 'Gerenciar dependentes', group_name: 'Funcionários' },
   { code: 'employees.profile.print', name: 'Imprimir ficha de funcionário', group_name: 'Funcionários' },
+  { code: 'company_settings.view', name: 'Ver configurações da empresa', group_name: 'Configurações' },
+  { code: 'company_settings.edit', name: 'Editar configurações da empresa', group_name: 'Configurações' },
   { code: 'advances.view', name: 'Ver vales', group_name: 'Vales' },
   { code: 'advances.manage', name: 'Gerenciar vales', group_name: 'Vales' },
   { code: 'advances.create', name: 'Criar listas de vales', group_name: 'Vales' },

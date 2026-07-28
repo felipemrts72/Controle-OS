@@ -15,7 +15,7 @@ export function EmployeesPage() {
   const canEdit = canAccessPermission(user, 'employees.edit') || canAccessPermission(user, 'employees.manage');
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ search: '', cpf: '', status: '', job_title: '' });
+  const [filters, setFilters] = useState({ search: '', cpf: '', status: '', job_title: '', sector_id: '' });
 
   async function load() {
     setLoading(true);
@@ -34,6 +34,7 @@ export function EmployeesPage() {
   }, []);
 
   const jobTitles = useMemo(() => [...new Set(employees.map((employee) => employee.job_title).filter(Boolean))].sort(), [employees]);
+  const sectors = useMemo(() => [...new Map(employees.filter((employee) => employee.sector_id).map((employee) => [employee.sector_id, employee.sector_name])).entries()], [employees]);
 
   function changeFilter(event) {
     setFilters((current) => ({ ...current, [event.target.name]: event.target.value }));
@@ -57,6 +58,7 @@ export function EmployeesPage() {
     },
     { key: 'cpf', label: 'CPF', render: (row) => formatCpfPartial(row.cpf) },
     { key: 'job_title', label: 'Cargo', render: (row) => row.job_title || '-' },
+    { key: 'sector_name', label: 'Setor', render: (row) => row.sector_name || '-' },
     { key: 'employment_status', label: 'Status', render: (row) => <span className={`employees-page__status employees-page__status_${row.employment_status}`}>{statusLabels[row.employment_status] || row.employment_status}</span> },
     { key: 'admission_date', label: 'Admissão', render: (row) => formatDate(row.admission_date) },
     {
@@ -111,6 +113,13 @@ export function EmployeesPage() {
           <select className="field__input" name="job_title" value={filters.job_title} onChange={changeFilter}>
             <option value="">Todos</option>
             {jobTitles.map((jobTitle) => <option key={jobTitle} value={jobTitle}>{jobTitle}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field__label">Setor</span>
+          <select className="field__input" name="sector_id" value={filters.sector_id} onChange={changeFilter}>
+            <option value="">Todos</option>
+            {sectors.map(([sectorId, sectorName]) => <option key={sectorId} value={sectorId}>{sectorName}</option>)}
           </select>
         </label>
         <button className="button button_primary employees-page__filter-button" type="submit">

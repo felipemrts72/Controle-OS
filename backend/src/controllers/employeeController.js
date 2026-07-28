@@ -23,6 +23,7 @@ import {
 import { getEmployeeAdvanceProfile } from '../services/advanceService.js';
 import { buildEmployeeProfilePdf } from '../services/pdf/employeePdfService.js';
 import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
+import { getCompanyPdfData } from '../services/companySettingsService.js';
 
 export async function index(req, res, next) {
   try {
@@ -169,9 +170,12 @@ export async function printData(req, res, next) {
 
 export async function profilePdf(req, res, next) {
   try {
-    const data = await getPrintData(req.params.id, req.user);
-    const pdf = await buildEmployeeProfilePdf(data);
-    sendPdfResponse(res, pdf, `ficha-funcionario-${req.params.id}.pdf`);
+    const [data, company] = await Promise.all([
+      getPrintData(req.params.id, req.user),
+      getCompanyPdfData(),
+    ]);
+    const pdf = await buildEmployeeProfilePdf(data, { company });
+    sendPdfResponse(res, pdf, `ficha-cadastral-${data.employee.full_name}.pdf`);
   } catch (error) { next(error); }
 }
 

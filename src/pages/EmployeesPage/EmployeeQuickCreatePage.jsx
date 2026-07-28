@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Save } from 'lucide-react';
 import { api, getStoredUser } from '../../services/api.js';
@@ -22,6 +22,8 @@ const emptyForm = {
   current_salary: '',
   meal_allowance: '',
   pix_key: '',
+  job_title: '',
+  sector_id: '',
 };
 
 export function EmployeeQuickCreatePage() {
@@ -32,6 +34,13 @@ export function EmployeeQuickCreatePage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState(null);
+  const [sectors, setSectors] = useState([]);
+
+  useEffect(() => {
+    api.get('/sectors')
+      .then((response) => setSectors(response.data.filter((sector) => sector.is_active !== false)))
+      .catch(() => toast.error('Não foi possível carregar os setores.'));
+  }, []);
 
   if (!canCreate) return <Navigate to="/acesso-negado" replace />;
 
@@ -88,6 +97,16 @@ export function EmployeeQuickCreatePage() {
           <section className="employees-page__section">
             <h2>Adicionar outros dados agora</h2>
             <p className="employees-page__hint">Opcional. A ficha cadastral pode ser completada posteriormente.</p>
+            <div className="form-grid">
+              <label className="field"><span className="field__label">Cargo</span><input className="field__input" name="job_title" value={form.job_title} onChange={setField} /></label>
+              <label className="field">
+                <span className="field__label">Setor</span>
+                <select className="field__input" name="sector_id" value={form.sector_id} onChange={setField}>
+                  <option value="">Não informado</option>
+                  {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+                </select>
+              </label>
+            </div>
           </section>
 
           <section className="employees-page__section">

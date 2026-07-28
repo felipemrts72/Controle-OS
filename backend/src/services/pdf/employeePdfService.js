@@ -1,5 +1,5 @@
 import {
-  addKeyValueRows,
+  addKeyValueGrid,
   addParagraph,
   addSectionTitle,
   addTable,
@@ -23,34 +23,41 @@ function formatCtps(employee) {
   return [employee.ctps_number, employee.ctps_series, employee.ctps_state].filter(Boolean).join(' / ') || '-';
 }
 
-function addSignatureLines(context) {
-  ensurePageSpace(context, 150);
+function addSignatureLines(context, company = {}) {
+  ensurePageSpace(context, 112);
   const { doc, margins } = context;
   const width = doc.page.width - margins.left - margins.right;
-  const labels = ['Local e data', 'Assinatura do funcionário', 'Assinatura do responsável pela empresa'];
+  const dateY = doc.y + 18;
+  doc.strokeColor('#64748b').lineWidth(0.6).moveTo(margins.left, dateY).lineTo(margins.left + width, dateY).stroke();
+  doc.fillColor('#475569').font('Helvetica').fontSize(8).text('Local e data', margins.left, dateY + 5, { width, align: 'center' });
 
-  for (const label of labels) {
-    const y = doc.y + 24;
-    doc.strokeColor('#64748b').lineWidth(0.6)
-      .moveTo(margins.left, y)
-      .lineTo(margins.left + width, y)
-      .stroke();
-    doc.fillColor('#475569').font('Helvetica').fontSize(8)
-      .text(label, margins.left, y + 5, { width, align: 'center' });
-    doc.y = y + 32;
-  }
+  const gap = 24;
+  const signatureWidth = (width - gap) / 2;
+  const signatureY = dateY + 48;
+  const representative = [company.nome_representante, company.cargo_representante].filter(Boolean).join(' - ');
+  const signatures = [
+    { x: margins.left, label: 'Assinatura do funcionário' },
+    { x: margins.left + signatureWidth + gap, label: representative || 'Assinatura do responsável pela empresa' },
+  ];
+  signatures.forEach(({ x, label }) => {
+    doc.strokeColor('#64748b').lineWidth(0.6).moveTo(x, signatureY).lineTo(x + signatureWidth, signatureY).stroke();
+    doc.fillColor('#475569').font('Helvetica').fontSize(8).text(label, x, signatureY + 5, { width: signatureWidth, align: 'center' });
+  });
+  doc.y = signatureY + 28;
 }
 
 export async function buildEmployeeProfilePdf({ employee, dependents = [] }, options = {}) {
+  const company = options.company || {};
   const context = createPdfDocument({
     title: 'Ficha cadastral de funcionário',
     subtitle: safeText(employee.full_name),
-    institutionalName: options.institutionalName || 'Torneadora Universal',
+    company,
     orientation: 'portrait',
+    margins: { top: 32, right: 38, bottom: 46, left: 38 },
   });
 
   addSectionTitle(context, '1. Dados pessoais');
-  addKeyValueRows(context, [
+  addKeyValueGrid(context, [
     { label: 'Nome', value: employee.full_name },
     { label: 'CPF', value: formatCpfBR(employee.cpf) },
     { label: 'RG', value: employee.rg },
@@ -59,10 +66,10 @@ export async function buildEmployeeProfilePdf({ employee, dependents = [] }, opt
   ]);
 
   addSectionTitle(context, '2. Endereço');
-  addParagraph(context, formatAddressBR(employee));
+  addParagraph(context, formatAddressBR(employee), { spacingAfter: 7 });
 
   addSectionTitle(context, '3. Documentação');
-  addKeyValueRows(context, [
+  addKeyValueGrid(context, [
     { label: 'CTPS', value: formatCtps(employee) },
     { label: 'PIS/PASEP', value: employee.pis_pasep },
     { label: 'Título eleitoral', value: employee.voter_registration },
@@ -70,9 +77,10 @@ export async function buildEmployeeProfilePdf({ employee, dependents = [] }, opt
   ]);
 
   addSectionTitle(context, '4. Dados trabalhistas');
-  addKeyValueRows(context, [
+  addKeyValueGrid(context, [
     { label: 'Admissão', value: formatDateBR(employee.admission_date) },
     { label: 'Cargo', value: employee.job_title },
+    { label: 'Setor', value: employee.sector_name },
     { label: 'Situação', value: employmentStatusLabels[employee.employment_status] || employee.employment_status },
   ]);
 
@@ -85,15 +93,16 @@ export async function buildEmployeeProfilePdf({ employee, dependents = [] }, opt
     ],
     rows: dependents,
     emptyMessage: 'Sem dependentes cadastrados.',
+    keepWithNextHeight: 145,
   });
 
-  ensurePageSpace(context, 200);
+  ensurePageSpace(context, 145);
   addParagraph(
     context,
     'Declaro que as informações acima são verdadeiras e autorizo seu uso para fins cadastrais, trabalhistas e administrativos da empresa, conforme aplicável.',
-    { fontSize: 9, spacingAfter: 8 },
+    { fontSize: 9, spacingAfter: 5 },
   );
-  addSignatureLines(context);
+  addSignatureLines(context, company);
 
   return finalizePdf(context);
 }

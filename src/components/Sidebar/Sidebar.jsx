@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Boxes, ClipboardList, FileSearch, HandCoins, History, IdCard, LayoutDashboard, Package, QrCode, Tags, Tv, Users, Wrench } from 'lucide-react';
+import { Boxes, Building2, ClipboardList, FileSearch, HandCoins, History, IdCard, LayoutDashboard, Package, QrCode, Tags, Tv, Users, Wrench } from 'lucide-react';
 import { getStoredUser } from '../../services/api.js';
 import { canAccessPermission, getDefaultRoute } from '../../utils/permissions.js';
 import './Sidebar.css';
@@ -21,6 +21,7 @@ const links = [
   { to: '/historico-ordens', label: 'Histórico de Ordens', icon: History, permission: 'orders.history.view' },
   { to: '/usuarios', label: 'Usuários', icon: Users, permission: 'users.view' },
   { to: '/roles', label: 'Roles/Permissões', icon: Users, permission: 'roles.view' },
+  { to: '/configuracoes/empresa', label: 'Configurações da Empresa', icon: Building2, permission: 'company_settings.view' },
 ];
 
 export function Sidebar({ onNavigate }) {

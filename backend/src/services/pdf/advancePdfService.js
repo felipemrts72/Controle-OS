@@ -52,37 +52,43 @@ function observation(item) {
   return '-';
 }
 
-export async function buildGeneralAdvanceReportPdf(report) {
+export async function buildGeneralAdvanceReportPdf(report, options = {}) {
   const context = createPdfDocument({
     title: 'Relatório geral de vales',
     subtitle: filterLabel(report.filter),
     orientation: 'portrait',
+    company: options.company || {},
   });
 
   if (cycleDetails(report.filter)) addParagraph(context, cycleDetails(report.filter), { color: '#475569' });
   addTable(context, {
     columns: [
-      { key: 'employee_name', label: 'Funcionário', width: 0.7 },
-      { key: 'total_amount', label: 'Total de vales', width: 0.3, align: 'right', format: formatCurrencyBR },
+      { key: 'employee_name', label: 'Funcionário', width: 0.4 },
+      { key: 'job_title', label: 'Cargo', width: 0.22 },
+      { key: 'sector_name', label: 'Setor', width: 0.18 },
+      { key: 'total_amount', label: 'Total de vales', width: 0.2, align: 'right', format: formatCurrencyBR },
     ],
     rows: report.rows,
+    keepWithNextHeight: 48,
   });
   addTotalLine(context, 'Total geral', formatCurrencyBR(report.total_amount));
 
   return finalizePdf(context);
 }
 
-export async function buildIndividualAdvanceReportPdf(report) {
+export async function buildIndividualAdvanceReportPdf(report, options = {}) {
   const context = createPdfDocument({
     title: 'Extrato individual de vales',
     subtitle: filterLabel(report.filter),
     orientation: 'portrait',
+    company: options.company || {},
   });
 
   addSectionTitle(context, 'Funcionário');
   addKeyValueRows(context, [
     { label: 'Nome', value: report.employee.full_name },
     { label: 'Cargo', value: report.employee.job_title },
+    { label: 'Setor', value: report.employee.sector_name },
   ]);
 
   addSectionTitle(context, 'Lançamentos');
@@ -101,6 +107,7 @@ export async function buildIndividualAdvanceReportPdf(report) {
     ],
     rows: entries,
     emptyMessage: 'Nenhum vale encontrado no filtro.',
+    keepWithNextHeight: 48,
   });
   addTotalLine(context, 'Total de vales', formatCurrencyBR(report.total_amount));
 
@@ -124,21 +131,25 @@ export async function buildIndividualAdvanceReportPdf(report) {
   return finalizePdf(context);
 }
 
-export async function buildAdvanceSummaryPdf(summary) {
+export async function buildAdvanceSummaryPdf(summary, options = {}) {
   const context = createPdfDocument({
     title: 'Lista de vales',
     subtitle: `Data: ${formatDateBR(summary.list_date)}`,
     orientation: 'landscape',
+    company: options.company || {},
   });
 
   addSectionTitle(context, 'Valores da lista');
   addTable(context, {
     columns: [
-      { key: 'employee_name', label: 'Funcionário', width: 0.46 },
-      { key: 'pix_key', label: 'Chave Pix', width: 0.34 },
-      { key: 'amount', label: 'Valor', width: 0.2, align: 'right', format: formatCurrencyBR },
+      { key: 'employee_name', label: 'Funcionário', width: 0.28 },
+      { key: 'job_title', label: 'Cargo', width: 0.2 },
+      { key: 'sector_name', label: 'Setor', width: 0.14 },
+      { key: 'pix_key', label: 'Chave Pix', width: 0.23 },
+      { key: 'amount', label: 'Valor', width: 0.15, align: 'right', format: formatCurrencyBR },
     ],
     rows: summary.items,
+    keepWithNextHeight: 48,
   });
   addTotalLine(context, 'Total', formatCurrencyBR(summary.total_amount));
 

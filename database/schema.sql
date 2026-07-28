@@ -466,6 +466,30 @@ WHERE c.id = latest_order.customer_id
     OR (NULLIF(c.destination_uf, '') IS NULL AND latest_order.destination_uf IS NOT NULL)
   );
 
+CREATE TABLE IF NOT EXISTS company_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  singleton_key BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
+  nome_fantasia VARCHAR,
+  razao_social VARCHAR,
+  cnpj VARCHAR,
+  telefone VARCHAR,
+  email VARCHAR,
+  endereco VARCHAR,
+  numero VARCHAR,
+  complemento VARCHAR,
+  bairro VARCHAR,
+  cidade VARCHAR,
+  estado VARCHAR(2),
+  cep VARCHAR,
+  nome_representante VARCHAR,
+  cpf_representante VARCHAR,
+  cargo_representante VARCHAR,
+  logo_path VARCHAR,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT company_settings_singleton_check CHECK (singleton_key = TRUE)
+);
+
 CREATE TABLE IF NOT EXISTS employees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name VARCHAR NOT NULL,
@@ -491,6 +515,7 @@ CREATE TABLE IF NOT EXISTS employees (
   state VARCHAR(2),
   admission_date DATE,
   job_title VARCHAR,
+  sector_id UUID NULL REFERENCES sectors(id) ON DELETE SET NULL,
   current_salary NUMERIC(12,2),
   meal_allowance NUMERIC(12,2),
   employment_status VARCHAR DEFAULT 'ativo',
@@ -514,10 +539,27 @@ CREATE TABLE IF NOT EXISTS employees (
   CONSTRAINT employees_employment_status_check CHECK (employment_status IN ('ativo', 'afastado', 'desligado'))
 );
 
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS sector_id UUID NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'employees_sector_id_fkey'
+      AND conrelid = 'employees'::regclass
+  ) THEN
+    ALTER TABLE employees
+      ADD CONSTRAINT employees_sector_id_fkey
+      FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_cpf_active ON employees(cpf) WHERE cpf IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_employees_normalized_name ON employees(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(employment_status);
 CREATE INDEX IF NOT EXISTS idx_employees_job_title ON employees(job_title);
+CREATE INDEX IF NOT EXISTS idx_employees_sector_id ON employees(sector_id);
 
 CREATE TABLE IF NOT EXISTS employee_salary_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -596,7 +638,9 @@ VALUES
   ('employees.documents.manage', 'Gerenciar documentos de funcionários', NULL, 'Funcionários'),
   ('employees.dependents.view', 'Ver dependentes', NULL, 'Funcionários'),
   ('employees.dependents.manage', 'Gerenciar dependentes', NULL, 'Funcionários'),
-  ('employees.profile.print', 'Imprimir ficha de funcionário', NULL, 'Funcionários')
+  ('employees.profile.print', 'Imprimir ficha de funcionário', NULL, 'Funcionários'),
+  ('company_settings.view', 'Ver configurações da empresa', NULL, 'Configurações'),
+  ('company_settings.edit', 'Editar configurações da empresa', NULL, 'Configurações')
 ON CONFLICT (code) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,

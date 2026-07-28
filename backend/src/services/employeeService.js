@@ -11,11 +11,12 @@ const projectRoot = path.resolve(__dirname, '../../..');
 const uploadRoot = path.resolve(process.env.EMPLOYEE_UPLOAD_DIR || path.join(projectRoot, 'uploads', 'employees'));
 const maxUploadBytes = Number(process.env.EMPLOYEE_DOCUMENT_MAX_BYTES || 10 * 1024 * 1024);
 const allowedMimeTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const employeeFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone',
   'email', 'pix_key', 'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood',
-  'city', 'state', 'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'employment_status', 'notes',
+  'city', 'state', 'admission_date', 'job_title', 'sector_id', 'current_salary', 'meal_allowance', 'employment_status', 'notes',
   'ctps_number', 'ctps_series', 'ctps_state', 'pis_pasep', 'voter_registration', 'voter_zone', 'voter_section',
   'military_certificate', 'registration_type', 'profile_completed',
 ];
@@ -154,9 +155,23 @@ function redactEmployee(row, user) {
 }
 
 async function fetchEmployee(client, id) {
-  const result = await client.query('SELECT * FROM employees WHERE id = $1 AND deleted_at IS NULL', [id]);
+  const result = await client.query(
+    `SELECT e.*, s.name AS sector_name
+     FROM employees e
+     LEFT JOIN sectors s ON s.id = e.sector_id
+     WHERE e.id = $1 AND e.deleted_at IS NULL`,
+    [id],
+  );
   if (!result.rows[0]) throw httpError(404, 'Funcionário não encontrado.');
   return result.rows[0];
+}
+
+async function assertValidSector(client, sectorId, currentSectorId = null) {
+  if (!sectorId) return;
+  if (!uuidPattern.test(sectorId)) throw httpError(400, 'Setor inválido.', { field: 'sector_id' });
+  if (currentSectorId && sectorId === currentSectorId) return;
+  const result = await client.query('SELECT id FROM sectors WHERE id = $1 AND is_active = TRUE', [sectorId]);
+  if (!result.rows[0]) throw httpError(400, 'Setor inválido ou inativo.', { field: 'sector_id' });
 }
 
 async function insertHistoryOnCreate(client, employee, userId) {
@@ -179,29 +194,36 @@ async function insertHistoryOnCreate(client, employee, userId) {
 export async function listEmployees({ user, query }) {
   return transaction(async (client) => {
     const params = [];
-    const filters = ['deleted_at IS NULL'];
+    const filters = ['e.deleted_at IS NULL'];
     if (query.search) {
       params.push(`%${normalizeName(query.search)}%`);
-      filters.push(`normalized_name ILIKE $${params.length}`);
+      filters.push(`e.normalized_name ILIKE $${params.length}`);
     }
     if (query.cpf) {
       params.push(`%${normalizeCpf(query.cpf) || ''}%`);
-      filters.push(`cpf LIKE $${params.length}`);
+      filters.push(`e.cpf LIKE $${params.length}`);
     }
     if (query.status) {
       params.push(query.status);
-      filters.push(`employment_status = $${params.length}`);
+      filters.push(`e.employment_status = $${params.length}`);
     }
     if (query.job_title) {
       params.push(query.job_title);
-      filters.push(`job_title = $${params.length}`);
+      filters.push(`e.job_title = $${params.length}`);
+    }
+    if (query.sector_id) {
+      if (!uuidPattern.test(query.sector_id)) throw httpError(400, 'Setor inválido.', { field: 'sector_id' });
+      params.push(query.sector_id);
+      filters.push(`e.sector_id = $${params.length}`);
     }
     const result = await client.query(
-      `SELECT id, full_name, cpf, job_title, admission_date, employment_status, registration_type, profile_completed,
-        current_salary, meal_allowance, created_at
-       FROM employees
+      `SELECT e.id, e.full_name, e.cpf, e.job_title, e.sector_id, s.name AS sector_name,
+        e.admission_date, e.employment_status, e.registration_type, e.profile_completed,
+        e.current_salary, e.meal_allowance, e.created_at
+       FROM employees e
+       LEFT JOIN sectors s ON s.id = e.sector_id
        WHERE ${filters.join(' AND ')}
-       ORDER BY full_name`,
+       ORDER BY e.full_name`,
       params,
     );
     return result.rows.map((row) => redactEmployee(row, user));
@@ -215,6 +237,7 @@ export async function getEmployee(id, user) {
 export async function createEmployee(body, user, { quick = false, complete = false } = {}) {
   return transaction(async (client) => {
     const payload = buildEmployeePayload(body, { quick });
+    await assertValidSector(client, payload.sector_id);
     if (quick) {
       validateQuickCreate(payload);
     } else {
@@ -249,6 +272,7 @@ export async function updateEmployee(id, body, user) {
   return transaction(async (client) => {
     const current = await fetchEmployee(client, id);
     const payload = buildEmployeePayload(body);
+    await assertValidSector(client, payload.sector_id, current.sector_id);
     const salaryWasSent = Object.prototype.hasOwnProperty.call(payload, 'current_salary');
     const mealWasSent = Object.prototype.hasOwnProperty.call(payload, 'meal_allowance');
     const nextSalary = payload.current_salary;
@@ -326,6 +350,7 @@ export async function completeEmployeeProfile(id, body, user) {
   return transaction(async (client) => {
     const current = await fetchEmployee(client, id);
     const payload = buildEmployeePayload(body);
+    await assertValidSector(client, payload.sector_id, current.sector_id);
     const salaryWasSent = Object.prototype.hasOwnProperty.call(payload, 'current_salary');
     const mealWasSent = Object.prototype.hasOwnProperty.call(payload, 'meal_allowance');
     const nextSalary = payload.current_salary;

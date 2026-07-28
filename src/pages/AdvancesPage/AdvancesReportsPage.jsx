@@ -3,6 +3,7 @@ import { BarChart3, FileSearch, History, Search } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { formatDate, formatMoney } from '../EmployeesPage/employeeUtils.js';
+import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import './AdvancesPage.css';
 
 const emptyEmployeeSearch = { search: '', results: [], selected: null, loading: false };
@@ -15,11 +16,8 @@ function today() {
   return `${year}-${month}-${day}`;
 }
 
-async function openReport(path, params) {
-  const response = await api.get(path, { params, responseType: 'blob' });
-  const url = URL.createObjectURL(response.data);
-  window.open(url, '_blank', 'noopener,noreferrer');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+async function openReport(path, params, fallbackFilename = 'relatorio-vales.pdf') {
+  await downloadAuthenticatedFile(path, fallbackFilename, { params });
 }
 
 function apiErrorMessage(error, fallback = 'Não foi possível concluir a operação.') {
@@ -103,7 +101,7 @@ export function AdvancesReportsPage() {
       ? { mode: 'current' }
       : { mode: 'period', from: individualPeriod.from, to: individualPeriod.to };
     try {
-      await openReport(`/advances/reports/individual/${employeeSearch.selected.id}/pdf`, params);
+      await openReport(`/advances/reports/individual/${employeeSearch.selected.id}/pdf`, params, 'extrato-individual-vales.pdf');
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Não foi possível gerar o extrato individual.'));
     }
