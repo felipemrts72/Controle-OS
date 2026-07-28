@@ -342,7 +342,7 @@ export function EmployeeDetailPage() {
         <div className="panel employees-page__summary">
           <div><span>CPF</span><strong>{formatCpf(employee.cpf)}</strong></div>
           <div><span>Cargo</span><strong>{employee.job_title || '-'}</strong></div>
-          <div><span>Setor</span><strong>{employee.sector_name || '-'}</strong></div>
+          <div><span>Setor</span><strong>{employee.sector_name ? `${employee.sector_name}${employee.sector_is_active === false ? ' — inativo' : ''}` : 'Não informado'}</strong></div>
           <div><span>Admissão</span><strong>{formatDate(employee.admission_date)}</strong></div>
           <div><span>Salário atual</span><strong>{formatMoney(employee.current_salary)}</strong></div>
           <div><span>Vale alimentação</span><strong>{formatMoney(employee.meal_allowance)}</strong></div>
@@ -385,7 +385,14 @@ export function EmployeeDetailPage() {
               <SectionFields disabled={!canEdit} form={form} setField={setField} fields={[
                 { name: 'admission_date', label: 'Data de admissão', type: 'date' },
                 { name: 'job_title', label: 'Cargo' },
-                { name: 'sector_id', label: 'Setor', type: 'select', options: sectors.map((sector) => ({ value: sector.id, label: `${sector.name}${sector.is_active === false ? ' (inativo)' : ''}` })) },
+                {
+                  name: 'sector_id',
+                  label: 'Setor',
+                  type: 'select',
+                  options: sectors
+                    .filter((sector) => sector.is_active !== false || sector.id === employee.sector_id)
+                    .map((sector) => ({ value: sector.id, label: `${sector.name}${sector.is_active === false ? ' — inativo' : ''}` })),
+                },
                 ...(canSalaryManage ? [{ name: 'current_salary', label: 'SalÃ¡rio atual', type: 'number' }] : []),
                 ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale alimentaÃ§Ã£o', type: 'number' }] : []),
                 { name: 'pix_key', label: 'Chave Pix' },

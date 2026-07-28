@@ -229,7 +229,7 @@ Snapshots, como o nome do produto em `sold_items` e o nome da etapa em `internal
 
 Transações e locks de linha são empregados em fluxos concorrentes, especialmente no domínio de vales. Algumas consultas usam `FOR UPDATE` e `SKIP LOCKED`.
 
-As migrations são arquivos SQL aplicados manualmente. Não existe migration runner automatizado nos scripts do projeto.
+As migrations são arquivos SQL ordenados em `database/migrations/`. O runner `scripts/migrate.js` carrega o `.env` da raiz, conecta diretamente com `pg`, registra checksum e data de aplicação em `schema_migrations` e executa cada arquivo pendente em uma transação.
 
 `database/schema.sql` e `database/migrations/` ainda apresentam divergências e não devem ser considerados equivalentes sem validação.
 
@@ -280,7 +280,7 @@ Esses princípios descrevem o estado observado do repositório, não uma políti
 ## 14. Limitações e dívidas técnicas conhecidas
 
 - não há testes automatizados no repositório;
-- não há migration runner automatizado;
+- o runner de migrations depende de SQL incremental idempotente para instalações que já aplicaram arquivos antigos manualmente;
 - `schema.sql` e migrations possuem divergências;
 - alguns serviços e páginas concentram muitas responsabilidades;
 - o SQL está distribuído entre controladores e serviços;

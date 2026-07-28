@@ -156,7 +156,7 @@ function redactEmployee(row, user) {
 
 async function fetchEmployee(client, id) {
   const result = await client.query(
-    `SELECT e.*, s.name AS sector_name
+    `SELECT e.*, s.name AS sector_name, s.is_active AS sector_is_active
      FROM employees e
      LEFT JOIN sectors s ON s.id = e.sector_id
      WHERE e.id = $1 AND e.deleted_at IS NULL`,
@@ -218,6 +218,7 @@ export async function listEmployees({ user, query }) {
     }
     const result = await client.query(
       `SELECT e.id, e.full_name, e.cpf, e.job_title, e.sector_id, s.name AS sector_name,
+        s.is_active AS sector_is_active,
         e.admission_date, e.employment_status, e.registration_type, e.profile_completed,
         e.current_salary, e.meal_allowance, e.created_at
        FROM employees e

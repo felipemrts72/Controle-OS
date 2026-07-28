@@ -4,6 +4,12 @@ import { httpError } from '../utils/httpError.js';
 import { logAudit } from '../services/auditService.js';
 import { getProductManufacturingSteps, saveProductManufacturingSteps } from '../services/manufacturingRouteService.js';
 import { hasPermission, isSuperAdmin } from '../services/permissionService.js';
+import {
+  createSector as createSectorRecord,
+  listSectors as listSectorRecords,
+  setSectorActive,
+  updateSector as updateSectorRecord,
+} from '../services/sectorService.js';
 
 const LEGACY_ROLES = ['admin', 'manager', 'shipping', 'viewer'];
 
@@ -123,32 +129,39 @@ export async function toggleUserActive(req, res, next) {
   } catch (error) { next(error); }
 }
 
-export async function listSectors(_req, res, next) {
+export async function listSectors(req, res, next) {
   try {
-    const result = await query('SELECT * FROM sectors ORDER BY name');
-    res.json(result.rows);
+    res.json(await listSectorRecords(req.query.search));
   } catch (error) { next(error); }
 }
 
 export async function createSector(req, res, next) {
   try {
-    const result = await query('INSERT INTO sectors (name, slug) VALUES ($1, $2) RETURNING *', [req.body.name, req.body.slug]);
-    res.status(201).json(result.rows[0]);
-  } catch (error) { next(error); }
+    res.status(201).json(await createSectorRecord(req.body, req.user));
+  } catch (error) {
+    if (error.code === '23505') return next(httpError(409, 'Já existe um setor com este nome.', { code: 'SECTOR_NAME_ALREADY_EXISTS', field: 'name' }));
+    return next(error);
+  }
 }
 
 export async function updateSector(req, res, next) {
   try {
-    const result = await query('UPDATE sectors SET name = $1, slug = $2, is_active = $3, updated_at = NOW() WHERE id = $4 RETURNING *', [req.body.name, req.body.slug, req.body.is_active, req.params.id]);
-    if (!result.rows[0]) throw httpError(404, 'Setor não encontrado.');
-    res.json(result.rows[0]);
-  } catch (error) { next(error); }
+    res.json(await updateSectorRecord(req.params.id, req.body, req.user));
+  } catch (error) {
+    if (error.code === '23505') return next(httpError(409, 'Já existe um setor com este nome.', { code: 'SECTOR_NAME_ALREADY_EXISTS', field: 'name' }));
+    return next(error);
+  }
 }
 
 export async function deactivateSector(req, res, next) {
   try {
-    const result = await query('UPDATE sectors SET is_active = FALSE, updated_at = NOW() WHERE id = $1 RETURNING *', [req.params.id]);
-    res.json(result.rows[0]);
+    res.json(await setSectorActive(req.params.id, false, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function reactivateSector(req, res, next) {
+  try {
+    res.json(await setSectorActive(req.params.id, true, req.user));
   } catch (error) { next(error); }
 }
 

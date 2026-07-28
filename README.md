@@ -229,12 +229,23 @@ Scripts disponíveis:
 | `npm run frontend:prod` | Serve `dist/` e encaminha `/api` | `4173` |
 | `npm run server` | Inicia a API Express | `3333` |
 | `npm run server:dev` | Inicia a API com Nodemon | `3333` |
+| `npm run migrate:status` | Exibe migrations aplicadas e pendentes | — |
+| `npm run migrate` | Aplica migrations pendentes | — |
 
 O projeto ainda não declara uma versão oficial de Node.js em `package.json`.
 
 ## Banco de dados
 
-O repositório contém `database/schema.sql` e migrations SQL em `database/migrations/`. Não existe atualmente um executor automatizado de migrations no `package.json`.
+O repositório contém `database/schema.sql` e migrations SQL em `database/migrations/`. O runner `scripts/migrate.js` carrega automaticamente o `.env` da raiz com `dotenv`, conecta ao PostgreSQL diretamente com `pg` e controla os arquivos aplicados na tabela `schema_migrations`.
+
+Para consultar e aplicar migrations, use somente:
+
+```bash
+npm run migrate:status
+npm run migrate
+```
+
+Não é necessário chamar `psql`, exportar `DATABASE_URL` ou carregar o `.env` manualmente.
 
 O `schema.sql` e o conjunto de migrations ainda possuem divergências e não devem ser tratados como equivalentes sem validação. Entre as diferenças conhecidas estão a restrição dos tipos de produto e o conjunto consolidado de permissões de funcionários. O procedimento oficial de criação e atualização do banco ainda precisa ser definido.
 

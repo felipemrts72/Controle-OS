@@ -15,6 +15,7 @@ import { employeeRoutes } from './routes/employeeRoutes.js';
 import { advanceRoutes } from './routes/advanceRoutes.js';
 import { roleRoutes } from './routes/roleRoutes.js';
 import { companySettingsRoutes } from './routes/companySettingsRoutes.js';
+import { awardRoutes } from './routes/awardRoutes.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
 
 export const app = express();
@@ -28,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/company-settings', companySettingsRoutes);
+app.use('/api/awards', awardRoutes);
 app.use('/api/sectors', sectorRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/internal-orders', internalOrderRoutes);

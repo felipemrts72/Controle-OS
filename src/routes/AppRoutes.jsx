@@ -31,6 +31,7 @@ import { AdvancesReportsPage } from '../pages/AdvancesPage/AdvancesReportsPage.j
 import { AdvanceGeneralReportPage } from '../pages/AdvancesPage/AdvanceGeneralReportPage.jsx';
 import { AdvanceIndividualReportPage } from '../pages/AdvancesPage/AdvanceIndividualReportPage.jsx';
 import { CompanySettingsPage } from '../pages/CompanySettingsPage/CompanySettingsPage.jsx';
+import { AwardsPage } from '../pages/AwardsPage/AwardsPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -142,6 +143,7 @@ export function AppRoutes() {
         <Route path="/usuarios" element={<RoleRoute permission="users.view"><UsersPage /></RoleRoute>} />
         <Route path="/roles" element={<RoleRoute permission="roles.view"><RolesPage /></RoleRoute>} />
         <Route path="/configuracoes/empresa" element={<RoleRoute permission="company_settings.view"><CompanySettingsPage /></RoleRoute>} />
+        <Route path="/premios" element={<RoleRoute permission="awards.view"><AwardsPage /></RoleRoute>} />
         <Route path="/funcionarios" element={<RoleRoute permission="employees.view"><EmployeesPage /></RoleRoute>} />
         <Route path="/funcionarios/novo" element={<RoleRoute permission="employees.create"><EmployeeCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.create"><EmployeeQuickCreatePage /></RoleRoute>} />

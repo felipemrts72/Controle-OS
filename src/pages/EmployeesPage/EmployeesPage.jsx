@@ -34,7 +34,10 @@ export function EmployeesPage() {
   }, []);
 
   const jobTitles = useMemo(() => [...new Set(employees.map((employee) => employee.job_title).filter(Boolean))].sort(), [employees]);
-  const sectors = useMemo(() => [...new Map(employees.filter((employee) => employee.sector_id).map((employee) => [employee.sector_id, employee.sector_name])).entries()], [employees]);
+  const sectors = useMemo(() => [...new Map(employees.filter((employee) => employee.sector_id).map((employee) => [
+    employee.sector_id,
+    `${employee.sector_name || 'Não informado'}${employee.sector_is_active === false ? ' — inativo' : ''}`,
+  ])).entries()], [employees]);
 
   function changeFilter(event) {
     setFilters((current) => ({ ...current, [event.target.name]: event.target.value }));
@@ -58,7 +61,7 @@ export function EmployeesPage() {
     },
     { key: 'cpf', label: 'CPF', render: (row) => formatCpfPartial(row.cpf) },
     { key: 'job_title', label: 'Cargo', render: (row) => row.job_title || '-' },
-    { key: 'sector_name', label: 'Setor', render: (row) => row.sector_name || '-' },
+    { key: 'sector_name', label: 'Setor', render: (row) => `${row.sector_name || 'Não informado'}${row.sector_is_active === false ? ' — inativo' : ''}` },
     { key: 'employment_status', label: 'Status', render: (row) => <span className={`employees-page__status employees-page__status_${row.employment_status}`}>{statusLabels[row.employment_status] || row.employment_status}</span> },
     { key: 'admission_date', label: 'Admissão', render: (row) => formatDate(row.admission_date) },
     {
