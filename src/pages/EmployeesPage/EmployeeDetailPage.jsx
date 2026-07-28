@@ -75,7 +75,6 @@ export function EmployeeDetailPage() {
   const [salaryForm, setSalaryForm] = useState({ salary: '', effective_from: '', reason: '' });
   const [mealForm, setMealForm] = useState({ amount: '', effective_from: '', reason: '' });
   const [documentForm, setDocumentForm] = useState({ document_type: 'RG', dependent_id: '', file: null });
-  const [printPayload, setPrintPayload] = useState(null);
 
   async function loadEmployee() {
     const response = await api.get(`/employees/${id}`);
@@ -236,9 +235,10 @@ export function EmployeeDetailPage() {
 
   async function printProfile() {
     try {
-      const response = await api.get(`/employees/${id}/profile-print-data`);
-      setPrintPayload(response.data);
-      setTimeout(() => window.print(), 80);
+      const response = await api.get(`/employees/${id}/profile-pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Não foi possível gerar a ficha para impressão.');
     }
@@ -511,20 +511,6 @@ export function EmployeeDetailPage() {
         </div>
       )}
 
-      {printPayload && (
-        <div className="employees-page__print">
-          <img className="employees-page__print-logo" src="/logo-torneadora-universal.png" alt="Logo Torneadora Universal" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-          <h1>TORNEADORA UNIVERSAL</h1>
-          <h2>FICHA CADASTRAL DE FUNCIONÁRIO</h2>
-          <section><h3>1. Dados pessoais</h3><p>Nome: {printPayload.employee.full_name}</p><p>CPF: {formatCpf(printPayload.employee.cpf)} · RG: {printPayload.employee.rg || '-'}</p><p>Nascimento: {formatDate(printPayload.employee.birth_date)} · Telefone: {printPayload.employee.phone || '-'}</p></section>
-          <section><h3>2. Endereço</h3><p>{[printPayload.employee.street, printPayload.employee.address_number, printPayload.employee.complement, printPayload.employee.neighborhood, printPayload.employee.city, printPayload.employee.state, printPayload.employee.zip_code].filter(Boolean).join(', ')}</p></section>
-          <section><h3>3. Documentação</h3><p>CTPS: {[printPayload.employee.ctps_number, printPayload.employee.ctps_series, printPayload.employee.ctps_state].filter(Boolean).join(' / ') || '-'}</p><p>PIS/PASEP: {printPayload.employee.pis_pasep || '-'} · Título eleitoral: {printPayload.employee.voter_registration || '-'}</p><p>Certificado militar: {printPayload.employee.military_certificate || '-'}</p></section>
-          <section><h3>4. Dados trabalhistas</h3><p>Admissão: {formatDate(printPayload.employee.admission_date)} · Cargo: {printPayload.employee.job_title || '-'}</p><p>Situação: {statusLabels[printPayload.employee.employment_status] || '-'}</p></section>
-          <section><h3>5. Dependentes</h3>{printPayload.dependents.length ? printPayload.dependents.map((dependent) => <p key={dependent.id}>{dependent.full_name} · {dependent.relationship || '-'} · {formatDate(dependent.birth_date)}</p>) : <p>Sem dependentes cadastrados.</p>}</section>
-          <p>Declaro que as informações acima são verdadeiras e autorizo seu uso para fins cadastrais, trabalhistas e administrativos da empresa, conforme aplicável.</p>
-          <div className="employees-page__signatures"><span>Local e data: ________________________________</span><span>Assinatura do funcionário: ________________________________</span><span>Assinatura responsável empresa: ________________________________</span></div>
-        </div>
-      )}
     </section>
   );
 }

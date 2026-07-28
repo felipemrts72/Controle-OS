@@ -288,8 +288,15 @@ export function AdvancesPage() {
     }
   }
 
-  function openSummary(listId) {
-    window.open(`/vales/${listId}/resumo`, '_blank', 'noopener,noreferrer');
+  async function openSummary(listId) {
+    try {
+      const response = await api.get(`/advances/lists/${listId}/summary/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Não foi possível gerar o resumo da lista.'));
+    }
   }
 
   async function deleteList() {

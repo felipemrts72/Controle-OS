@@ -15,6 +15,7 @@ import {
   mealAllowanceHistory,
   mealAllowanceStore,
   printData,
+  profilePdf,
   quickStore,
   salaryHistory,
   salaryStore,
@@ -58,5 +59,6 @@ employeeRoutes.get('/:id/documents/:documentId', requirePermission('employees.do
 employeeRoutes.delete('/:id/documents/:documentId', requireAnyPermission('employees.documents.manage', 'employees.manage'), documentDestroy);
 
 employeeRoutes.get('/:id/profile-print-data', requirePermission('employees.profile.print'), printData);
+employeeRoutes.get('/:id/profile-pdf', requirePermission('employees.profile.print'), profilePdf);
 employeeRoutes.get('/:id/audit', requireAnyPermission('employees.edit', 'employees.manage'), auditIndex);
 employeeRoutes.get('/:id/advances', requirePermission('advances.view'), advancesProfile);

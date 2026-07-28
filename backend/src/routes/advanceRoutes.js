@@ -8,9 +8,11 @@ import {
   closedCyclesReport,
   eligibleInstallments,
   generalReport,
+  generalReportPdf,
   home,
   individualStore,
   individualReport,
+  individualReportPdf,
   installmentConvert,
   itemDestroy,
   itemStore,
@@ -22,6 +24,7 @@ import {
   listStore,
   listSubmit,
   listSummary,
+  listSummaryPdf,
   listUpdate,
 } from '../controllers/advanceController.js';
 import { authenticate, requireAnyPermission, requirePermission, requirePermissionOrAdmin } from '../middlewares/authMiddleware.js';
@@ -37,7 +40,9 @@ advanceRoutes.post('/individual', requireAnyPermission('advances.create_individu
 advanceRoutes.get('/installments/eligible', requireAnyPermission('advances.installments.convert', 'advances.manage'), eligibleInstallments);
 advanceRoutes.post('/individual/:itemId/installments', requirePermissionOrAdmin('advances.installments.convert', 'Você não possui permissão para parcelar vales.'), installmentConvert);
 advanceRoutes.get('/reports/general', requireAnyPermission('advances.reports.general', 'advances.manage'), generalReport);
+advanceRoutes.get('/reports/general/pdf', requireAnyPermission('advances.reports.general', 'advances.manage'), generalReportPdf);
 advanceRoutes.get('/reports/individual/:employeeId', requireAnyPermission('advances.reports.individual', 'advances.manage'), individualReport);
+advanceRoutes.get('/reports/individual/:employeeId/pdf', requireAnyPermission('advances.reports.individual', 'advances.manage'), individualReportPdf);
 advanceRoutes.get('/reports/cycles', requireAnyPermission('advances.reports.cycles', 'advances.manage'), closedCyclesReport);
 advanceRoutes.get('/audit', requireAnyPermission('advances.audit.view', 'advances.manage'), auditReport);
 advanceRoutes.get('/cycles', requireAnyPermission('advances.cycles.view', 'advances.view'), cyclesIndex);
@@ -54,3 +59,4 @@ advanceRoutes.delete('/lists/:id/items/:itemId', requireAnyPermission('advances.
 advanceRoutes.post('/lists/:id/submit', requireAnyPermission('advances.create', 'advances.edit_own_list', 'advances.review', 'advances.manage'), listSubmit);
 advanceRoutes.post('/lists/:id/approve', requirePermissionOrAdmin('advances.approve', 'Você não possui permissão para aprovar listas de vales.'), listApprove);
 advanceRoutes.get('/lists/:id/summary', requirePermission('advances.view'), listSummary);
+advanceRoutes.get('/lists/:id/summary/pdf', requirePermission('advances.view'), listSummaryPdf);

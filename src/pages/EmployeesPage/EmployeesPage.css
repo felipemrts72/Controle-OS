@@ -198,10 +198,6 @@
   font-weight: 800;
 }
 
-.employees-page__print {
-  display: none;
-}
-
 @media (max-width: 760px) {
   .employees-page__detail-header {
     gap: 12px;
@@ -215,52 +211,5 @@
   .employees-page__form-actions .button,
   .employees-page__inline-form .button {
     width: 100%;
-  }
-}
-
-@media print {
-  body * {
-    visibility: hidden;
-  }
-
-  .employees-page__print,
-  .employees-page__print * {
-    visibility: visible;
-  }
-
-  .employees-page__print {
-    color: #111;
-    display: block;
-    font-family: Arial, sans-serif;
-    left: 0;
-    padding: 24px;
-    position: absolute;
-    top: 0;
-    width: 100%;
-  }
-
-  .employees-page__print h1,
-  .employees-page__print h2 {
-    text-align: center;
-  }
-
-  .employees-page__print-logo {
-    display: block;
-    margin: 0 auto 10px;
-    max-height: 70px;
-    max-width: 180px;
-    object-fit: contain;
-  }
-
-  .employees-page__print section {
-    border-top: 1px solid #222;
-    margin-top: 14px;
-    padding-top: 8px;
-  }
-
-  .employees-page__signatures {
-    display: grid;
-    gap: 28px;
-    margin-top: 32px;
   }
 }

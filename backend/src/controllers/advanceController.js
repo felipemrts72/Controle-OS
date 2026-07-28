@@ -22,6 +22,12 @@ import {
   submitAdvanceList,
   updateAdvanceList,
 } from '../services/advanceService.js';
+import {
+  buildAdvanceSummaryPdf,
+  buildGeneralAdvanceReportPdf,
+  buildIndividualAdvanceReportPdf,
+} from '../services/pdf/advancePdfService.js';
+import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 
 export async function home(req, res, next) {
   try {
@@ -65,9 +71,25 @@ export async function generalReport(req, res, next) {
   } catch (error) { next(error); }
 }
 
+export async function generalReportPdf(req, res, next) {
+  try {
+    const report = await getGeneralAdvanceReport(req.query, req.user);
+    const pdf = await buildGeneralAdvanceReportPdf(report);
+    sendPdfResponse(res, pdf, 'relatorio-geral-vales.pdf');
+  } catch (error) { next(error); }
+}
+
 export async function individualReport(req, res, next) {
   try {
     res.json(await getIndividualAdvanceReport(req.params.employeeId, req.query, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function individualReportPdf(req, res, next) {
+  try {
+    const report = await getIndividualAdvanceReport(req.params.employeeId, req.query, req.user);
+    const pdf = await buildIndividualAdvanceReportPdf(report);
+    sendPdfResponse(res, pdf, `extrato-vales-${req.params.employeeId}.pdf`);
   } catch (error) { next(error); }
 }
 
@@ -158,5 +180,13 @@ export async function listApprove(req, res, next) {
 export async function listSummary(req, res, next) {
   try {
     res.json(await getAdvanceSummary(req.params.id));
+  } catch (error) { next(error); }
+}
+
+export async function listSummaryPdf(req, res, next) {
+  try {
+    const summary = await getAdvanceSummary(req.params.id);
+    const pdf = await buildAdvanceSummaryPdf(summary);
+    sendPdfResponse(res, pdf, `lista-vales-${req.params.id}.pdf`);
   } catch (error) { next(error); }
 }

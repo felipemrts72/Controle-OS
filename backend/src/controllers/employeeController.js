@@ -21,6 +21,8 @@ import {
   uploadDocument,
 } from '../services/employeeService.js';
 import { getEmployeeAdvanceProfile } from '../services/advanceService.js';
+import { buildEmployeeProfilePdf } from '../services/pdf/employeePdfService.js';
+import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 
 export async function index(req, res, next) {
   try {
@@ -162,6 +164,14 @@ export async function documentDestroy(req, res, next) {
 export async function printData(req, res, next) {
   try {
     res.json(await getPrintData(req.params.id, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function profilePdf(req, res, next) {
+  try {
+    const data = await getPrintData(req.params.id, req.user);
+    const pdf = await buildEmployeeProfilePdf(data);
+    sendPdfResponse(res, pdf, `ficha-funcionario-${req.params.id}.pdf`);
   } catch (error) { next(error); }
 }
 
