@@ -17,18 +17,18 @@ export function safeText(value, fallback = '-') {
   return text || fallback;
 }
 
-export function formatDateBR(value) {
+export function formatDateBR(value, timeZone = undefined) {
   if (!value) return '-';
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (match) return `${match[3]}/${match[2]}/${match[1]}`;
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('pt-BR');
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('pt-BR', timeZone ? { timeZone } : undefined);
 }
 
-export function formatDateTimeBR(value) {
+export function formatDateTimeBR(value, timeZone = undefined) {
   if (!value) return '-';
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('pt-BR');
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('pt-BR', timeZone ? { timeZone } : undefined);
 }
 
 export function formatCurrencyBR(value) {
@@ -83,7 +83,7 @@ function companyAddress(company = {}) {
 }
 
 export function addDocumentHeader(context) {
-  const { doc, margins, title, subtitle, company = {}, emittedAt } = context;
+  const { doc, margins, title, subtitle, company = {}, emittedAt, timeZone } = context;
   const width = contentWidth(context);
   let y = margins.top;
 
@@ -135,7 +135,7 @@ export function addDocumentHeader(context) {
   }
 
   doc.fillColor(COLORS.muted).font('Helvetica').fontSize(8)
-    .text(`Emitido em ${formatDateTimeBR(emittedAt)}`, margins.left, y, { width, align: 'right' });
+    .text(`Emitido em ${formatDateTimeBR(emittedAt, timeZone)}`, margins.left, y, { width, align: 'right' });
   y = Math.max(doc.y, y + 12) + 7;
 
   doc.strokeColor(COLORS.primary).lineWidth(1)
@@ -153,6 +153,7 @@ export function createPdfDocument({
   orientation = 'portrait',
   margins = DEFAULT_MARGINS,
   emittedAt = new Date(),
+  timeZone = undefined,
 } = {}) {
   const normalizedMargins = { ...DEFAULT_MARGINS, ...margins };
   const layout = orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -182,6 +183,7 @@ export function createPdfDocument({
     subtitle,
     company,
     emittedAt,
+    timeZone,
     margins: normalizedMargins,
     orientation: layout,
   };
@@ -376,6 +378,29 @@ export function addTotalLine(context, label, value) {
   doc.fillColor(COLORS.text).font('Helvetica-Bold').fontSize(11)
     .text(`${safeText(label)}: ${safeText(value)}`, margins.left, y + 9, { width, align: 'right' });
   doc.y = y + 34;
+}
+
+export function addChecklist(context, items = []) {
+  const { doc, margins } = context;
+  const width = contentWidth(context);
+  const boxSize = 10;
+  const textX = margins.left + boxSize + 9;
+  const textWidth = width - boxSize - 9;
+
+  for (const item of items) {
+    doc.font('Helvetica').fontSize(9);
+    const textHeight = doc.heightOfString(safeText(item), { width: textWidth, lineGap: 2 });
+    const itemHeight = Math.max(boxSize, textHeight) + 9;
+    ensurePageSpace(context, itemHeight);
+    const y = doc.y;
+    doc.strokeColor(COLORS.text).lineWidth(0.7)
+      .rect(margins.left, y + 1, boxSize, boxSize)
+      .stroke();
+    doc.fillColor(COLORS.text).font('Helvetica').fontSize(9)
+      .text(safeText(item), textX, y, { width: textWidth, lineGap: 2 });
+    doc.y = y + itemHeight;
+  }
+  doc.y += 5;
 }
 
 function addDocumentFooters(context) {

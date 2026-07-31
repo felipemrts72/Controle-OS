@@ -29,25 +29,37 @@ const completeRequiredFields = [
   ['marital_status', 'Estado civil'],
   ['zip_code', 'CEP'],
   ['street', 'Logradouro'],
-  ['address_number', 'Numero'],
+  ['address_number', 'Número'],
   ['neighborhood', 'Bairro'],
   ['city', 'Cidade'],
   ['state', 'UF'],
-  ['admission_date', 'Data de admissao'],
+  ['admission_date', 'Data de admissão'],
   ['job_title', 'Cargo'],
-  ['current_salary', 'Salario atual'],
-  ['meal_allowance', 'Vale alimentacao'],
-  ['employment_status', 'Situacao funcional'],
-  ['ctps_number', 'CTPS numero'],
+  ['current_salary', 'Salário atual'],
+  ['meal_allowance', 'Vale alimentação'],
+  ['employment_status', 'Situação funcional'],
+  ['ctps_number', 'CTPS número'],
   ['pis_pasep', 'PIS/PASEP'],
-  ['voter_registration', 'Titulo de eleitor'],
+  ['voter_registration', 'Título de eleitor'],
   ['voter_zone', 'Zona eleitoral'],
-  ['voter_section', 'Secao eleitoral'],
+  ['voter_section', 'Seção eleitoral'],
 ];
 
 export function normalizeCpf(value) {
   const digits = String(value || '').replace(/\D/g, '');
   return digits || null;
+}
+
+export function isValidCpf(value) {
+  const digits = normalizeCpf(value);
+  if (!digits || digits.length !== 11 || /^(\d)\1+$/.test(digits)) return false;
+  const calculateDigit = (length) => {
+    let sum = 0;
+    for (let index = 0; index < length; index += 1) sum += Number(digits[index]) * (length + 1 - index);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
 }
 
 function normalizeName(value) {
@@ -89,18 +101,18 @@ function getCompleteProfileMissing(employee, documentTypes = []) {
 
   const maritalStatus = normalizeDocumentType(employee.marital_status);
   if (['casado', 'uniao estavel'].includes(maritalStatus) && !isFilled(employee.spouse_name)) {
-    missing.push('Nome do conjuge');
+    missing.push('Nome do cônjuge');
   }
 
   const hasRgData = isFilled(employee.rg) && isFilled(employee.rg_issuer) && isFilled(employee.rg_state);
   const hasIdentityDocument = documentTypes.some((type) => ['rg', 'cnh'].includes(normalizeDocumentType(type)));
-  if (!hasRgData && !hasIdentityDocument) missing.push('Documento de identificacao: RG completo ou anexo RG/CNH');
+  if (!hasRgData && !hasIdentityDocument) missing.push('Documento de identidade: RG completo ou anexo RG/CNH');
 
   const hasAddressDocument = documentTypes.some((type) => {
     const normalized = normalizeDocumentType(type);
     return normalized.includes('comprovante') && normalized.includes('endereco');
   });
-  if (!hasAddressDocument) missing.push('Comprovante de endereco anexado');
+  if (!hasAddressDocument) missing.push('Comprovante de endereço anexado');
 
   return missing;
 }
@@ -543,31 +555,53 @@ export async function listDependents(id) {
 export async function saveDependent(employeeId, dependentId, body, user) {
   return transaction(async (client) => {
     await fetchEmployee(client, employeeId);
+    const identificationType = String(body.identification_type || 'cpf').trim().toLowerCase();
+    if (!['cpf', 'matricula'].includes(identificationType)) {
+      throw httpError(400, 'Tipo de identificação inválido.', { field: 'identification_type' });
+    }
+    const rawIdentificationNumber = body.identification_number ?? body.cpf;
     const payload = {
       full_name: cleanText(body.full_name),
       birth_date: cleanText(body.birth_date),
-      cpf: normalizeCpf(body.cpf),
       relationship: cleanText(body.relationship),
+      identification_type: identificationType,
+      identification_number: identificationType === 'cpf'
+        ? normalizeCpf(rawIdentificationNumber)
+        : cleanText(rawIdentificationNumber),
       notes: cleanText(body.notes),
     };
     if (!payload.full_name) throw httpError(400, 'Informe o nome do dependente.');
+    if (payload.identification_type === 'cpf' && payload.identification_number && !isValidCpf(payload.identification_number)) {
+      throw httpError(400, 'CPF do dependente inválido.', { field: 'identification_number' });
+    }
     const result = dependentId
       ? await client.query(
-        `UPDATE employee_dependents SET full_name = $1, birth_date = $2, cpf = $3, relationship = $4, notes = $5, updated_at = NOW()
-         WHERE id = $6 AND employee_id = $7 RETURNING *`,
-        [payload.full_name, payload.birth_date, payload.cpf, payload.relationship, payload.notes, dependentId, employeeId],
+        `UPDATE employee_dependents
+         SET full_name = $1, birth_date = $2, relationship = $3, identification_type = $4,
+             identification_number = $5, notes = $6, updated_at = NOW()
+         WHERE id = $7 AND employee_id = $8 AND is_active = TRUE
+         RETURNING *`,
+        [payload.full_name, payload.birth_date, payload.relationship, payload.identification_type,
+          payload.identification_number, payload.notes, dependentId, employeeId],
       )
       : await client.query(
-        `INSERT INTO employee_dependents (employee_id, full_name, birth_date, cpf, relationship, notes)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [employeeId, payload.full_name, payload.birth_date, payload.cpf, payload.relationship, payload.notes],
+        `INSERT INTO employee_dependents
+          (employee_id, full_name, birth_date, relationship, identification_type, identification_number, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [employeeId, payload.full_name, payload.birth_date, payload.relationship,
+          payload.identification_type, payload.identification_number, payload.notes],
       );
     if (!result.rows[0]) throw httpError(404, 'Dependente não encontrado.');
     await logAudit(client, {
       entityType: 'employee',
       entityId: employeeId,
       action: dependentId ? 'dependent_update' : 'dependent_create',
-      newValue: { dependent_id: result.rows[0].id, full_name: result.rows[0].full_name },
+      newValue: {
+        dependent_id: result.rows[0].id,
+        full_name: result.rows[0].full_name,
+        identification_type: result.rows[0].identification_type,
+      },
       userId: user.id,
     });
     return result.rows[0];
@@ -685,6 +719,109 @@ export async function removeDocument(employeeId, documentId, user) {
       newValue: { document_id: documentId, document_type: result.rows[0].document_type },
       userId: user.id,
     });
+  });
+}
+
+function getDependentPendingItems(dependent, hasDocument) {
+  const label = dependent.full_name || 'Sem nome';
+  const missing = [];
+  if (!isFilled(dependent.full_name)) missing.push('Nome do dependente não informado');
+  if (!isFilled(dependent.relationship)) missing.push(`Parentesco do dependente: ${label}`);
+  if (!isFilled(dependent.birth_date)) missing.push(`Data de nascimento do dependente: ${label}`);
+  if (!isFilled(dependent.identification_number)) {
+    missing.push(`Número de identificação do dependente: ${label}`);
+  } else if (dependent.identification_type === 'cpf' && !isValidCpf(dependent.identification_number)) {
+    missing.push(`CPF inválido do dependente: ${label}`);
+  }
+  if (!hasDocument) missing.push(`Dependente sem documentação: ${label}`);
+  return missing;
+}
+
+function buildEmployeePendingReportRow(employee, documentTypes, dependents, documentedDependents) {
+  const pendencies = getCompleteProfileMissing(employee, documentTypes);
+  for (const dependent of dependents) {
+    pendencies.push(...getDependentPendingItems(dependent, documentedDependents.has(dependent.id)));
+  }
+  return {
+    id: employee.id,
+    full_name: employee.full_name,
+    job_title: employee.job_title,
+    sector_name: employee.sector_name,
+    pendencies,
+  };
+}
+
+export async function getEmployeeIncompleteRegistrationReport(employeeId) {
+  return transaction(async (client) => {
+    const employee = await fetchEmployee(client, employeeId);
+    const documentsResult = await client.query(
+      `SELECT dependent_id, document_type
+       FROM employee_documents
+       WHERE employee_id = $1 AND deleted_at IS NULL`,
+      [employeeId],
+    );
+    const dependentsResult = await client.query(
+      `SELECT *
+       FROM employee_dependents
+       WHERE employee_id = $1 AND is_active = TRUE
+       ORDER BY full_name`,
+      [employeeId],
+    );
+    const documentTypes = documentsResult.rows
+      .filter((document) => !document.dependent_id)
+      .map((document) => document.document_type);
+    const documentedDependents = new Set(
+      documentsResult.rows.filter((document) => document.dependent_id).map((document) => document.dependent_id),
+    );
+    return buildEmployeePendingReportRow(employee, documentTypes, dependentsResult.rows, documentedDependents);
+  });
+}
+
+export async function getIncompleteRegistrationReport() {
+  return transaction(async (client) => {
+    const employeesResult = await client.query(
+      `SELECT e.*, s.name AS sector_name
+       FROM employees e
+       LEFT JOIN sectors s ON s.id = e.sector_id
+       WHERE e.deleted_at IS NULL
+       ORDER BY e.full_name`,
+    );
+    const documentsResult = await client.query(
+      `SELECT employee_id, dependent_id, document_type
+       FROM employee_documents
+       WHERE deleted_at IS NULL`,
+    );
+    const dependentsResult = await client.query(
+      `SELECT *
+       FROM employee_dependents
+       WHERE is_active = TRUE
+       ORDER BY full_name`,
+    );
+
+    const documentsByEmployee = new Map();
+    const documentedDependents = new Set();
+    for (const document of documentsResult.rows) {
+      if (document.dependent_id) documentedDependents.add(document.dependent_id);
+      if (!document.dependent_id) {
+        const current = documentsByEmployee.get(document.employee_id) || [];
+        current.push(document.document_type);
+        documentsByEmployee.set(document.employee_id, current);
+      }
+    }
+
+    const dependentsByEmployee = new Map();
+    for (const dependent of dependentsResult.rows) {
+      const current = dependentsByEmployee.get(dependent.employee_id) || [];
+      current.push(dependent);
+      dependentsByEmployee.set(dependent.employee_id, current);
+    }
+
+    return employeesResult.rows.map((employee) => buildEmployeePendingReportRow(
+      employee,
+      documentsByEmployee.get(employee.id) || [],
+      dependentsByEmployee.get(employee.id) || [],
+      documentedDependents,
+    )).filter((employee) => employee.pendencies.length > 0);
   });
 }
 

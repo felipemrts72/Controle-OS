@@ -12,7 +12,7 @@ function filenameFromDisposition(disposition) {
 }
 
 export async function downloadAuthenticatedFile(url, fallbackFilename = 'documento.pdf', config = {}) {
-  const response = await api.get(url, { ...config, responseType: 'blob' });
+  const response = await api.request({ method: 'get', url, ...config, responseType: 'blob' });
   const receivedFilename = filenameFromDisposition(response.headers['content-disposition']) || fallbackFilename;
   const filename = String(receivedFilename).split(/[\\/]/).pop() || 'documento.pdf';
   const objectUrl = URL.createObjectURL(response.data);

@@ -4,6 +4,8 @@ import {
   createEmployee,
   getDocument,
   getEmployee,
+  getEmployeeIncompleteRegistrationReport,
+  getIncompleteRegistrationReport,
   getPrintData,
   listDependents,
   listDocuments,
@@ -22,8 +24,28 @@ import {
 } from '../services/employeeService.js';
 import { getEmployeeAdvanceProfile } from '../services/advanceService.js';
 import { buildEmployeeProfilePdf } from '../services/pdf/employeePdfService.js';
+import { buildEmployeePendingReportPdf } from '../services/pdf/employeePendingPdfService.js';
 import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 import { getCompanyPdfData } from '../services/companySettingsService.js';
+import { httpError } from '../utils/httpError.js';
+
+function selectPendingReportItems(employees, selections) {
+  if (selections === undefined) return employees;
+  if (!Array.isArray(selections)) throw httpError(400, 'Seleção de pendências inválida.');
+
+  const selectionsByEmployee = new Map(selections.map((selection) => [
+    selection?.employee_id,
+    Array.isArray(selection?.pending_indexes) ? selection.pending_indexes : [],
+  ]));
+  const selectedEmployees = employees.map((employee) => {
+    const indexes = [...new Set(selectionsByEmployee.get(employee.id) || [])]
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < employee.pendencies.length);
+    return { ...employee, pendencies: indexes.map((index) => employee.pendencies[index]) };
+  }).filter((employee) => employee.pendencies.length > 0);
+
+  if (!selectedEmployees.length) throw httpError(400, 'Selecione ao menos uma pendência.');
+  return selectedEmployees;
+}
 
 export async function index(req, res, next) {
   try {
@@ -176,6 +198,49 @@ export async function profilePdf(req, res, next) {
     ]);
     const pdf = await buildEmployeeProfilePdf(data, { company });
     sendPdfResponse(res, pdf, `ficha-cadastral-${data.employee.full_name}.pdf`);
+  } catch (error) { next(error); }
+}
+
+export async function incompleteReportPdf(req, res, next) {
+  try {
+    const [employees, company] = await Promise.all([
+      getIncompleteRegistrationReport(),
+      getCompanyPdfData(),
+    ]);
+    const selectedEmployees = selectPendingReportItems(employees, req.body?.selections);
+    const emittedAt = new Date();
+    const pdf = await buildEmployeePendingReportPdf(selectedEmployees, { company, emittedAt });
+    const filenameDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Cuiaba',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(emittedAt);
+    sendPdfResponse(res, pdf, `pendencias-cadastrais-funcionarios-${filenameDate}.pdf`);
+  } catch (error) { next(error); }
+}
+
+export async function incompleteReportPreview(_req, res, next) {
+  try {
+    res.json(await getIncompleteRegistrationReport());
+  } catch (error) { next(error); }
+}
+
+export async function employeeIncompleteReportPdf(req, res, next) {
+  try {
+    const [employee, company] = await Promise.all([
+      getEmployeeIncompleteRegistrationReport(req.params.id),
+      getCompanyPdfData(),
+    ]);
+    const selectedEmployees = selectPendingReportItems([employee], req.body?.selections);
+    const pdf = await buildEmployeePendingReportPdf(selectedEmployees, { company, emittedAt: new Date() });
+    sendPdfResponse(res, pdf, `ficha-incompleta-${employee.full_name}.pdf`);
+  } catch (error) { next(error); }
+}
+
+export async function employeeIncompleteReportPreview(req, res, next) {
+  try {
+    res.json(await getEmployeeIncompleteRegistrationReport(req.params.id));
   } catch (error) { next(error); }
 }
 

@@ -5,7 +5,8 @@ import { api, getStoredUser } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission } from '../../utils/permissions.js';
 import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
-import { documentTypes, formatCpf, formatDate, formatMoney, maritalStatusOptions, statusLabels, toDateInput } from './employeeUtils.js';
+import { documentTypes, formatCpf, formatDate, formatMoney, isValidCpf, maritalStatusOptions, maskCpf, statusLabels, toDateInput } from './employeeUtils.js';
+import { PendingReportModal } from './PendingReportModal.jsx';
 import './EmployeesPage.css';
 
 const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'Dependentes', 'Documentos', 'Histórico salarial', 'Histórico de vale alimentação', 'Vales', 'Auditoria'];
@@ -19,6 +20,17 @@ const editableFields = [
 
 function emptyEmployeeForm() {
   return Object.fromEntries(editableFields.map((field) => [field, '']));
+}
+
+function emptyDependentForm() {
+  return {
+    full_name: '',
+    relationship: '',
+    birth_date: '',
+    identification_type: 'cpf',
+    identification_number: '',
+    notes: '',
+  };
 }
 
 function SectionFields({ form, setField, disabled, fields }) {
@@ -72,11 +84,15 @@ export function EmployeeDetailPage() {
   const [documents, setDocuments] = useState([]);
   const [audit, setAudit] = useState([]);
   const [advanceProfile, setAdvanceProfile] = useState(null);
-  const [dependentForm, setDependentForm] = useState({ full_name: '', birth_date: '', cpf: '', relationship: '', notes: '' });
+  const [dependentForm, setDependentForm] = useState(emptyDependentForm);
   const [salaryForm, setSalaryForm] = useState({ salary: '', effective_from: '', reason: '' });
   const [mealForm, setMealForm] = useState({ amount: '', effective_from: '', reason: '' });
   const [documentForm, setDocumentForm] = useState({ document_type: 'RG', dependent_id: '', file: null });
   const [sectors, setSectors] = useState([]);
+  const [pendingReportModalOpen, setPendingReportModalOpen] = useState(false);
+  const [pendingReportEmployees, setPendingReportEmployees] = useState([]);
+  const [loadingPendingReport, setLoadingPendingReport] = useState(false);
+  const [downloadingPendingReport, setDownloadingPendingReport] = useState(false);
 
   async function loadEmployee() {
     const response = await api.get(`/employees/${id}`);
@@ -181,9 +197,13 @@ export function EmployeeDetailPage() {
 
   async function saveDependent(event) {
     event.preventDefault();
+    if (dependentForm.identification_type === 'cpf' && dependentForm.identification_number && !isValidCpf(dependentForm.identification_number)) {
+      toast.error('Informe um CPF válido para o dependente.');
+      return;
+    }
     try {
       await api.post(`/employees/${id}/dependents`, dependentForm);
-      setDependentForm({ full_name: '', birth_date: '', cpf: '', relationship: '', notes: '' });
+      setDependentForm(emptyDependentForm());
       toast.success('Dependente adicionado.');
       await loadRelated();
     } catch (error) {
@@ -250,6 +270,35 @@ export function EmployeeDetailPage() {
     }
   }
 
+  async function openIncompleteReport() {
+    setPendingReportModalOpen(true);
+    setLoadingPendingReport(true);
+    try {
+      const response = await api.get(`/employees/${id}/incomplete-report`);
+      setPendingReportEmployees([response.data]);
+    } catch (error) {
+      setPendingReportModalOpen(false);
+      toast.error(error.response?.data?.message || 'Não foi possível carregar as pendências cadastrais.');
+    } finally {
+      setLoadingPendingReport(false);
+    }
+  }
+
+  async function downloadIncompleteReport(selections) {
+    setDownloadingPendingReport(true);
+    try {
+      await downloadAuthenticatedFile(`/employees/${id}/incomplete-report-pdf`, 'ficha-incompleta-funcionario.pdf', {
+        method: 'post',
+        data: { selections },
+      });
+      setPendingReportModalOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível gerar o relatório de pendências.');
+    } finally {
+      setDownloadingPendingReport(false);
+    }
+  }
+
   const visibleTabs = useMemo(() => tabs.filter((tab) => {
     if (tab === 'Dependentes') return canDependentsView;
     if (tab === 'Documentos') return canDocumentsView;
@@ -310,9 +359,19 @@ export function EmployeeDetailPage() {
         <div className="page__actions">
           {!employee.profile_completed && canEdit && <button className="button" type="button" onClick={() => { setCompleteMode(true); setActiveTab('Dados pessoais'); }}>Completar ficha cadastral</button>}
           {canPrint && employee.profile_completed && <button className="button button_primary" type="button" onClick={printProfile}><Download size={18} /><span>Baixar ficha cadastral</span></button>}
-          {canPrint && !employee.profile_completed && <button className="button" type="button" disabled><Download size={18} /><span>Ficha incompleta</span></button>}
+          {canPrint && <button className="button" type="button" onClick={openIncompleteReport} disabled={loadingPendingReport || downloadingPendingReport}><Download size={18} /><span>{loadingPendingReport ? 'Carregando...' : 'Relatório de pendências'}</span></button>}
         </div>
       </div>
+
+      <PendingReportModal
+        open={pendingReportModalOpen}
+        title="Relatório de pendências"
+        employees={pendingReportEmployees}
+        loading={loadingPendingReport}
+        generating={downloadingPendingReport}
+        onCancel={() => setPendingReportModalOpen(false)}
+        onGenerate={downloadIncompleteReport}
+      />
 
       {completeMode && !employee.profile_completed && (
         <div className="panel employees-page__completion">
@@ -416,17 +475,49 @@ export function EmployeeDetailPage() {
       {activeTab === 'Dependentes' && (
         <div className="panel employees-page__stack">
           {canDependentsManage && (
-            <form className="employees-page__inline-form" onSubmit={saveDependent}>
-              <input className="field__input" placeholder="Nome completo" value={dependentForm.full_name} onChange={(event) => setDependentForm({ ...dependentForm, full_name: event.target.value })} required />
-              <input className="field__input" type="date" value={dependentForm.birth_date} onChange={(event) => setDependentForm({ ...dependentForm, birth_date: event.target.value })} />
-              <input className="field__input" placeholder="CPF" value={dependentForm.cpf} onChange={(event) => setDependentForm({ ...dependentForm, cpf: event.target.value })} />
-              <input className="field__input" placeholder="Parentesco" value={dependentForm.relationship} onChange={(event) => setDependentForm({ ...dependentForm, relationship: event.target.value })} />
-              <button className="button button_primary" type="submit">Adicionar</button>
+            <form className="employees-page__inline-form employees-page__dependent-form" onSubmit={saveDependent}>
+              <label className="field">
+                <span className="field__label">Nome completo</span>
+                <input className="field__input" value={dependentForm.full_name} onChange={(event) => setDependentForm({ ...dependentForm, full_name: event.target.value })} required />
+              </label>
+              <label className="field">
+                <span className="field__label">Parentesco</span>
+                <input className="field__input" value={dependentForm.relationship} onChange={(event) => setDependentForm({ ...dependentForm, relationship: event.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field__label">Data de nascimento</span>
+                <input className="field__input" type="date" value={dependentForm.birth_date} onChange={(event) => setDependentForm({ ...dependentForm, birth_date: event.target.value })} />
+              </label>
+              <div className="employees-page__dependent-identification">
+                <fieldset className="employees-page__identification-type">
+                  <legend className="field__label">Tipo de identificação</legend>
+                  <label><input type="radio" name="dependent-identification-type" value="cpf" checked={dependentForm.identification_type === 'cpf'} onChange={(event) => setDependentForm({ ...dependentForm, identification_type: event.target.value, identification_number: '' })} /> CPF</label>
+                  <label><input type="radio" name="dependent-identification-type" value="matricula" checked={dependentForm.identification_type === 'matricula'} onChange={(event) => setDependentForm({ ...dependentForm, identification_type: event.target.value, identification_number: '' })} /> Matrícula</label>
+                </fieldset>
+                <label className="field">
+                  <span className="field__label">Número da identificação</span>
+                  <input
+                    className="field__input"
+                    inputMode={dependentForm.identification_type === 'cpf' ? 'numeric' : 'text'}
+                    maxLength={dependentForm.identification_type === 'cpf' ? 14 : undefined}
+                    value={dependentForm.identification_number}
+                    onChange={(event) => setDependentForm({
+                      ...dependentForm,
+                      identification_number: dependentForm.identification_type === 'cpf' ? maskCpf(event.target.value) : event.target.value,
+                    })}
+                  />
+                </label>
+              </div>
+              <button className="button button_primary employees-page__dependent-submit" type="submit">Adicionar</button>
             </form>
           )}
           {dependents.map((dependent) => (
             <div className="employees-page__row" key={dependent.id}>
-              <div><strong>{dependent.full_name}</strong><span>{dependent.relationship || 'Parentesco não informado'} · {formatDate(dependent.birth_date)}</span></div>
+              <div>
+                <strong>{dependent.full_name}</strong>
+                <span>{dependent.relationship || 'Parentesco não informado'} · {formatDate(dependent.birth_date)}</span>
+                <span>{dependent.identification_type === 'matricula' ? 'Matrícula' : 'CPF'}: {dependent.identification_number ? (dependent.identification_type === 'cpf' ? formatCpf(dependent.identification_number) : dependent.identification_number) : 'Não informado'}</span>
+              </div>
               {canDependentsManage && <button className="button button_danger" type="button" onClick={() => removeDependent(dependent.id)}>Remover</button>}
             </div>
           ))}

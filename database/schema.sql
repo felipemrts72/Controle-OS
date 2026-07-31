@@ -635,12 +635,14 @@ CREATE TABLE IF NOT EXISTS employee_dependents (
   employee_id UUID NOT NULL REFERENCES employees(id),
   full_name VARCHAR NOT NULL,
   birth_date DATE,
-  cpf VARCHAR,
+  identification_type VARCHAR(20) NOT NULL DEFAULT 'cpf',
+  identification_number VARCHAR,
   relationship VARCHAR,
   notes TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT employee_dependents_identification_type_check CHECK (identification_type IN ('cpf', 'matricula'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_employee_dependents_employee ON employee_dependents(employee_id);

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Zap } from 'lucide-react';
+import { Download, Plus, Search, Zap } from 'lucide-react';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { api, getStoredUser } from '../../services/api.js';
 import { canAccessPermission } from '../../utils/permissions.js';
+import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import { formatCpfPartial, formatDate, statusLabels } from './employeeUtils.js';
+import { PendingReportModal } from './PendingReportModal.jsx';
 import './EmployeesPage.css';
 
 export function EmployeesPage() {
@@ -13,8 +15,13 @@ export function EmployeesPage() {
   const user = getStoredUser();
   const canCreate = canAccessPermission(user, 'employees.create');
   const canEdit = canAccessPermission(user, 'employees.edit') || canAccessPermission(user, 'employees.manage');
+  const canPrint = canAccessPermission(user, 'employees.profile.print');
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pendingReportModalOpen, setPendingReportModalOpen] = useState(false);
+  const [pendingReportEmployees, setPendingReportEmployees] = useState([]);
+  const [loadingPendingReport, setLoadingPendingReport] = useState(false);
+  const [downloadingPendingReport, setDownloadingPendingReport] = useState(false);
   const [filters, setFilters] = useState({ search: '', cpf: '', status: '', job_title: '', sector_id: '' });
 
   async function load() {
@@ -46,6 +53,35 @@ export function EmployeesPage() {
   function submitFilters(event) {
     event.preventDefault();
     load();
+  }
+
+  async function openPendingReport() {
+    setPendingReportModalOpen(true);
+    setLoadingPendingReport(true);
+    try {
+      const response = await api.get('/employees/incomplete-report');
+      setPendingReportEmployees(response.data);
+    } catch (error) {
+      setPendingReportModalOpen(false);
+      toast.error(error.response?.data?.message || 'Não foi possível carregar as pendências cadastrais.');
+    } finally {
+      setLoadingPendingReport(false);
+    }
+  }
+
+  async function downloadPendingReport(selections) {
+    setDownloadingPendingReport(true);
+    try {
+      await downloadAuthenticatedFile('/employees/incomplete-report-pdf', 'pendencias-cadastrais-funcionarios.pdf', {
+        method: 'post',
+        data: { selections },
+      });
+      setPendingReportModalOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível gerar o relatório de pendências cadastrais.');
+    } finally {
+      setDownloadingPendingReport(false);
+    }
   }
 
   const columns = [
@@ -80,6 +116,12 @@ export function EmployeesPage() {
       <div className="page__header">
         <h1 className="page__title">Funcionários</h1>
         <div className="page__actions">
+          {canPrint && (
+            <button className="button" type="button" onClick={openPendingReport} disabled={loadingPendingReport || downloadingPendingReport}>
+              <Download size={18} />
+              <span>{loadingPendingReport ? 'Carregando...' : 'Relatório geral de pendências'}</span>
+            </button>
+          )}
           {canCreate && (
             <Link className="button button_primary" to="/funcionarios/novo">
               <Plus size={18} />
@@ -134,6 +176,16 @@ export function EmployeesPage() {
       <div className="panel">
         {loading ? <p>Carregando funcionários...</p> : <DataTable columns={columns} rows={employees} emptyText="Nenhum funcionário encontrado." />}
       </div>
+
+      <PendingReportModal
+        open={pendingReportModalOpen}
+        title="Relatório geral de pendências"
+        employees={pendingReportEmployees}
+        loading={loadingPendingReport}
+        generating={downloadingPendingReport}
+        onCancel={() => setPendingReportModalOpen(false)}
+        onGenerate={downloadPendingReport}
+      />
     </section>
   );
 }
