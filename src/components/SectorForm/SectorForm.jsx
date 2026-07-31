@@ -1,28 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './SectorForm.css';
 
-export function SectorForm({ sector, onSubmit }) {
-  const [form, setForm] = useState(sector || { name: '', slug: '', is_active: true });
+export function SectorForm({ sector, onSubmit, formId = 'sector-form' }) {
+  const [name, setName] = useState(sector?.name || '');
 
-  function change(event) {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
-  }
+  useEffect(() => setName(sector?.name || ''), [sector]);
 
   function submit(event) {
     event.preventDefault();
-    onSubmit(form);
-    if (!sector) setForm({ name: '', slug: '', is_active: true });
+    onSubmit({ name });
   }
 
   return (
-    <form className="sector-form" onSubmit={submit}>
-      <input className="field__input" name="name" placeholder="Nome" value={form.name} onChange={change} required />
-      <input className="field__input" name="slug" placeholder="Slug" value={form.slug} onChange={change} required />
-      <label className="sector-form__toggle">
-        <input type="checkbox" name="is_active" checked={form.is_active} onChange={change} />
-        Ativo
+    <form className="sector-form" id={formId} onSubmit={submit}>
+      <label className="field">
+        <span className="field__label">Nome do setor</span>
+        <input className="field__input" name="name" placeholder="Ex.: Solda" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} autoFocus required />
       </label>
-      <button className="button button_primary" type="submit">Salvar setor</button>
+      <p className="sector-form__hint">O identificador técnico é gerado automaticamente e permanece estável após a criação.</p>
     </form>
   );
 }

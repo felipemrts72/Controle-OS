@@ -1,5 +1,11 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  filename TEXT PRIMARY KEY,
+  checksum VARCHAR(64) NOT NULL,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR NOT NULL,
@@ -170,6 +176,8 @@ CREATE INDEX IF NOT EXISTS idx_shipment_volumes_shipment_code ON shipment_volume
 CREATE INDEX IF NOT EXISTS idx_shipment_volumes_label_status ON shipment_volumes(label_status);
 CREATE INDEX IF NOT EXISTS idx_products_type ON products(type);
 CREATE INDEX IF NOT EXISTS idx_sectors_slug ON sectors(slug);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sectors_name_normalized_unique
+  ON sectors ((lower(regexp_replace(btrim(name), '[[:space:]]+', ' ', 'g'))));
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type ON audit_logs(entity_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity_id);
 
@@ -466,6 +474,30 @@ WHERE c.id = latest_order.customer_id
     OR (NULLIF(c.destination_uf, '') IS NULL AND latest_order.destination_uf IS NOT NULL)
   );
 
+CREATE TABLE IF NOT EXISTS company_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  singleton_key BOOLEAN NOT NULL DEFAULT TRUE UNIQUE,
+  nome_fantasia VARCHAR,
+  razao_social VARCHAR,
+  cnpj VARCHAR,
+  telefone VARCHAR,
+  email VARCHAR,
+  endereco VARCHAR,
+  numero VARCHAR,
+  complemento VARCHAR,
+  bairro VARCHAR,
+  cidade VARCHAR,
+  estado VARCHAR(2),
+  cep VARCHAR,
+  nome_representante VARCHAR,
+  cpf_representante VARCHAR,
+  cargo_representante VARCHAR,
+  logo_path VARCHAR,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT company_settings_singleton_check CHECK (singleton_key = TRUE)
+);
+
 CREATE TABLE IF NOT EXISTS employees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name VARCHAR NOT NULL,
@@ -491,6 +523,7 @@ CREATE TABLE IF NOT EXISTS employees (
   state VARCHAR(2),
   admission_date DATE,
   job_title VARCHAR,
+  sector_id UUID NULL REFERENCES sectors(id) ON DELETE SET NULL,
   current_salary NUMERIC(12,2),
   meal_allowance NUMERIC(12,2),
   employment_status VARCHAR DEFAULT 'ativo',
@@ -514,10 +547,62 @@ CREATE TABLE IF NOT EXISTS employees (
   CONSTRAINT employees_employment_status_check CHECK (employment_status IN ('ativo', 'afastado', 'desligado'))
 );
 
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS sector_id UUID NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'employees_sector_id_fkey'
+      AND conrelid = 'employees'::regclass
+  ) THEN
+    ALTER TABLE employees
+      ADD CONSTRAINT employees_sector_id_fkey
+      FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_cpf_active ON employees(cpf) WHERE cpf IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_employees_normalized_name ON employees(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(employment_status);
 CREATE INDEX IF NOT EXISTS idx_employees_job_title ON employees(job_title);
+CREATE INDEX IF NOT EXISTS idx_employees_sector_id ON employees(sector_id);
+
+CREATE TABLE IF NOT EXISTS employee_awards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  employee_id UUID NOT NULL REFERENCES employees(id),
+  amount NUMERIC(12,2) NOT NULL,
+  award_date DATE NOT NULL,
+  performance_description TEXT NOT NULL,
+  employee_name_snapshot VARCHAR NOT NULL,
+  employee_cpf_snapshot VARCHAR,
+  job_title_snapshot VARCHAR,
+  sector_name_snapshot VARCHAR,
+  company_name_snapshot VARCHAR NOT NULL,
+  company_cnpj_snapshot VARCHAR,
+  company_city_snapshot VARCHAR,
+  representative_name_snapshot VARCHAR NOT NULL,
+  representative_job_title_snapshot VARCHAR NOT NULL,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_by UUID REFERENCES users(id),
+  deleted_by UUID REFERENCES users(id),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMP NULL,
+  CONSTRAINT employee_awards_amount_positive CHECK (amount > 0),
+  CONSTRAINT employee_awards_description_not_blank CHECK (length(btrim(performance_description)) >= 10)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_awards_employee_date
+  ON employee_awards(employee_id, award_date DESC);
+CREATE INDEX IF NOT EXISTS idx_employee_awards_award_date
+  ON employee_awards(award_date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_employee_awards_created_by
+  ON employee_awards(created_by);
+CREATE INDEX IF NOT EXISTS idx_employee_awards_active
+  ON employee_awards(award_date DESC, created_at DESC)
+  WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS employee_salary_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -550,12 +635,14 @@ CREATE TABLE IF NOT EXISTS employee_dependents (
   employee_id UUID NOT NULL REFERENCES employees(id),
   full_name VARCHAR NOT NULL,
   birth_date DATE,
-  cpf VARCHAR,
+  identification_type VARCHAR(20) NOT NULL DEFAULT 'cpf',
+  identification_number VARCHAR,
   relationship VARCHAR,
   notes TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT employee_dependents_identification_type_check CHECK (identification_type IN ('cpf', 'matricula'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_employee_dependents_employee ON employee_dependents(employee_id);
@@ -596,7 +683,9 @@ VALUES
   ('employees.documents.manage', 'Gerenciar documentos de funcionários', NULL, 'Funcionários'),
   ('employees.dependents.view', 'Ver dependentes', NULL, 'Funcionários'),
   ('employees.dependents.manage', 'Gerenciar dependentes', NULL, 'Funcionários'),
-  ('employees.profile.print', 'Imprimir ficha de funcionário', NULL, 'Funcionários')
+  ('employees.profile.print', 'Imprimir ficha de funcionário', NULL, 'Funcionários'),
+  ('company_settings.view', 'Ver configurações da empresa', NULL, 'Configurações'),
+  ('company_settings.edit', 'Editar configurações da empresa', NULL, 'Configurações')
 ON CONFLICT (code) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
@@ -936,6 +1025,25 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM roles r
 CROSS JOIN permissions p
+WHERE r.slug = 'admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO permissions (code, name, description, group_name)
+VALUES
+  ('awards.view', 'Ver prêmios', NULL, 'Prêmios'),
+  ('awards.create', 'Criar prêmios', NULL, 'Prêmios'),
+  ('awards.edit', 'Editar prêmios', NULL, 'Prêmios'),
+  ('awards.delete', 'Excluir prêmios', NULL, 'Prêmios'),
+  ('awards.pdf', 'Baixar termos de prêmios', NULL, 'Prêmios')
+ON CONFLICT (code) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  group_name = EXCLUDED.group_name;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON p.code IN ('awards.view', 'awards.create', 'awards.edit', 'awards.delete', 'awards.pdf')
 WHERE r.slug = 'admin'
 ON CONFLICT DO NOTHING;
 

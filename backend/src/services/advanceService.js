@@ -140,10 +140,11 @@ async function fetchList(client, listId, lock = false) {
 
 async function fetchEmployeeForAdvance(client, employeeId, lock = false, allowTerminated = false) {
   const result = await client.query(
-    `SELECT id, full_name, job_title, current_salary, employment_status
-     FROM employees
-     WHERE id = $1 AND deleted_at IS NULL
-     ${lock ? 'FOR UPDATE' : ''}`,
+    `SELECT e.id, e.full_name, e.job_title, e.sector_id, s.name AS sector_name, e.current_salary, e.employment_status
+     FROM employees e
+     LEFT JOIN sectors s ON s.id = e.sector_id
+     WHERE e.id = $1 AND e.deleted_at IS NULL
+     ${lock ? 'FOR UPDATE OF e' : ''}`,
     [employeeId],
   );
   const employee = result.rows[0];
@@ -296,9 +297,11 @@ async function hydrateList(client, listId) {
   );
   if (!listResult.rows[0]) throw httpError(404, 'Lista de vales nao encontrada.');
   const items = await client.query(
-    `SELECT ali.*, e.full_name AS employee_name, e.pix_key, e.current_salary, e.employment_status
+    `SELECT ali.*, e.full_name AS employee_name, e.job_title, e.sector_id, s.name AS sector_name,
+       e.pix_key, e.current_salary, e.employment_status
      FROM advance_list_items ali
      JOIN employees e ON e.id = ali.employee_id
+     LEFT JOIN sectors s ON s.id = e.sector_id
      WHERE ali.list_id = $1 AND ali.removed_at IS NULL AND ali.status = 'active'
      ORDER BY e.full_name`,
     [listId],
@@ -1543,18 +1546,20 @@ export async function getGeneralAdvanceReport(query, user) {
   return transaction(async (client) => {
     const filter = await resolveReportFilter(client, query);
     const result = await client.query(
-      `SELECT e.id AS employee_id, e.full_name AS employee_name, COALESCE(SUM(ali.amount), 0)::numeric AS total_amount
+      `SELECT e.id AS employee_id, e.full_name AS employee_name, e.job_title, s.name AS sector_name,
+        COALESCE(SUM(ali.amount), 0)::numeric AS total_amount
        FROM advance_list_items ali
        JOIN advance_lists al ON al.id = ali.list_id
        JOIN advance_cycles ac ON ac.id = al.cycle_id
        JOIN employees e ON e.id = ali.employee_id
+       LEFT JOIN sectors s ON s.id = e.sector_id
        WHERE ${filter.where}
          AND al.status <> 'cancelled'
          AND al.deleted_at IS NULL
          AND ali.status = 'active'
          AND ali.removed_at IS NULL
          AND ali.confirmed = TRUE
-       GROUP BY e.id, e.full_name
+       GROUP BY e.id, e.full_name, e.job_title, s.name
        ORDER BY e.full_name`,
       filter.params,
     );

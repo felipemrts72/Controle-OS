@@ -1,0 +1,141 @@
+.awards-page__subtitle {
+  color: var(--color-text-muted);
+  margin: 5px 0 0;
+}
+
+.awards-page .confirm-modal__content {
+  max-width: 720px;
+}
+
+.awards-page__filters {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(140px, 0.8fr)) auto;
+}
+
+.awards-page__filter-actions,
+.awards-page__row-actions,
+.awards-page__employee-search {
+  display: flex;
+  gap: 8px;
+}
+
+.awards-page__row-actions .button {
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+.awards-page__form {
+  display: grid;
+  gap: 16px;
+  min-width: min(650px, 72vw);
+}
+
+.awards-page__form-grid,
+.awards-page__detail {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.awards-page__employee-picker,
+.awards-page__selected-employee,
+.awards-page__selected-employee div,
+.awards-page__employee-results,
+.awards-page__detail div,
+.awards-page__detail article {
+  display: grid;
+  gap: 7px;
+}
+
+.awards-page__selected-employee {
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+}
+
+.awards-page__selected-employee span,
+.awards-page__employee-results span,
+.awards-page__detail span,
+.awards-page small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.awards-page__employee-search .field__input {
+  flex: 1;
+}
+
+.awards-page__employee-results {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.awards-page__employee-results > button {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.awards-page__employee-results > button:hover {
+  border-color: var(--color-primary);
+}
+
+.awards-page__description {
+  min-height: 125px;
+  resize: vertical;
+}
+
+.awards-page__detail div,
+.awards-page__detail article {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 11px;
+}
+
+.awards-page__detail article {
+  grid-column: 1 / -1;
+}
+
+.awards-page__detail p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1100px) {
+  .awards-page__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .awards-page__filters,
+  .awards-page__form-grid,
+  .awards-page__detail {
+    grid-template-columns: 1fr;
+  }
+
+  .awards-page__filter-actions,
+  .awards-page__filter-actions .button,
+  .awards-page__employee-search,
+  .awards-page__employee-search .button {
+    width: 100%;
+  }
+
+  .awards-page__employee-search,
+  .awards-page__selected-employee {
+    grid-template-columns: 1fr;
+  }
+
+  .awards-page__form {
+    min-width: 0;
+  }
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Save, Upload } from 'lucide-react';
 import { api, getStoredUser } from '../../services/api.js';
@@ -29,6 +29,7 @@ const emptyForm = {
   state: '',
   admission_date: '',
   job_title: '',
+  sector_id: '',
   current_salary: '',
   meal_allowance: '0',
   pix_key: '',
@@ -58,6 +59,13 @@ export function EmployeeCreatePage() {
   const [identityFile, setIdentityFile] = useState(null);
   const [addressFile, setAddressFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [sectors, setSectors] = useState([]);
+
+  useEffect(() => {
+    api.get('/sectors')
+      .then((response) => setSectors(response.data.filter((sector) => sector.is_active !== false)))
+      .catch(() => toast.error('Não foi possível carregar os setores.'));
+  }, []);
 
   if (!canCreate) return <Navigate to="/acesso-negado" replace />;
 
@@ -161,6 +169,13 @@ export function EmployeeCreatePage() {
           <div className="form-grid">
             <label className="field"><span className="field__label">Data de admissão <RequiredMark /></span><input className="field__input" name="admission_date" type="date" value={form.admission_date} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Cargo <RequiredMark /></span><input className="field__input" name="job_title" value={form.job_title} onChange={setField} required /></label>
+            <label className="field">
+              <span className="field__label">Setor</span>
+              <select className="field__input" name="sector_id" value={form.sector_id} onChange={setField}>
+                <option value="">Não informado</option>
+                {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+              </select>
+            </label>
             <label className="field"><span className="field__label">Salário atual <RequiredMark /></span><input className="field__input" name="current_salary" type="number" step="0.01" min="0" value={form.current_salary} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Vale alimentação <RequiredMark /></span><input className="field__input" name="meal_allowance" type="number" step="0.01" min="0" value={form.meal_allowance} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Chave Pix</span><input className="field__input" name="pix_key" value={form.pix_key} onChange={setField} /></label>

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Download, Printer, Save, Upload } from 'lucide-react';
+import { Download, Save, Upload } from 'lucide-react';
 import { api, getStoredUser } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission } from '../../utils/permissions.js';
-import { documentTypes, formatCpf, formatDate, formatMoney, maritalStatusOptions, statusLabels, toDateInput } from './employeeUtils.js';
+import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
+import { documentTypes, formatCpf, formatDate, formatMoney, isValidCpf, maritalStatusOptions, maskCpf, statusLabels, toDateInput } from './employeeUtils.js';
+import { PendingReportModal } from './PendingReportModal.jsx';
 import './EmployeesPage.css';
 
 const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'Dependentes', 'Documentos', 'Histórico salarial', 'Histórico de vale alimentação', 'Vales', 'Auditoria'];
@@ -12,12 +14,23 @@ const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'De
 const editableFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone', 'email',
   'marital_status', 'spouse_name', 'zip_code', 'street', 'address_number', 'complement', 'neighborhood', 'city', 'state',
-  'admission_date', 'job_title', 'current_salary', 'meal_allowance', 'pix_key', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
+  'admission_date', 'job_title', 'sector_id', 'current_salary', 'meal_allowance', 'pix_key', 'employment_status', 'notes', 'ctps_number', 'ctps_series',
   'ctps_state', 'pis_pasep', 'voter_registration', 'voter_zone', 'voter_section', 'military_certificate',
 ];
 
 function emptyEmployeeForm() {
   return Object.fromEntries(editableFields.map((field) => [field, '']));
+}
+
+function emptyDependentForm() {
+  return {
+    full_name: '',
+    relationship: '',
+    birth_date: '',
+    identification_type: 'cpf',
+    identification_number: '',
+    notes: '',
+  };
 }
 
 function SectionFields({ form, setField, disabled, fields }) {
@@ -71,11 +84,15 @@ export function EmployeeDetailPage() {
   const [documents, setDocuments] = useState([]);
   const [audit, setAudit] = useState([]);
   const [advanceProfile, setAdvanceProfile] = useState(null);
-  const [dependentForm, setDependentForm] = useState({ full_name: '', birth_date: '', cpf: '', relationship: '', notes: '' });
+  const [dependentForm, setDependentForm] = useState(emptyDependentForm);
   const [salaryForm, setSalaryForm] = useState({ salary: '', effective_from: '', reason: '' });
   const [mealForm, setMealForm] = useState({ amount: '', effective_from: '', reason: '' });
   const [documentForm, setDocumentForm] = useState({ document_type: 'RG', dependent_id: '', file: null });
-  const [printPayload, setPrintPayload] = useState(null);
+  const [sectors, setSectors] = useState([]);
+  const [pendingReportModalOpen, setPendingReportModalOpen] = useState(false);
+  const [pendingReportEmployees, setPendingReportEmployees] = useState([]);
+  const [loadingPendingReport, setLoadingPendingReport] = useState(false);
+  const [downloadingPendingReport, setDownloadingPendingReport] = useState(false);
 
   async function loadEmployee() {
     const response = await api.get(`/employees/${id}`);
@@ -103,6 +120,12 @@ export function EmployeeDetailPage() {
     Promise.all([loadEmployee(), loadRelated()]).catch(() => toast.error('Não foi possível carregar a ficha do funcionário.'));
   }, [id]);
 
+  useEffect(() => {
+    api.get('/sectors')
+      .then((response) => setSectors(response.data))
+      .catch(() => toast.error('Não foi possível carregar os setores.'));
+  }, []);
+
   function setField(event) {
     const { name, value, type, checked } = event.target;
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
@@ -121,6 +144,7 @@ export function EmployeeDetailPage() {
     try {
       const response = await api.put(`/employees/${id}`, buildEmployeePayload());
       setEmployee(response.data);
+      await loadEmployee();
       toast.success('Alterações salvas.');
       await loadRelated();
     } catch (error) {
@@ -173,9 +197,13 @@ export function EmployeeDetailPage() {
 
   async function saveDependent(event) {
     event.preventDefault();
+    if (dependentForm.identification_type === 'cpf' && dependentForm.identification_number && !isValidCpf(dependentForm.identification_number)) {
+      toast.error('Informe um CPF válido para o dependente.');
+      return;
+    }
     try {
       await api.post(`/employees/${id}/dependents`, dependentForm);
-      setDependentForm({ full_name: '', birth_date: '', cpf: '', relationship: '', notes: '' });
+      setDependentForm(emptyDependentForm());
       toast.success('Dependente adicionado.');
       await loadRelated();
     } catch (error) {
@@ -236,11 +264,38 @@ export function EmployeeDetailPage() {
 
   async function printProfile() {
     try {
-      const response = await api.get(`/employees/${id}/profile-print-data`);
-      setPrintPayload(response.data);
-      setTimeout(() => window.print(), 80);
+      await downloadAuthenticatedFile(`/employees/${id}/profile-pdf`, 'ficha-cadastral-funcionario.pdf');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Não foi possível gerar a ficha para impressão.');
+    }
+  }
+
+  async function openIncompleteReport() {
+    setPendingReportModalOpen(true);
+    setLoadingPendingReport(true);
+    try {
+      const response = await api.get(`/employees/${id}/incomplete-report`);
+      setPendingReportEmployees([response.data]);
+    } catch (error) {
+      setPendingReportModalOpen(false);
+      toast.error(error.response?.data?.message || 'Não foi possível carregar as pendências cadastrais.');
+    } finally {
+      setLoadingPendingReport(false);
+    }
+  }
+
+  async function downloadIncompleteReport(selections) {
+    setDownloadingPendingReport(true);
+    try {
+      await downloadAuthenticatedFile(`/employees/${id}/incomplete-report-pdf`, 'ficha-incompleta-funcionario.pdf', {
+        method: 'post',
+        data: { selections },
+      });
+      setPendingReportModalOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível gerar o relatório de pendências.');
+    } finally {
+      setDownloadingPendingReport(false);
     }
   }
 
@@ -303,10 +358,20 @@ export function EmployeeDetailPage() {
         </div>
         <div className="page__actions">
           {!employee.profile_completed && canEdit && <button className="button" type="button" onClick={() => { setCompleteMode(true); setActiveTab('Dados pessoais'); }}>Completar ficha cadastral</button>}
-          {canPrint && employee.profile_completed && <button className="button button_primary" type="button" onClick={printProfile}><Printer size={18} /><span>Imprimir ficha cadastral</span></button>}
-          {canPrint && !employee.profile_completed && <button className="button" type="button" disabled><Printer size={18} /><span>Ficha incompleta</span></button>}
+          {canPrint && employee.profile_completed && <button className="button button_primary" type="button" onClick={printProfile}><Download size={18} /><span>Baixar ficha cadastral</span></button>}
+          {canPrint && <button className="button" type="button" onClick={openIncompleteReport} disabled={loadingPendingReport || downloadingPendingReport}><Download size={18} /><span>{loadingPendingReport ? 'Carregando...' : 'Relatório de pendências'}</span></button>}
         </div>
       </div>
+
+      <PendingReportModal
+        open={pendingReportModalOpen}
+        title="Relatório de pendências"
+        employees={pendingReportEmployees}
+        loading={loadingPendingReport}
+        generating={downloadingPendingReport}
+        onCancel={() => setPendingReportModalOpen(false)}
+        onGenerate={downloadIncompleteReport}
+      />
 
       {completeMode && !employee.profile_completed && (
         <div className="panel employees-page__completion">
@@ -336,6 +401,7 @@ export function EmployeeDetailPage() {
         <div className="panel employees-page__summary">
           <div><span>CPF</span><strong>{formatCpf(employee.cpf)}</strong></div>
           <div><span>Cargo</span><strong>{employee.job_title || '-'}</strong></div>
+          <div><span>Setor</span><strong>{employee.sector_name ? `${employee.sector_name}${employee.sector_is_active === false ? ' — inativo' : ''}` : 'Não informado'}</strong></div>
           <div><span>Admissão</span><strong>{formatDate(employee.admission_date)}</strong></div>
           <div><span>Salário atual</span><strong>{formatMoney(employee.current_salary)}</strong></div>
           <div><span>Vale alimentação</span><strong>{formatMoney(employee.meal_allowance)}</strong></div>
@@ -378,6 +444,14 @@ export function EmployeeDetailPage() {
               <SectionFields disabled={!canEdit} form={form} setField={setField} fields={[
                 { name: 'admission_date', label: 'Data de admissão', type: 'date' },
                 { name: 'job_title', label: 'Cargo' },
+                {
+                  name: 'sector_id',
+                  label: 'Setor',
+                  type: 'select',
+                  options: sectors
+                    .filter((sector) => sector.is_active !== false || sector.id === employee.sector_id)
+                    .map((sector) => ({ value: sector.id, label: `${sector.name}${sector.is_active === false ? ' — inativo' : ''}` })),
+                },
                 ...(canSalaryManage ? [{ name: 'current_salary', label: 'SalÃ¡rio atual', type: 'number' }] : []),
                 ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale alimentaÃ§Ã£o', type: 'number' }] : []),
                 { name: 'pix_key', label: 'Chave Pix' },
@@ -401,17 +475,49 @@ export function EmployeeDetailPage() {
       {activeTab === 'Dependentes' && (
         <div className="panel employees-page__stack">
           {canDependentsManage && (
-            <form className="employees-page__inline-form" onSubmit={saveDependent}>
-              <input className="field__input" placeholder="Nome completo" value={dependentForm.full_name} onChange={(event) => setDependentForm({ ...dependentForm, full_name: event.target.value })} required />
-              <input className="field__input" type="date" value={dependentForm.birth_date} onChange={(event) => setDependentForm({ ...dependentForm, birth_date: event.target.value })} />
-              <input className="field__input" placeholder="CPF" value={dependentForm.cpf} onChange={(event) => setDependentForm({ ...dependentForm, cpf: event.target.value })} />
-              <input className="field__input" placeholder="Parentesco" value={dependentForm.relationship} onChange={(event) => setDependentForm({ ...dependentForm, relationship: event.target.value })} />
-              <button className="button button_primary" type="submit">Adicionar</button>
+            <form className="employees-page__inline-form employees-page__dependent-form" onSubmit={saveDependent}>
+              <label className="field">
+                <span className="field__label">Nome completo</span>
+                <input className="field__input" value={dependentForm.full_name} onChange={(event) => setDependentForm({ ...dependentForm, full_name: event.target.value })} required />
+              </label>
+              <label className="field">
+                <span className="field__label">Parentesco</span>
+                <input className="field__input" value={dependentForm.relationship} onChange={(event) => setDependentForm({ ...dependentForm, relationship: event.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field__label">Data de nascimento</span>
+                <input className="field__input" type="date" value={dependentForm.birth_date} onChange={(event) => setDependentForm({ ...dependentForm, birth_date: event.target.value })} />
+              </label>
+              <div className="employees-page__dependent-identification">
+                <fieldset className="employees-page__identification-type">
+                  <legend className="field__label">Tipo de identificação</legend>
+                  <label><input type="radio" name="dependent-identification-type" value="cpf" checked={dependentForm.identification_type === 'cpf'} onChange={(event) => setDependentForm({ ...dependentForm, identification_type: event.target.value, identification_number: '' })} /> CPF</label>
+                  <label><input type="radio" name="dependent-identification-type" value="matricula" checked={dependentForm.identification_type === 'matricula'} onChange={(event) => setDependentForm({ ...dependentForm, identification_type: event.target.value, identification_number: '' })} /> Matrícula</label>
+                </fieldset>
+                <label className="field">
+                  <span className="field__label">Número da identificação</span>
+                  <input
+                    className="field__input"
+                    inputMode={dependentForm.identification_type === 'cpf' ? 'numeric' : 'text'}
+                    maxLength={dependentForm.identification_type === 'cpf' ? 14 : undefined}
+                    value={dependentForm.identification_number}
+                    onChange={(event) => setDependentForm({
+                      ...dependentForm,
+                      identification_number: dependentForm.identification_type === 'cpf' ? maskCpf(event.target.value) : event.target.value,
+                    })}
+                  />
+                </label>
+              </div>
+              <button className="button button_primary employees-page__dependent-submit" type="submit">Adicionar</button>
             </form>
           )}
           {dependents.map((dependent) => (
             <div className="employees-page__row" key={dependent.id}>
-              <div><strong>{dependent.full_name}</strong><span>{dependent.relationship || 'Parentesco não informado'} · {formatDate(dependent.birth_date)}</span></div>
+              <div>
+                <strong>{dependent.full_name}</strong>
+                <span>{dependent.relationship || 'Parentesco não informado'} · {formatDate(dependent.birth_date)}</span>
+                <span>{dependent.identification_type === 'matricula' ? 'Matrícula' : 'CPF'}: {dependent.identification_number ? (dependent.identification_type === 'cpf' ? formatCpf(dependent.identification_number) : dependent.identification_number) : 'Não informado'}</span>
+              </div>
               {canDependentsManage && <button className="button button_danger" type="button" onClick={() => removeDependent(dependent.id)}>Remover</button>}
             </div>
           ))}
@@ -511,20 +617,6 @@ export function EmployeeDetailPage() {
         </div>
       )}
 
-      {printPayload && (
-        <div className="employees-page__print">
-          <img className="employees-page__print-logo" src="/logo-torneadora-universal.png" alt="Logo Torneadora Universal" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-          <h1>TORNEADORA UNIVERSAL</h1>
-          <h2>FICHA CADASTRAL DE FUNCIONÁRIO</h2>
-          <section><h3>1. Dados pessoais</h3><p>Nome: {printPayload.employee.full_name}</p><p>CPF: {formatCpf(printPayload.employee.cpf)} · RG: {printPayload.employee.rg || '-'}</p><p>Nascimento: {formatDate(printPayload.employee.birth_date)} · Telefone: {printPayload.employee.phone || '-'}</p></section>
-          <section><h3>2. Endereço</h3><p>{[printPayload.employee.street, printPayload.employee.address_number, printPayload.employee.complement, printPayload.employee.neighborhood, printPayload.employee.city, printPayload.employee.state, printPayload.employee.zip_code].filter(Boolean).join(', ')}</p></section>
-          <section><h3>3. Documentação</h3><p>CTPS: {[printPayload.employee.ctps_number, printPayload.employee.ctps_series, printPayload.employee.ctps_state].filter(Boolean).join(' / ') || '-'}</p><p>PIS/PASEP: {printPayload.employee.pis_pasep || '-'} · Título eleitoral: {printPayload.employee.voter_registration || '-'}</p><p>Certificado militar: {printPayload.employee.military_certificate || '-'}</p></section>
-          <section><h3>4. Dados trabalhistas</h3><p>Admissão: {formatDate(printPayload.employee.admission_date)} · Cargo: {printPayload.employee.job_title || '-'}</p><p>Situação: {statusLabels[printPayload.employee.employment_status] || '-'}</p></section>
-          <section><h3>5. Dependentes</h3>{printPayload.dependents.length ? printPayload.dependents.map((dependent) => <p key={dependent.id}>{dependent.full_name} · {dependent.relationship || '-'} · {formatDate(dependent.birth_date)}</p>) : <p>Sem dependentes cadastrados.</p>}</section>
-          <p>Declaro que as informações acima são verdadeiras e autorizo seu uso para fins cadastrais, trabalhistas e administrativos da empresa, conforme aplicável.</p>
-          <div className="employees-page__signatures"><span>Local e data: ________________________________</span><span>Assinatura do funcionário: ________________________________</span><span>Assinatura responsável empresa: ________________________________</span></div>
-        </div>
-      )}
     </section>
   );
 }

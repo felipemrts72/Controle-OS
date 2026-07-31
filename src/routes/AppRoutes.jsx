@@ -30,6 +30,8 @@ import { AdvanceSummaryPage } from '../pages/AdvancesPage/AdvanceSummaryPage.jsx
 import { AdvancesReportsPage } from '../pages/AdvancesPage/AdvancesReportsPage.jsx';
 import { AdvanceGeneralReportPage } from '../pages/AdvancesPage/AdvanceGeneralReportPage.jsx';
 import { AdvanceIndividualReportPage } from '../pages/AdvancesPage/AdvanceIndividualReportPage.jsx';
+import { CompanySettingsPage } from '../pages/CompanySettingsPage/CompanySettingsPage.jsx';
+import { AwardsPage } from '../pages/AwardsPage/AwardsPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -60,7 +62,7 @@ function SessionLoading() {
       <div className="session-loading__card">
         <div className="session-loading__mark" aria-hidden="true">OS</div>
         <div>
-          <strong className="session-loading__brand">Controle Interno</strong>
+          <strong className="session-loading__brand">OliMen Gestão</strong>
           <p className="session-loading__text">Validando sessao...</p>
         </div>
         <span className="session-loading__spinner" aria-hidden="true" />
@@ -140,6 +142,8 @@ export function AppRoutes() {
         <Route path="/historico-ordens" element={<RoleRoute permission="orders.history.view"><OrderHistoryPage /></RoleRoute>} />
         <Route path="/usuarios" element={<RoleRoute permission="users.view"><UsersPage /></RoleRoute>} />
         <Route path="/roles" element={<RoleRoute permission="roles.view"><RolesPage /></RoleRoute>} />
+        <Route path="/configuracoes/empresa" element={<RoleRoute permission="company_settings.view"><CompanySettingsPage /></RoleRoute>} />
+        <Route path="/premios" element={<RoleRoute permission="awards.view"><AwardsPage /></RoleRoute>} />
         <Route path="/funcionarios" element={<RoleRoute permission="employees.view"><EmployeesPage /></RoleRoute>} />
         <Route path="/funcionarios/novo" element={<RoleRoute permission="employees.create"><EmployeeCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.create"><EmployeeQuickCreatePage /></RoleRoute>} />

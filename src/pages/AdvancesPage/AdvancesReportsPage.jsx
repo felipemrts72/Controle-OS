@@ -3,6 +3,7 @@ import { BarChart3, FileSearch, History, Search } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { formatDate, formatMoney } from '../EmployeesPage/employeeUtils.js';
+import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import './AdvancesPage.css';
 
 const emptyEmployeeSearch = { search: '', results: [], selected: null, loading: false };
@@ -15,9 +16,8 @@ function today() {
   return `${year}-${month}-${day}`;
 }
 
-function openReport(path, params) {
-  const query = new URLSearchParams(params);
-  window.open(`${path}?${query.toString()}`, '_blank', 'noopener,noreferrer');
+async function openReport(path, params, fallbackFilename = 'relatorio-vales.pdf') {
+  await downloadAuthenticatedFile(path, fallbackFilename, { params });
 }
 
 function apiErrorMessage(error, fallback = 'Não foi possível concluir a operação.') {
@@ -81,14 +81,18 @@ export function AdvancesReportsPage() {
     if (tab === 'audit') loadAudit();
   }, [tab]);
 
-  function generateGeneral() {
+  async function generateGeneral() {
     const params = generalMode === 'current'
       ? { mode: 'current' }
       : { mode: 'period', from: generalPeriod.from, to: generalPeriod.to };
-    openReport('/vales/relatorios/geral', params);
+    try {
+      await openReport('/advances/reports/general/pdf', params);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Não foi possível gerar o relatório geral.'));
+    }
   }
 
-  function generateIndividual() {
+  async function generateIndividual() {
     if (!employeeSearch.selected) {
       toast.error('Selecione um funcionario.');
       return;
@@ -96,7 +100,11 @@ export function AdvancesReportsPage() {
     const params = individualMode === 'current'
       ? { mode: 'current' }
       : { mode: 'period', from: individualPeriod.from, to: individualPeriod.to };
-    openReport(`/vales/relatorios/individual/${employeeSearch.selected.id}`, params);
+    try {
+      await openReport(`/advances/reports/individual/${employeeSearch.selected.id}/pdf`, params, 'extrato-individual-vales.pdf');
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Não foi possível gerar o extrato individual.'));
+    }
   }
 
   return (
@@ -179,7 +187,7 @@ export function AdvancesReportsPage() {
                 <span>Aberto por {cycle.opened_by_name || '-'} · Fechado por {cycle.closed_by_name || '-'}</span>
               </div>
               <div>{cycle.employee_count} funcionarios · {formatMoney(cycle.total_amount)}</div>
-              <button className="button" type="button" onClick={() => openReport('/vales/relatorios/geral', { cycle_id: cycle.id })}>Relatorio do ciclo</button>
+              <button className="button" type="button" onClick={() => openReport('/advances/reports/general/pdf', { cycle_id: cycle.id }).catch((error) => toast.error(apiErrorMessage(error, 'Não foi possível gerar o relatório do ciclo.')))}>Relatorio do ciclo</button>
             </div>
           ))}
           {!cycles.length && <p>Nenhum ciclo fechado encontrado.</p>}

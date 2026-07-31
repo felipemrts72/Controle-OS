@@ -1,18 +1,10 @@
 .sector-form {
-  align-items: center;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr 1fr auto auto;
+  gap: 12px;
 }
 
-.sector-form__toggle {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
-}
-
-@media (max-width: 760px) {
-  .sector-form {
-    grid-template-columns: 1fr;
-  }
+.sector-form__hint {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0;
 }

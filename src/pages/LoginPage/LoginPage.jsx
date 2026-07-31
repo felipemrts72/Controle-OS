@@ -27,7 +27,7 @@ export function LoginPage() {
   return (
     <main className="login-page">
       <form className="login-page__form" onSubmit={submit}>
-        <h1 className="login-page__title">Controle Interno de OS e Expedição</h1>
+        <h1 className="login-page__title">OliMen Gestão</h1>
         <label className="field">
           <span className="field__label">Usuário</span>
           <input className="field__input" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required />

@@ -11,10 +11,15 @@ import {
   documentShow,
   documentStore,
   documentsIndex,
+  employeeIncompleteReportPdf,
+  employeeIncompleteReportPreview,
   index,
+  incompleteReportPdf,
+  incompleteReportPreview,
   mealAllowanceHistory,
   mealAllowanceStore,
   printData,
+  profilePdf,
   quickStore,
   salaryHistory,
   salaryStore,
@@ -32,6 +37,9 @@ employeeRoutes.use(authenticate);
 employeeRoutes.get('/', requirePermission('employees.view'), index);
 employeeRoutes.post('/', requirePermission('employees.create'), store);
 employeeRoutes.post('/quick', requirePermission('employees.create'), quickStore);
+employeeRoutes.get('/incomplete-report', requirePermission('employees.profile.print'), incompleteReportPreview);
+employeeRoutes.get('/incomplete-report-pdf', requirePermission('employees.profile.print'), incompleteReportPdf);
+employeeRoutes.post('/incomplete-report-pdf', requirePermission('employees.profile.print'), incompleteReportPdf);
 employeeRoutes.get('/:id', requirePermission('employees.view'), show);
 employeeRoutes.put('/:id', requireAnyPermission('employees.edit', 'employees.manage'), update);
 employeeRoutes.post('/:id/complete-profile', requireAnyPermission('employees.create', 'employees.edit', 'employees.manage'), completeProfile);
@@ -58,5 +66,9 @@ employeeRoutes.get('/:id/documents/:documentId', requirePermission('employees.do
 employeeRoutes.delete('/:id/documents/:documentId', requireAnyPermission('employees.documents.manage', 'employees.manage'), documentDestroy);
 
 employeeRoutes.get('/:id/profile-print-data', requirePermission('employees.profile.print'), printData);
+employeeRoutes.get('/:id/profile-pdf', requirePermission('employees.profile.print'), profilePdf);
+employeeRoutes.get('/:id/incomplete-report', requirePermission('employees.profile.print'), employeeIncompleteReportPreview);
+employeeRoutes.get('/:id/incomplete-report-pdf', requirePermission('employees.profile.print'), employeeIncompleteReportPdf);
+employeeRoutes.post('/:id/incomplete-report-pdf', requirePermission('employees.profile.print'), employeeIncompleteReportPdf);
 employeeRoutes.get('/:id/audit', requireAnyPermission('employees.edit', 'employees.manage'), auditIndex);
 employeeRoutes.get('/:id/advances', requirePermission('advances.view'), advancesProfile);

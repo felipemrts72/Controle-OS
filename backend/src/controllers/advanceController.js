@@ -22,6 +22,13 @@ import {
   submitAdvanceList,
   updateAdvanceList,
 } from '../services/advanceService.js';
+import {
+  buildAdvanceSummaryPdf,
+  buildGeneralAdvanceReportPdf,
+  buildIndividualAdvanceReportPdf,
+} from '../services/pdf/advancePdfService.js';
+import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
+import { getCompanyPdfData } from '../services/companySettingsService.js';
 
 export async function home(req, res, next) {
   try {
@@ -65,9 +72,31 @@ export async function generalReport(req, res, next) {
   } catch (error) { next(error); }
 }
 
+export async function generalReportPdf(req, res, next) {
+  try {
+    const [report, company] = await Promise.all([
+      getGeneralAdvanceReport(req.query, req.user),
+      getCompanyPdfData(),
+    ]);
+    const pdf = await buildGeneralAdvanceReportPdf(report, { company });
+    sendPdfResponse(res, pdf, 'relatorio-geral-vales.pdf');
+  } catch (error) { next(error); }
+}
+
 export async function individualReport(req, res, next) {
   try {
     res.json(await getIndividualAdvanceReport(req.params.employeeId, req.query, req.user));
+  } catch (error) { next(error); }
+}
+
+export async function individualReportPdf(req, res, next) {
+  try {
+    const [report, company] = await Promise.all([
+      getIndividualAdvanceReport(req.params.employeeId, req.query, req.user),
+      getCompanyPdfData(),
+    ]);
+    const pdf = await buildIndividualAdvanceReportPdf(report, { company });
+    sendPdfResponse(res, pdf, `extrato-vales-${report.employee.full_name}.pdf`);
   } catch (error) { next(error); }
 }
 
@@ -158,5 +187,19 @@ export async function listApprove(req, res, next) {
 export async function listSummary(req, res, next) {
   try {
     res.json(await getAdvanceSummary(req.params.id));
+  } catch (error) { next(error); }
+}
+
+export async function listSummaryPdf(req, res, next) {
+  try {
+    const [summary, company] = await Promise.all([
+      getAdvanceSummary(req.params.id),
+      getCompanyPdfData(),
+    ]);
+    const pdf = await buildAdvanceSummaryPdf(summary, { company });
+    const listDate = summary.list_date instanceof Date
+      ? summary.list_date.toISOString().slice(0, 10)
+      : String(summary.list_date || req.params.id).slice(0, 10);
+    sendPdfResponse(res, pdf, `resumo-lista-vales-${listDate}.pdf`);
   } catch (error) { next(error); }
 }

@@ -1,4 +1,5 @@
 export function errorMiddleware(error, req, res, _next) {
+  if (res.headersSent) return _next(error);
   let status = error.status || 500;
   let message = status === 500 ? 'Erro interno do servidor.' : error.message;
   let code = error.code;

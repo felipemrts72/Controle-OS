@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
-import { Boxes, ClipboardList, FileSearch, HandCoins, History, IdCard, LayoutDashboard, Package, QrCode, Tags, Tv, Users, Wrench } from 'lucide-react';
+import { Boxes, Building2, ClipboardList, FileSearch, HandCoins, History, IdCard, LayoutDashboard, Package, QrCode, Tags, Trophy, Tv, Users, Wrench } from 'lucide-react';
 import { getStoredUser } from '../../services/api.js';
 import { canAccessPermission, getDefaultRoute } from '../../utils/permissions.js';
 import './Sidebar.css';
@@ -10,6 +10,7 @@ const links = [
   { to: '/os/nova', label: 'Nova OS', icon: ClipboardList, permission: 'orders.create' },
   { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products.view' },
   { to: '/funcionarios', label: 'Funcionários', icon: IdCard, permission: 'employees.view' },
+  { to: '/premios', label: 'Prêmios', icon: Trophy, permission: 'awards.view' },
   { to: '/vales', label: 'Vales', icon: HandCoins, permission: 'advances.view' },
   { to: '/vales/relatorios', label: 'Relatórios de Vales', icon: FileSearch, permission: 'advances.reports.view' },
   { to: '/setores', label: 'Setores', icon: Boxes, permission: 'sectors.view' },
@@ -21,6 +22,7 @@ const links = [
   { to: '/historico-ordens', label: 'Histórico de Ordens', icon: History, permission: 'orders.history.view' },
   { to: '/usuarios', label: 'Usuários', icon: Users, permission: 'users.view' },
   { to: '/roles', label: 'Roles/Permissões', icon: Users, permission: 'roles.view' },
+  { to: '/configuracoes/empresa', label: 'Configurações da Empresa', icon: Building2, permission: 'company_settings.view' },
 ];
 
 export function Sidebar({ onNavigate }) {
@@ -29,7 +31,7 @@ export function Sidebar({ onNavigate }) {
 
   return (
     <aside className="sidebar" id="app-sidebar">
-      <Link to={getDefaultRoute(user)} className="sidebar__brand" onClick={onNavigate}>Controle Interno</Link>
+      <Link to={getDefaultRoute(user)} className="sidebar__brand" onClick={onNavigate}>OliMen Gestão</Link>
       <nav className="sidebar__nav">
         {visibleLinks.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => `sidebar__link ${isActive ? 'sidebar__link_active' : ''}`}>
