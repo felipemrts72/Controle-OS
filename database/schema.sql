@@ -1112,3 +1112,6 @@ SET is_active = TRUE,
   approval_status = 'approved',
   updated_at = NOW()
 WHERE username = 'admin';
+-- O módulo de compras e fornecedores é mantido pela migration incremental abaixo.
+-- O include preserva uma única fonte SQL para o schema consolidado e para o migration runner.
+\ir migrations/20260731_purchases_suppliers_module.sql

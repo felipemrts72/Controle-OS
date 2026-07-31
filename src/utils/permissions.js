@@ -1,4 +1,5 @@
 export const routeCandidates = [
+  { path: '/compras', permission: 'purchases.view' },
   { path: '/dashboard', permission: 'dashboard.view' },
   { path: '/os', permission: 'orders.view' },
   { path: '/fila-etiquetas', permission: 'labels.view' },

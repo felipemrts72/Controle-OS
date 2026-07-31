@@ -32,6 +32,7 @@ import { AdvanceGeneralReportPage } from '../pages/AdvancesPage/AdvanceGeneralRe
 import { AdvanceIndividualReportPage } from '../pages/AdvancesPage/AdvanceIndividualReportPage.jsx';
 import { CompanySettingsPage } from '../pages/CompanySettingsPage/CompanySettingsPage.jsx';
 import { AwardsPage } from '../pages/AwardsPage/AwardsPage.jsx';
+import { PurchasesPage } from '../pages/PurchasesPage/PurchasesPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -151,6 +152,13 @@ export function AppRoutes() {
         <Route path="/vales" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
         <Route path="/vales/relatorios" element={<RoleRoute permission="advances.reports.view"><AdvancesReportsPage /></RoleRoute>} />
         <Route path="/vales/:id" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
+        <Route path="/compras" element={<RoleRoute permission="purchases.view"><PurchasesPage section="overview" /></RoleRoute>} />
+        <Route path="/compras/solicitacoes" element={<RoleRoute permission="purchases.view"><PurchasesPage section="requests" /></RoleRoute>} />
+        <Route path="/compras/aprovacoes" element={<RoleRoute permission="purchases.approve"><PurchasesPage section="approvals" /></RoleRoute>} />
+        <Route path="/compras/cotacoes" element={<RoleRoute permission="purchases.view"><PurchasesPage section="quotes" /></RoleRoute>} />
+        <Route path="/compras/pedidos" element={<RoleRoute permission="purchases.view"><PurchasesPage section="orders" /></RoleRoute>} />
+        <Route path="/compras/fornecedores" element={<RoleRoute permission="suppliers.view"><PurchasesPage section="suppliers" /></RoleRoute>} />
+        <Route path="/compras/grupos" element={<RoleRoute permission="supplier_groups.manage"><PurchasesPage section="groups" /></RoleRoute>} />
         <Route path="/acesso-negado" element={<AccessDenied />} />
       </Route>
     </Routes>
