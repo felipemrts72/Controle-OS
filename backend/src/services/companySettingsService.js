@@ -14,6 +14,7 @@ const allowedLogoMimeTypes = new Set(['image/png', 'image/jpeg']);
 const editableFields = [
   'nome_fantasia', 'razao_social', 'cnpj', 'telefone', 'email', 'endereco', 'numero', 'complemento',
   'bairro', 'cidade', 'estado', 'cep', 'nome_representante', 'cpf_representante', 'cargo_representante',
+  'delivery_address', 'purchase_response_email', 'purchase_response_whatsapp', 'purchase_responsible_name',
 ];
 
 function cleanText(value) {
@@ -55,7 +56,7 @@ function validateAndNormalize(body) {
   const payload = {};
   for (const field of editableFields) {
     if (!(field in body)) continue;
-    payload[field] = ['cnpj', 'cpf_representante', 'cep', 'telefone'].includes(field)
+    payload[field] = ['cnpj', 'cpf_representante', 'cep', 'telefone', 'purchase_response_whatsapp'].includes(field)
       ? digitsOrNull(body[field])
       : cleanText(body[field]);
   }
@@ -69,6 +70,8 @@ function validateAndNormalize(body) {
   if (payload.cep && payload.cep.length !== 8) throw httpError(400, 'CEP inválido.', { field: 'cep' });
   if (payload.telefone && ![10, 11].includes(payload.telefone.length)) throw httpError(400, 'Telefone inválido.', { field: 'telefone' });
   if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) throw httpError(400, 'E-mail inválido.', { field: 'email' });
+  if (payload.purchase_response_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.purchase_response_email)) throw httpError(400, 'E-mail de resposta de compras inválido.', { field: 'purchase_response_email' });
+  if (payload.purchase_response_whatsapp && ![10, 11].includes(payload.purchase_response_whatsapp.length)) throw httpError(400, 'WhatsApp de resposta inválido.', { field: 'purchase_response_whatsapp' });
   if (payload.estado) {
     payload.estado = payload.estado.toUpperCase();
     if (!/^[A-Z]{2}$/.test(payload.estado)) throw httpError(400, 'Estado inválido.', { field: 'estado' });

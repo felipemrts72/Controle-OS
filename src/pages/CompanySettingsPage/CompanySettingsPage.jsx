@@ -8,6 +8,7 @@ import './CompanySettingsPage.css';
 const fields = [
   'nome_fantasia', 'razao_social', 'cnpj', 'telefone', 'email', 'endereco', 'numero', 'complemento',
   'bairro', 'cidade', 'estado', 'cep', 'nome_representante', 'cpf_representante', 'cargo_representante',
+  'delivery_address', 'purchase_response_email', 'purchase_response_whatsapp', 'purchase_responsible_name',
 ];
 const emptyForm = Object.fromEntries(fields.map((field) => [field, '']));
 
@@ -43,6 +44,7 @@ function hydratedForm(data) {
     if (field === 'cpf_representante') return [field, maskCpf(value)];
     if (field === 'cep') return [field, maskCep(value)];
     if (field === 'telefone') return [field, maskPhone(value)];
+    if (field === 'purchase_response_whatsapp') return [field, maskPhone(value)];
     return [field, value];
   }));
 }
@@ -100,6 +102,7 @@ export function CompanySettingsPage() {
     if (name === 'cpf_representante') value = maskCpf(value);
     if (name === 'cep') value = maskCep(value);
     if (name === 'telefone') value = maskPhone(value);
+    if (name === 'purchase_response_whatsapp') value = maskPhone(value);
     if (name === 'estado') value = value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
     setForm((current) => ({ ...current, [name]: value }));
   }
@@ -218,6 +221,17 @@ export function CompanySettingsPage() {
             <label className="field"><span className="field__label">Nome</span><input className="field__input" name="nome_representante" value={form.nome_representante} onChange={changeField} disabled={!canEdit} /></label>
             <label className="field"><span className="field__label">CPF</span><input className="field__input" name="cpf_representante" value={form.cpf_representante} onChange={changeField} inputMode="numeric" placeholder="000.000.000-00" disabled={!canEdit} /></label>
             <label className="field"><span className="field__label">Cargo</span><input className="field__input" name="cargo_representante" value={form.cargo_representante} onChange={changeField} disabled={!canEdit} /></label>
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2>Compras e cotações</h2>
+          <p className="page__subtitle">Dados sugeridos ao criar uma cotação. Todos podem ser ajustados na própria cotação.</p>
+          <div className="company-settings-page__grid">
+            <label className="field company-settings-page__wide"><span className="field__label">Endereço padrão de entrega</span><input className="field__input" name="delivery_address" value={form.delivery_address} onChange={changeField} placeholder="Em branco, usa o endereço principal da empresa" disabled={!canEdit} /></label>
+            <label className="field"><span className="field__label">E-mail para resposta</span><input className="field__input" type="email" name="purchase_response_email" value={form.purchase_response_email} onChange={changeField} placeholder="Em branco, usa o e-mail principal" disabled={!canEdit} /></label>
+            <label className="field"><span className="field__label">WhatsApp para resposta</span><input className="field__input" name="purchase_response_whatsapp" value={form.purchase_response_whatsapp} onChange={changeField} inputMode="tel" placeholder="Em branco, usa o telefone principal" disabled={!canEdit} /></label>
+            <label className="field"><span className="field__label">Responsável por compras</span><input className="field__input" name="purchase_responsible_name" value={form.purchase_responsible_name} onChange={changeField} placeholder="Em branco, usa o representante" disabled={!canEdit} /></label>
           </div>
         </div>
 

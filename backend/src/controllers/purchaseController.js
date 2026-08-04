@@ -2,6 +2,7 @@ import * as service from '../services/purchaseService.js';
 import { getCompanyPdfData } from '../services/companySettingsService.js';
 import { buildPurchaseQuotePdf } from '../services/pdf/purchaseQuotePdfService.js';
 import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
+import * as importService from '../services/purchaseImportService.js';
 
 const handler = (fn, status = 200) => async (req, res, next) => { try { res.status(status).json(await fn(req)); } catch (error) { next(error); } };
 
@@ -10,6 +11,10 @@ export const suppliersShow = handler((req) => service.getSupplier(req.params.id)
 export const suppliersStore = handler((req) => service.createSupplier(req.body, req.user), 201);
 export const suppliersUpdate = handler((req) => service.updateSupplier(req.params.id, req.body, req.user));
 export const suppliersActive = handler((req) => service.setSupplierActive(req.params.id, req.body.is_active, req.user));
+export const supplierCatalog = handler((req) => importService.listSupplierCatalog(req.params.id, req.query));
+export const supplierMappingStore = handler((req) => importService.saveSupplierMapping(req.params.id, req.body, req.user), 201);
+export const supplierMappingActive = handler((req) => importService.setSupplierMappingActive(req.params.id, req.params.mappingId, req.body.is_active, req.user));
+export const supplierPrices = handler((req) => importService.getSupplierPriceHistory(req.params.id, req.query.mapping_id));
 export const groupsIndex = handler((req) => service.listMaterialGroups(req.query));
 export const groupsStore = handler((req) => service.createMaterialGroup(req.body, req.user), 201);
 export const groupsUpdate = handler((req) => service.updateMaterialGroup(req.params.id, req.body, req.user));
@@ -23,6 +28,8 @@ export const requestsTransition = handler((req) => service.transitionPurchaseReq
 export const quotesIndex = handler((req) => service.listQuoteRequests(req.query));
 export const quotesShow = handler((req) => service.getQuoteRequest(req.params.id, req.user));
 export const quotesStore = handler((req) => service.createQuoteRequest(req.body, req.user), 201);
+export const quotesDirectStore = handler((req) => service.createQuoteRequest({ ...req.body, quote_type: 'direct' }, req.user), 201);
+export const quotesDefaults = handler(() => service.getQuoteDefaults());
 export const quotesSuggest = handler((req) => service.suggestSuppliers(req.params.requestId));
 export const quotesDispatch = handler((req) => service.registerQuoteDispatch(req.params.id, req.body, req.user), 201);
 export const quotesProposal = handler((req) => service.registerProposal(req.params.id, req.body, req.user), 201);
@@ -34,6 +41,10 @@ export const purchasesDirect = handler((req) => service.createDirectPurchase(req
 export const purchasesReceive = handler((req) => service.receivePurchase(req.params.id, req.body, req.user), 201);
 export const purchasesCancel = handler((req) => service.cancelPurchase(req.params.id, req.body.reason, req.user));
 export const purchasesDashboard = handler((req) => service.getPurchaseDashboard(req.user));
+export const importsPreview = handler((req) => importService.previewImport(req.body, req.user));
+export const importsConfirm = handler((req) => importService.confirmImport(req.body, req.user), 201);
+export const importsCreateProduct = handler((req) => importService.createProductFromImport(req.body, req.user), 201);
+export const importsProducts = handler((req) => importService.listImportProducts(req.query.search));
 
 export async function quotesText(req, res, next) { try {
   const [quote, company] = await Promise.all([service.quoteTextData(req.params.id), getCompanyPdfData()]);
@@ -41,7 +52,7 @@ export async function quotesText(req, res, next) { try {
   const lines = [`A empresa ${companyName} solicita orçamento dos itens relacionados abaixo. Favor informar preço, marca, prazo de entrega, condição de pagamento e validade da proposta.`, '', `Cotação: ${quote.number}`];
   quote.items.forEach((item, index) => lines.push(`${index + 1}. ${item.description} — ${item.quantity} ${item.unit}${item.technical_specification ? ` — ${item.technical_specification}` : ''}`));
   lines.push('', `Prazo para resposta: ${quote.response_deadline || 'a combinar'}`, `Local de entrega: ${quote.delivery_address || 'a combinar'}`, `Retorno: ${[quote.response_email, quote.response_whatsapp].filter(Boolean).join(' | ') || 'a combinar'}`);
-  if (quote.notes) lines.push(`Observações: ${quote.notes}`); lines.push(`Responsável: ${quote.responsible_name}`); res.json({ text: lines.join('\n') });
+  if (quote.notes) lines.push(`Observações: ${quote.notes}`); lines.push(`Responsável: ${quote.contact_responsible_name || quote.responsible_name}`); res.json({ text: lines.join('\n') });
 } catch (error) { next(error); } }
 
 export async function quotesPdf(req, res, next) { try {

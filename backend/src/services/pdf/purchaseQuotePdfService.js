@@ -5,7 +5,7 @@ export async function buildPurchaseQuotePdf(quote, supplier, company) {
   addKeyValueGrid(context, [
     { label: 'Solicitação de compra', value: quote.request_number },
     { label: 'Prazo para resposta', value: formatDateBR(quote.response_deadline) },
-    { label: 'Responsável', value: quote.responsible_name },
+    { label: 'Responsável', value: quote.contact_responsible_name || quote.responsible_name },
     { label: 'Contato para retorno', value: [quote.response_email, quote.response_whatsapp].filter(Boolean).join(' | ') || '-' },
   ]);
   addSectionTitle(context, 'Itens solicitados');
@@ -19,4 +19,3 @@ export async function buildPurchaseQuotePdf(quote, supplier, company) {
   if (quote.notes) addParagraph(context, `Observações: ${quote.notes}`);
   return finalizePdf(context);
 }
-
