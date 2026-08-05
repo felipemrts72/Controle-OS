@@ -29,7 +29,7 @@ export function ShippingAuditPage() {
   return (
     <section className="page shipping-audit-page">
       <div className="page__header">
-        <h1 className="page__title">Auditoria de Expedições</h1>
+        <h1 className="page__title">Auditoria</h1>
       </div>
 
       {error && <p className="shipping-audit-page__error">{error}</p>}

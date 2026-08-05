@@ -8,6 +8,7 @@ import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { useEscapeKey } from '../../hooks/useEscapeKey.js';
 import { canAccessPermission } from '../../utils/permissions.js';
+import { shouldScrollElementIntoView } from '../../utils/viewport.js';
 import './ShippingPage.css';
 
 function formatDate(date) {
@@ -52,7 +53,9 @@ export function ShippingPage() {
   const [readyOrders, setReadyOrders] = useState([]);
   const [readyOrdersLoading, setReadyOrdersLoading] = useState(false);
   const [readyOrderConfirmation, setReadyOrderConfirmation] = useState(null);
+  const [scrollRequest, setScrollRequest] = useState(0);
   const lookupRef = useRef(null);
+  const loadedSaleRef = useRef(null);
   const autoCloseTimerRef = useRef(null);
   const lastReadRef = useRef({ code: '', readAt: 0 });
 
@@ -73,13 +76,14 @@ export function ShippingPage() {
     };
   }
 
-  function applyLookup(payload) {
+  function applyLookup(payload, options = {}) {
     const nextVolumes = payload.volumes || (payload.shipment_volume_id ? [payload] : []);
     const nextSummary = payload.sale_summary || getSummaryFromVolume(nextVolumes[0]);
     setVolumes(nextVolumes);
     setSaleSummary(nextSummary);
     if (nextSummary?.sale_number) setCurrentSaleNumber(nextSummary.sale_number);
     setMessage('');
+    if (options.scrollToResult) setScrollRequest((value) => value + 1);
   }
 
   function showFeedback(nextFeedback) {
@@ -142,16 +146,29 @@ export function ShippingPage() {
     refreshReadyOrders();
   }, [refreshReadyOrders]);
 
+  useEffect(() => {
+    if (!scrollRequest || !saleSummary || !loadedSaleRef.current) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const element = loadedSaleRef.current;
+      if (!element) return;
+      if (shouldScrollElementIntoView(element.getBoundingClientRect(), window.innerHeight)) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [scrollRequest, saleSummary]);
+
   async function lookupCode(code) {
     const normalizedCode = String(code || '').replace(/\s/g, '');
     if (shouldIgnoreDuplicateCode(normalizedCode)) return;
     try {
       const response = await api.get(`/shipping/code/${normalizedCode}`);
-      applyLookup(response.data);
+      applyLookup(response.data, { scrollToResult: true });
       toast.success('Volume localizado.');
     } catch {
       setVolumes([]);
       setSaleSummary(null);
+      setMessage('Código não encontrado.');
       showFeedback({
         variant: 'invalid',
         title: 'CÓDIGO NÃO ENCONTRADO',
@@ -162,14 +179,23 @@ export function ShippingPage() {
   }
 
   async function lookupSale(sale) {
-    const response = await api.get(`/shipping/sale/${sale}`);
-    applyLookup(response.data);
-    if (response.data.sale_summary) setCurrentSaleNumber(response.data.sale_summary.sale_number);
+    try {
+      const response = await api.get(`/shipping/sale/${sale}`);
+      if (!response.data.sale_summary) throw new Error('SALE_NOT_FOUND');
+      applyLookup(response.data, { scrollToResult: true });
+      setCurrentSaleNumber(response.data.sale_summary.sale_number);
+      return true;
+    } catch {
+      setVolumes([]);
+      setSaleSummary(null);
+      setMessage('Venda não encontrada.');
+      toast.error('Venda não encontrada.');
+      return false;
+    }
   }
 
   async function loadReadyOrder(order) {
-    await lookupSale(order.sale_number);
-    toast.success('Venda carregada para expedição.');
+    if (await lookupSale(order.sale_number)) toast.success('Venda carregada para expedição.');
   }
 
   async function handleLoadReadyOrder(order) {
@@ -268,6 +294,7 @@ export function ShippingPage() {
     const code = String(decodedText || '').replace(/\s/g, '');
     if (shouldIgnoreDuplicateCode(code)) return;
     if (!/^\d{6}$/.test(code)) {
+      setMessage('QR Code inválido.');
       showFeedback({
         variant: 'invalid',
         title: 'QR CODE INVÁLIDO',
@@ -291,12 +318,14 @@ export function ShippingPage() {
         return;
       }
       if (!canConfirm) {
-        applyLookup(response.data);
+        applyLookup(response.data, { scrollToResult: true });
         toast.success('Volume localizado.');
         return;
       }
       await confirmCode(code);
+      setScrollRequest((value) => value + 1);
     } catch {
+      setMessage('Código não encontrado.');
       showFeedback({
         variant: 'invalid',
         title: 'CÓDIGO NÃO ENCONTRADO',
@@ -312,15 +341,49 @@ export function ShippingPage() {
     const code = pendingSaleSwitch.code;
     setPendingSaleSwitch(null);
     await confirmCode(code);
+    setScrollRequest((value) => value + 1);
   }
 
   return (
     <section className="page shipping-page">
       <div className="page__header">
-        <h1 className="page__title">Expedição</h1>
+        <h1 className="page__title">Conferência e envio</h1>
       </div>
       <QrScannerBox onScan={handleQrScan} />
       <ShippingLookup ref={lookupRef} onLookupCode={lookupCode} onLookupSale={lookupSale} />
+      {message && <div className="shipping-page__message">{message}</div>}
+      {saleSummary && (
+        <div ref={loadedSaleRef} className="shipping-page__loaded-sale">
+          <section className="shipping-page__status panel">
+            <div>
+              <span>Venda</span>
+              <strong>{saleSummary.sale_number}</strong>
+            </div>
+            <div>
+              <span>Cliente</span>
+              <strong>{saleSummary.customer_name}</strong>
+            </div>
+            <div>
+              <span>Data de entrega</span>
+              <strong>{formatDate(saleSummary.promised_date)}</strong>
+            </div>
+            <div>
+              <span>Expedidos</span>
+              <strong>{saleSummary.shipped_volumes}/{saleSummary.total_volumes}</strong>
+            </div>
+            <div className="shipping-page__remaining">
+              <span>Faltam</span>
+              <strong>{saleSummary.remaining_volumes}</strong>
+            </div>
+          </section>
+          <ShippingResultCard
+            volumes={volumes}
+            onConfirmCode={confirmCode}
+            onConfirmSale={confirmSale}
+            canConfirm={canConfirm}
+          />
+        </div>
+      )}
       {canViewReadyOrders && (
         <section className="shipping-ready panel">
           <div className="shipping-ready__header">
@@ -371,38 +434,6 @@ export function ShippingPage() {
           )}
         </section>
       )}
-      {saleSummary && (
-        <section className="shipping-page__status panel">
-          <div>
-            <span>Venda</span>
-            <strong>{saleSummary.sale_number}</strong>
-          </div>
-          <div>
-            <span>Cliente</span>
-            <strong>{saleSummary.customer_name}</strong>
-          </div>
-          <div>
-            <span>Data de entrega</span>
-            <strong>{formatDate(saleSummary.promised_date)}</strong>
-          </div>
-          <div>
-            <span>Expedidos</span>
-            <strong>{saleSummary.shipped_volumes}/{saleSummary.total_volumes}</strong>
-          </div>
-          <div className="shipping-page__remaining">
-            <span>Faltam</span>
-            <strong>{saleSummary.remaining_volumes}</strong>
-          </div>
-        </section>
-      )}
-      {message && <div className="shipping-page__message">{message}</div>}
-      <ShippingResultCard
-        volumes={volumes}
-        onConfirmCode={confirmCode}
-        onConfirmSale={confirmSale}
-        canConfirm={canConfirm}
-      />
-
       {feedback && (
         <div className="shipping-page__modal">
           <div className={`shipping-page__modal-content shipping-page__modal-content_${feedback.variant}`}>

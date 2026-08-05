@@ -29,12 +29,12 @@ export function InternalOrderCreatePage() {
     setIsSaving(true);
     try {
       const response = await api.post('/internal-orders', { ...pendingPayload, goods_ready: goodsReady });
-      toast.success(goodsReady ? 'OS criada e liberada para etiquetas.' : 'Ordem de Serviço criada com sucesso.');
+      toast.success(goodsReady ? 'Ordem de produção criada e liberada para etiquetas.' : 'Ordem de produção criada com sucesso.');
       setReadyModalOpen(false);
       setPendingPayload(null);
       navigate(goodsReady ? '/fila-etiquetas' : `/os/${response.data.id}`);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível criar a Ordem de Serviço.');
+      toast.error(error.response?.data?.message || 'Não foi possível criar a ordem de produção.');
     } finally {
       setIsSaving(false);
     }
@@ -43,7 +43,7 @@ export function InternalOrderCreatePage() {
   return (
     <section className="page internal-order-create-page">
       <div className="page__header">
-        <h1 className="page__title">Nova Ordem de Serviço Interna</h1>
+        <h1 className="page__title">Nova ordem de produção</h1>
       </div>
       <InternalOrderForm onSubmit={submit} isSubmitting={isSaving} />
       <ConfirmModal
@@ -61,7 +61,7 @@ export function InternalOrderCreatePage() {
           </>
         )}
       >
-        <p>Esta OS já deve ser liberada diretamente para a Fila de Etiquetas?</p>
+        <p>Esta ordem de produção já deve ser liberada diretamente para a Fila de Etiquetas?</p>
       </ConfirmModal>
     </section>
   );

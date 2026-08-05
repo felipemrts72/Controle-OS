@@ -18,6 +18,29 @@
   gap: 5px;
 }
 
+.sidebar__direct-link {
+  align-items: center;
+  border-left: 2px solid transparent;
+  border-radius: 9px;
+  color: #dbeafe;
+  display: grid;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 9px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  letter-spacing: 0.035em;
+  min-height: 40px;
+  padding: 9px 10px;
+  text-transform: uppercase;
+}
+
+.sidebar__direct-link:hover,
+.sidebar__direct-link_active {
+  background: rgba(255, 255, 255, 0.09);
+  border-left-color: #93c5fd;
+  color: #ffffff;
+}
+
 .sidebar__group {
   border-left: 2px solid transparent;
   border-radius: 9px;
@@ -55,6 +78,7 @@
 }
 
 .sidebar__group-toggle span,
+.sidebar__direct-link span,
 .sidebar__link span {
   min-width: 0;
   overflow: hidden;
@@ -122,6 +146,10 @@
   }
 
   .sidebar__group-toggle {
+    min-height: 44px;
+  }
+
+  .sidebar__direct-link {
     min-height: 44px;
   }
 

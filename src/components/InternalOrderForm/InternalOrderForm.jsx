@@ -9,7 +9,7 @@ function formatCustomerDetails(customer) {
   return [customer.phone, destination, customer.carrier_name].filter(Boolean).join(' - ') || 'Cliente salvo';
 }
 
-export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar Ordem de Serviço Interna', isSubmitting = false }) {
+export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar ordem de produção', isSubmitting = false }) {
   const toast = useToast();
   const [form, setForm] = useState(() => initialOrder ? {
     sale_number: initialOrder.sale_number || '',
@@ -202,7 +202,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     setHighlightedProductId('');
     setHasSearchedProducts(false);
     setMessage('');
-    toast.success('Item adicionado à OS.');
+    toast.success('Item adicionado à ordem de produção.');
   }
 
   function removeItem(index) {
@@ -213,7 +213,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
     event.preventDefault();
     if (!event.currentTarget.reportValidity()) return;
     if (!items.length) {
-      setMessage('Adicione ao menos um item na OS.');
+      setMessage('Adicione ao menos um item na ordem de produção.');
       return;
     }
     onSubmit({
@@ -315,7 +315,7 @@ export function InternalOrderForm({ initialOrder, onSubmit, submitLabel = 'Criar
 
       <div className="internal-order-form__items">
         <div className="internal-order-form__section-header">
-          <h3>Itens da OS</h3>
+          <h3>Itens da ordem de produção</h3>
         </div>
         <div className="internal-order-form__item-fields">
           <div className="field internal-order-form__search-field">

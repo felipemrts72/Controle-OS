@@ -452,8 +452,8 @@ export function EmployeeDetailPage() {
                     .filter((sector) => sector.is_active !== false || sector.id === employee.sector_id)
                     .map((sector) => ({ value: sector.id, label: `${sector.name}${sector.is_active === false ? ' — inativo' : ''}` })),
                 },
-                ...(canSalaryManage ? [{ name: 'current_salary', label: 'SalÃ¡rio atual', type: 'number' }] : []),
-                ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale alimentaÃ§Ã£o', type: 'number' }] : []),
+                ...(canSalaryManage ? [{ name: 'current_salary', label: 'Salário atual', type: 'number' }] : []),
+                ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale-alimentação', type: 'number' }] : []),
                 { name: 'pix_key', label: 'Chave Pix' },
                 { name: 'employment_status', label: 'Situação funcional', type: 'select', options: Object.entries(statusLabels).map(([value, label]) => ({ value, label })) },
                 { name: 'ctps_number', label: 'CTPS número' },

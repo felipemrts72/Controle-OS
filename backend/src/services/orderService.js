@@ -224,7 +224,7 @@ async function markOrderGoodsReady(client, orderId, userId) {
     action: 'create_ready_for_label',
     newValue: {
       goods_ready: true,
-      message: 'OS criada como mercadoria pronta. Tarefas marcadas como prontas automaticamente.',
+      message: 'Ordem de produção criada como mercadoria pronta. Tarefas marcadas como prontas automaticamente.',
       marked_tasks: updatedTasks.rows.length,
     },
     userId,
@@ -247,13 +247,13 @@ export function normalizeDeliveryPayload(payload) {
 
 export async function createInternalOrder(payload, userId) {
   return transaction(async (client) => {
-    if (!payload.items?.length) throw httpError(400, 'Informe ao menos um item na OS.');
+    if (!payload.items?.length) throw httpError(400, 'Informe ao menos um item na ordem de produção.');
     const delivery = normalizeDeliveryPayload(payload);
     const customer = await upsertCustomerForOrder(client, { ...payload, ...delivery });
 
     const duplicate = await client.query('SELECT id FROM internal_orders WHERE sale_number = $1', [payload.sale_number]);
     if (duplicate.rows[0]) {
-      throw httpError(409, 'Já existe uma OS cadastrada com este número de venda. Verifique o número informado ou utilize outro número.', {
+      throw httpError(409, 'Já existe uma ordem de produção cadastrada com este número de venda. Verifique o número informado ou utilize outro número.', {
         code: 'SALE_NUMBER_ALREADY_EXISTS',
         field: 'sale_number',
       });
@@ -288,7 +288,7 @@ export async function createInternalOrder(payload, userId) {
       const product = productResult.rows[0];
       if (!product) throw httpError(404, 'Produto não encontrado.');
       if (product.type === 'material_prima' && !item.is_spare_part) {
-        throw httpError(400, 'Matéria-prima só pode ser lançada na OS como peça de reposição.', {
+        throw httpError(400, 'Matéria-prima só pode ser lançada na ordem de produção como peça de reposição.', {
           code: 'MATERIAL_REQUIRES_SPARE_PART',
           field: 'is_spare_part',
         });

@@ -16,7 +16,7 @@ supplierRoutes.get('/:id/prices', requirePermission('supplier_prices.view'), c.s
 
 export const materialGroupRoutes = Router();
 materialGroupRoutes.use(authenticate);
-materialGroupRoutes.get('/', requireAnyPermission('supplier_groups.manage','suppliers.view','purchases.create_request','purchase_quotes.create'), c.groupsIndex);
+materialGroupRoutes.get('/', requireAnyPermission('purchases.view','purchases.create_request','purchase_quotes.create','suppliers.view','supplier_groups.manage'), c.groupsIndex);
 materialGroupRoutes.post('/', requirePermission('supplier_groups.manage'), c.groupsStore);
 materialGroupRoutes.put('/:id', requirePermission('supplier_groups.manage'), c.groupsUpdate);
 materialGroupRoutes.patch('/:id/active', requirePermission('supplier_groups.manage'), c.groupsActive);
@@ -28,8 +28,8 @@ purchaseRoutes.post('/imports/preview', requirePermission('purchase_items.import
 purchaseRoutes.post('/imports/confirm', requirePermission('purchase_items.import'), c.importsConfirm);
 purchaseRoutes.post('/imports/products', requirePermission('purchase_imports.create_product'), c.importsCreateProduct);
 purchaseRoutes.get('/imports/products', requireAnyPermission('purchase_items.import','supplier_catalog.manage'), c.importsProducts);
-purchaseRoutes.get('/requests', requirePermission('purchases.view'), c.requestsIndex);
-purchaseRoutes.get('/requests/:id', requirePermission('purchases.view'), c.requestsShow);
+purchaseRoutes.get('/requests', requireAnyPermission('purchases.view','purchases.approve'), c.requestsIndex);
+purchaseRoutes.get('/requests/:id', requireAnyPermission('purchases.view','purchases.approve'), c.requestsShow);
 purchaseRoutes.post('/requests', requirePermission('purchases.create_request'), c.requestsStore);
 purchaseRoutes.post('/requests/preapproved', requirePermission('purchases.create_preapproved'), c.requestsPreapproved);
 purchaseRoutes.put('/requests/:id', requirePermission('purchases.edit_own_request'), c.requestsUpdate);
@@ -46,8 +46,8 @@ purchaseRoutes.post('/quotes/:id/dispatches', requirePermission('purchase_quotes
 purchaseRoutes.post('/quotes/:id/proposals', requirePermission('purchase_quotes.register_response'), c.quotesProposal);
 purchaseRoutes.post('/quotes/:id/select', requirePermission('purchase_quotes.choose_supplier'), c.quotesSelect);
 purchaseRoutes.post('/quotes/:id/copied', requirePermission('purchases.view'), c.quotesCopied);
-purchaseRoutes.get('/orders', requirePermission('purchases.view'), c.purchasesIndex);
-purchaseRoutes.get('/orders/:id', requirePermission('purchases.view'), c.purchasesShow);
+purchaseRoutes.get('/orders', requireAnyPermission('purchases.view','purchases.receive'), c.purchasesIndex);
+purchaseRoutes.get('/orders/:id', requireAnyPermission('purchases.view','purchases.receive'), c.purchasesShow);
 purchaseRoutes.post('/orders/direct', requirePermission('purchases.create_direct'), c.purchasesDirect);
 purchaseRoutes.post('/orders/:id/receipts', requirePermission('purchases.receive'), c.purchasesReceive);
 purchaseRoutes.post('/orders/:id/cancel', requirePermission('purchases.cancel'), c.purchasesCancel);

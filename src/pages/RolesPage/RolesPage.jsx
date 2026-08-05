@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../services/api.js';
+import { api, getStoredUser } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission } from '../../utils/permissions.js';
-import { getStoredUser } from '../../services/api.js';
+import { groupPermissionsForPresentation } from '../../config/modulePresentation.js';
 import './RolesPage.css';
 
 const emptyForm = {
@@ -36,7 +36,7 @@ export function RolesPage() {
   }
 
   useEffect(() => {
-    load().catch(() => toast.error('Não foi possível carregar roles e permissões.'));
+    load().catch(() => toast.error('Não foi possível carregar perfis e permissões.'));
   }, []);
 
   useEffect(() => {
@@ -56,13 +56,10 @@ export function RolesPage() {
     });
   }, [roles, selectedRoleId]);
 
-  const groupedPermissions = useMemo(() => permissions.reduce((groups, permission) => {
-    const groupName = permission.group_name || 'Outras';
-    return {
-      ...groups,
-      [groupName]: [...(groups[groupName] || []), permission],
-    };
-  }, {}), [permissions]);
+  const groupedPermissions = useMemo(
+    () => groupPermissionsForPresentation(permissions),
+    [permissions],
+  );
 
   function startNewRole() {
     setSelectedRoleId(null);
@@ -92,15 +89,15 @@ export function RolesPage() {
       };
       if (form.id) {
         await api.put(`/roles/${form.id}`, payload);
-        toast.success('Role atualizada com sucesso.');
+        toast.success('Perfil atualizado com sucesso.');
       } else {
         const response = await api.post('/roles', payload);
         setSelectedRoleId(response.data.id);
-        toast.success('Role criada com sucesso.');
+        toast.success('Perfil criado com sucesso.');
       }
       await load();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível salvar a role.');
+      toast.error(error.response?.data?.message || 'Não foi possível salvar o perfil.');
     } finally {
       setSaving(false);
     }
@@ -109,8 +106,8 @@ export function RolesPage() {
   return (
     <section className="page roles-page">
       <div className="page__header roles-page__header">
-        <h1 className="page__title">Roles e Permissões</h1>
-        {canManage && <button className="button button_primary" type="button" onClick={startNewRole}>Nova role</button>}
+        <h1 className="page__title">Perfis e permissões</h1>
+        {canManage && <button className="button button_primary" type="button" onClick={startNewRole}>Novo perfil</button>}
       </div>
 
       <div className="roles-page__layout">
@@ -123,7 +120,7 @@ export function RolesPage() {
               onClick={() => setSelectedRoleId(role.id)}
             >
               <strong>{role.name}</strong>
-              <span>{role.is_active ? 'Ativa' : 'Inativa'}{role.is_system ? ' · Sistema' : ''}</span>
+              <span>{role.is_active ? 'Ativo' : 'Inativo'}{role.is_system ? ' · Sistema' : ''}</span>
             </button>
           ))}
         </div>
@@ -150,33 +147,38 @@ export function RolesPage() {
               disabled={!canManage || form.is_system}
               onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
             />
-            <span>Role ativa</span>
+            <span>Perfil ativo</span>
           </label>
 
           <div className="roles-page__permissions">
-            {Object.entries(groupedPermissions).map(([groupName, groupPermissions]) => (
-              <section className="roles-page__permission-group" key={groupName}>
-                <h2>{groupName}</h2>
-                <div className="roles-page__checks">
-                  {groupPermissions.map((permission) => (
-                    <label className="roles-page__check" key={permission.code}>
-                      <input
-                        type="checkbox"
-                        checked={form.permission_codes.includes(permission.code)}
-                        disabled={!canManage}
-                        onChange={() => togglePermission(permission.code)}
-                      />
-                      <span>{permission.name}</span>
-                    </label>
-                  ))}
-                </div>
+            {groupedPermissions.map(({ module, subdivisions }) => (
+              <section className="roles-page__permission-group" key={module}>
+                <h2>{module}</h2>
+                {subdivisions.map(({ name, items }) => (
+                  <div className="roles-page__permission-subdivision" key={name || `${module}-main`}>
+                    {name && <h3>{name}</h3>}
+                    <div className="roles-page__checks">
+                      {items.map((permission) => (
+                        <label className="roles-page__check" key={permission.code}>
+                          <input
+                            type="checkbox"
+                            checked={form.permission_codes.includes(permission.code)}
+                            disabled={!canManage}
+                            onChange={() => togglePermission(permission.code)}
+                          />
+                          <span>{permission.visualName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </section>
             ))}
           </div>
 
           {canManage && (
             <div className="roles-page__actions">
-              <button className="button button_primary" type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Salvar role'}</button>
+              <button className="button button_primary" type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Salvar perfil'}</button>
             </div>
           )}
         </form>

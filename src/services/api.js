@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: import.meta.env?.VITE_API_URL || '/api',
 });
 
 const AUTH_CLEARED_EVENT = 'controle-os-auth-cleared';
@@ -19,19 +19,20 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    const status = error.response?.status;
-    const token = getStoredToken();
-    const url = error.config?.url || '';
-    const isLoginRequest = url.includes('/auth/login');
-
-    if ((status === 401 || status === 403) && token && !isLoginRequest) {
-      handleUnauthorizedSession();
-    }
-
-    return Promise.reject(error);
-  },
+  handleApiError,
 );
+
+export function handleApiError(error) {
+  const status = error.response?.status;
+  const url = error.config?.url || '';
+  const isLoginRequest = url.includes('/auth/login');
+
+  if (status === 401 && !isLoginRequest) {
+    handleUnauthorizedSession();
+  }
+
+  return Promise.reject(error);
+}
 
 export function setSession(token, user) {
   isRedirectingToLogin = false;
@@ -65,10 +66,9 @@ export function onSessionCleared(callback) {
 }
 
 function handleUnauthorizedSession() {
-  clearSession();
-
   if (isRedirectingToLogin) return;
   isRedirectingToLogin = true;
+  clearSession();
 
   if (window.location.pathname !== '/entrar') {
     window.location.replace('/entrar');

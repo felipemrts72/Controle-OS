@@ -8,7 +8,9 @@ O frontend é uma SPA construída com React e o backend é uma API Express. Eles
 
 O PostgreSQL concentra a persistência operacional. O backend acessa o banco com SQL direto por meio do driver `pg`, sem ORM.
 
-As áreas principais abrangem ordens de serviço, produção, etiquetas, expedição, usuários, funcionários, vales e auditoria.
+As áreas visuais são Dashboard, Produção, Estoque, Compras, Expedição, Administrativo e Configurações. Comercial e Financeiro serão adicionados somente quando tiverem funcionalidades próprias.
+
+A apresentação modular é definida centralmente em `src/config/modulePresentation.js`. Identificadores técnicos legados — inclusive rotas `/os`, endpoints, tabelas e códigos de permissões — permanecem preservados. Não há integração automática entre os módulos: Estoque ainda não movimenta saldos, Recebimentos não cria entrada de estoque e Expedição não cria saída de estoque.
 
 ## 2. Diagrama de alto nível
 
@@ -64,6 +66,7 @@ Em desenvolvimento, o Vite pode chamar a API diretamente por `VITE_API_URL`. Em 
 │   └── schema.sql         # schema consolidado disponível
 ├── src/
 │   ├── components/        # componentes React reutilizáveis
+│   ├── config/            # navegação e apresentação visual das permissões
 │   ├── hooks/             # hooks compartilhados
 │   ├── pages/             # páginas e fluxos de interface
 │   ├── routes/            # roteamento e proteção de páginas
@@ -136,6 +139,8 @@ O serviço de permissões também mantém compatibilidade com os papéis legados
 Os middlewares `requirePermission`, `requireAnyPermission` e `requirePermissionOrAdmin` aplicam autorização nas rotas do backend. As verificações do frontend melhoram a navegação, mas a autorização efetiva permanece na API.
 
 ## 7. Domínios e módulos
+
+A Sidebar deriva a visibilidade dos subitens da permissão de cada rota, oculta módulos sem itens acessíveis e mantém o Dashboard como link direto. A tela Perfis e permissões usa a mesma configuração central para os nomes e agrupamentos visuais, sem depender de `permissions.group_name`.
 
 - **Ordens de serviço:** venda, cliente, entrega, itens, volumes e situação operacional.
 - **Clientes:** cadastro e reaproveitamento durante a criação de ordens.

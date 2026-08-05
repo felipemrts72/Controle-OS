@@ -1,10 +1,14 @@
 # OliMen Gestão
 
-Sistema web para controle de ordens de serviço, produção, etiquetagem, expedição, funcionários e vales.
+Sistema web para gestão de produção, produtos, compras, expedição, funcionários e vales.
 
 Alguns identificadores técnicos legados ainda utilizam o nome `Controle-OS` e são preservados para evitar impactos em integrações e dados locais.
 
 ## Visão geral
+
+A navegação é organizada visualmente por Dashboard, Produção, Estoque, Compras, Expedição, Administrativo e Configurações. Comercial e Financeiro são módulos futuros e ainda não aparecem na interface.
+
+Rotas, endpoints, tabelas e códigos de permissões legados são preservados por compatibilidade. A organização por módulos é de apresentação: não cria integrações automáticas entre áreas. Estoque ainda não possui movimentações; Recebimentos não gera entrada automática e Expedição não gera saída automática.
 
 A aplicação centraliza as principais áreas da operação:
 
@@ -114,9 +118,9 @@ O sistema gera etiquetas individuais ou em lote nos formatos suportados pela apl
 
 A expedição permite consultar e confirmar volumes por leitura de QR Code ou código numérico, além de consultar e confirmar uma venda completa. As operações relevantes são registradas para auditoria.
 
-### Usuários e permissões
+### Usuários, perfis e permissões
 
-O acesso é controlado por funções e permissões. Em cada requisição autenticada, o backend valida o JWT e consulta novamente o usuário no banco, fazendo com que alterações de função, permissões, aprovação ou ativação tenham efeito na requisição seguinte.
+O acesso é controlado por perfis e permissões. Em cada requisição autenticada, o backend valida o JWT e consulta novamente o usuário no banco, fazendo com que alterações de perfil, permissões, aprovação ou ativação tenham efeito na requisição seguinte.
 
 ### Funcionários
 

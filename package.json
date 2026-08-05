@@ -6,6 +6,7 @@
 "scripts": {
   "dev": "vite",
   "build": "vite build",
+  "test": "node --test",
   "preview": "vite preview",
   "frontend:prod": "node server.js",
   "server": "node backend/src/server.js",

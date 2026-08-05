@@ -24,7 +24,7 @@ export function Header() {
     <header className="header">
       <div>
         <strong>{user?.name || 'Usuário'}</strong>
-        <span className="header__role">{user?.role || ''}</span>
+        <span className="header__role">{user?.role_name || user?.role_slug || user?.role || ''}</span>
       </div>
       <button className="header__button" type="button" onClick={toggleTheme} title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'} aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}>
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}

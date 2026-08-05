@@ -1,20 +1,7 @@
-export const routeCandidates = [
-  { path: '/compras', permission: 'purchases.view' },
-  { path: '/dashboard', permission: 'dashboard.view' },
-  { path: '/os', permission: 'orders.view' },
-  { path: '/fila-etiquetas', permission: 'labels.view' },
-  { path: '/expedicao', permission: 'shipping.view' },
-  { path: '/servicos', permission: 'services.view' },
-  { path: '/produtos', permission: 'products.view' },
-  { path: '/funcionarios', permission: 'employees.view' },
-  { path: '/premios', permission: 'awards.view' },
-  { path: '/configuracoes/empresa', permission: 'company_settings.view' },
-  { path: '/vales/relatorios', permission: 'advances.reports.view' },
-  { path: '/vales', permission: 'advances.view' },
-  { path: '/tv', permission: 'tv.view' },
-  { path: '/usuarios', permission: 'users.view' },
-  { path: '/roles', permission: 'roles.view' },
-];
+import { getNavigationItemsInOrder } from '../config/modulePresentation.js';
+
+export const routeCandidates = getNavigationItemsInOrder()
+  .map(({ to: path, permission }) => ({ path, permission }));
 
 export const legacyRolePermissions = {
   admin: ['*'],
@@ -60,6 +47,7 @@ export function isSuperAdmin(user) {
 
 export function getDefaultRoute(user) {
   if (!user) return '/entrar';
+  if (canAccessPermission(user, 'dashboard.view')) return '/dashboard';
   const route = routeCandidates.find((candidate) => canAccessPermission(user, candidate.permission));
   return route?.path || '/acesso-negado';
 }

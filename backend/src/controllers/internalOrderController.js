@@ -28,7 +28,7 @@ async function createSoldItemRecords(client, orderId, item) {
   const product = productResult.rows[0];
   if (!product) throw httpError(404, 'Produto não encontrado ou inativo.', { code: 'PRODUCT_NOT_FOUND', field: 'product_id' });
   if (product.type === 'material_prima' && !item.is_spare_part) {
-    throw httpError(400, 'Matéria-prima só pode ser lançada na OS como peça de reposição.', {
+    throw httpError(400, 'Matéria-prima só pode ser lançada na ordem de produção como peça de reposição.', {
       code: 'MATERIAL_REQUIRES_SPARE_PART',
       field: 'is_spare_part',
     });
@@ -136,7 +136,7 @@ export async function getInternalOrder(req, res, next) {
        WHERE io.id = $1`,
       [req.params.id],
     );
-    if (!order.rows[0]) throw httpError(404, 'OS não encontrada.');
+    if (!order.rows[0]) throw httpError(404, 'Ordem de produção não encontrada.');
     const items = await query(
       `SELECT si.*,
         p.type AS product_type,
@@ -176,7 +176,14 @@ export async function getInternalOrder(req, res, next) {
     const volumes = itemIds.length ? await query(
       `SELECT sv.*,
         shipped_user.name AS shipped_by_name,
-        shipped_user.role AS shipped_by_role
+        shipped_user.role AS shipped_by_role,
+        EXISTS (
+          SELECT 1
+          FROM audit_logs al
+          WHERE al.entity_type = 'shipment_volume'
+            AND al.entity_id = sv.id
+            AND al.action = 'ready_without_label'
+        ) AS was_ready_without_label
        FROM shipment_volumes sv
        LEFT JOIN users shipped_user ON shipped_user.id = sv.shipped_by
        WHERE sv.sold_item_id = ANY($1)
@@ -191,10 +198,10 @@ export async function updateInternalOrder(req, res, next) {
   try {
     const result = await transaction(async (client) => {
       const current = await client.query('SELECT * FROM internal_orders WHERE id = $1', [req.params.id]);
-      if (!current.rows[0]) throw httpError(404, 'OS não encontrada.');
+      if (!current.rows[0]) throw httpError(404, 'Ordem de produção não encontrada.');
       const duplicate = await client.query('SELECT id FROM internal_orders WHERE sale_number = $1 AND id <> $2', [req.body.sale_number, req.params.id]);
       if (duplicate.rows[0]) {
-        throw httpError(409, 'Já existe uma OS cadastrada com este número de venda. Verifique o número informado ou utilize outro número.', {
+        throw httpError(409, 'Já existe uma ordem de produção cadastrada com este número de venda. Verifique o número informado ou utilize outro número.', {
           code: 'SALE_NUMBER_ALREADY_EXISTS',
           field: 'sale_number',
         });
@@ -244,7 +251,7 @@ export async function updateInternalOrder(req, res, next) {
             continue;
           }
           const previous = currentItems.rows.find((currentItem) => currentItem.id === item.id);
-          if (!previous) throw httpError(404, 'Item da OS não encontrado.', { code: 'SOLD_ITEM_NOT_FOUND' });
+          if (!previous) throw httpError(404, 'Item da ordem de produção não encontrado.', { code: 'SOLD_ITEM_NOT_FOUND' });
           const changedOperationalData = Number(previous.quantity) !== Number(item.quantity) || previous.product_id !== item.product_id;
           if (changedOperationalData) {
             await assertSoldItemEditable(client, item.id);
@@ -300,7 +307,7 @@ export async function deleteInternalOrder(req, res, next) {
   try {
     await transaction(async (client) => {
       const current = await client.query('SELECT * FROM internal_orders WHERE id = $1', [req.params.id]);
-      if (!current.rows[0]) throw httpError(404, 'OS não encontrada.');
+      if (!current.rows[0]) throw httpError(404, 'Ordem de produção não encontrada.');
       if (current.rows[0].status === 'deleted') return;
 
       const updated = await client.query(

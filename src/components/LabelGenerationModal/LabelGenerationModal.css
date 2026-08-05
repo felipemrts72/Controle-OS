@@ -1,0 +1,37 @@
+.label-generation-modal {
+  max-width: 620px;
+}
+
+.label-generation-modal__summary {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.label-generation-modal__summary p {
+  margin: 0;
+}
+
+.label-generation-modal__notice,
+.label-generation-modal__error {
+  border-radius: 8px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+}
+
+.label-generation-modal__notice {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.label-generation-modal__error {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+@media (max-width: 640px) {
+  .label-generation-modal__summary {
+    grid-template-columns: 1fr;
+  }
+}

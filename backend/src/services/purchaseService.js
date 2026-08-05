@@ -256,6 +256,12 @@ export async function updatePurchaseRequest(id,payload,user){
   });
 }
 
+export function assertPurchaseRequestTransitionPermission(action, current, user) {
+  if(action==='submit'&&(current.requester_id!==user.id||!hasPermission(user,'purchases.create_request'))) throw httpError(403,'Sem permissão para enviar esta solicitação.');
+  if(['approve','return','reject'].includes(action)&&!hasPermission(user,'purchases.approve')) throw httpError(403,'Sem permissão para decidir solicitações.');
+  if(action==='cancel'&&!hasPermission(user,'purchases.cancel')) throw httpError(403,'Sem permissão para cancelar.');
+}
+
 export async function transitionPurchaseRequest(id,action,reason,user){
   const map={submit:{from:['draft','returned'],to:'pending_approval'},approve:{from:['pending_approval'],to:'approved'},return:{from:['pending_approval'],to:'returned'},reject:{from:['pending_approval'],to:'rejected'},cancel:{from:[...REQUEST_STATUSES].filter(s=>!['received','cancelled'].includes(s)),to:'cancelled'}};
   const transition=map[action]; if(!transition) throw httpError(400,'Ação inválida.');
@@ -263,9 +269,7 @@ export async function transitionPurchaseRequest(id,action,reason,user){
   return transaction(async(client)=>{
     const current=(await client.query('SELECT * FROM purchase_requests WHERE id=$1 FOR UPDATE',[id])).rows[0]; if(!current) throw httpError(404,'Solicitação não encontrada.');
     if(!transition.from.includes(current.status)) throw httpError(409,`Transição não permitida a partir de ${current.status}.`);
-    if(action==='submit'&&(current.requester_id!==user.id||!hasPermission(user,'purchases.create_request'))) throw httpError(403,'Sem permissão para enviar esta solicitação.');
-    if(['approve','return','reject'].includes(action)&&!hasPermission(user,'purchases.approve')) throw httpError(403,'Sem permissão para decidir solicitações.');
-    if(action==='cancel'&&!hasPermission(user,'purchases.cancel')) throw httpError(403,'Sem permissão para cancelar.');
+    assertPurchaseRequestTransitionPermission(action, current, user);
     const row=(await client.query(`UPDATE purchase_requests SET status=$1,approver_id=CASE WHEN $2='approve' THEN $3 ELSE approver_id END,approved_at=CASE WHEN $2='approve' THEN NOW() ELSE approved_at END,decision_reason=$4,cancelled_at=CASE WHEN $2='cancel' THEN NOW() ELSE cancelled_at END,cancelled_by=CASE WHEN $2='cancel' THEN $3 ELSE cancelled_by END,updated_at=NOW() WHERE id=$5 RETURNING *`,[transition.to,action,user.id,text(reason),id])).rows[0];
     await addRequestHistory(client,row,user.id,action,current.status,transition.to,text(reason)); return getPurchaseRequestWithClient(client,id,user);
   });

@@ -17,7 +17,7 @@ export function DashboardPage() {
       </div>
       <div className="dashboard-page__list">
         {orders.map((order) => <InternalOrderCard key={order.id} order={order} />)}
-        {orders.length === 0 && <div className="panel">Nenhuma OS aberta.</div>}
+        {orders.length === 0 && <div className="panel">Nenhuma ordem de produção aberta.</div>}
       </div>
     </section>
   );

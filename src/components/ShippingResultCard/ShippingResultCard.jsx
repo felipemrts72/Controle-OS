@@ -6,7 +6,7 @@ export function ShippingResultCard({ volumes, onConfirmCode, onConfirmSale, canC
   const forced = volumes.some((volume) => !['label_generated', 'ready_without_label', 'shipped'].includes(volume.label_status));
   return (
     <section className="shipping-result panel">
-      {forced && <p className="shipping-result__alert">Esta OS possui volumes ainda não concluídos ou sem etiqueta. Deseja expedir mesmo assim?</p>}
+      {forced && <p className="shipping-result__alert">Esta ordem de produção possui volumes ainda não concluídos ou sem etiqueta. Deseja expedir mesmo assim?</p>}
       {volumes.map((volume) => (
         <div className="shipping-result__row" key={volume.id || volume.shipment_volume_id}>
           <strong>{volume.customer_name}</strong>

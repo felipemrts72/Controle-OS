@@ -87,7 +87,200 @@ async function ensureMigrationTable(client) {
   );
 }
 
+async function assertRequiredTables(client, tableNames) {
+  const result = await client.query(
+    `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY($1::text[])`,
+    [tableNames],
+  );
+  const actual = new Set(result.rows.map((row) => row.tablename));
+  return tableNames.every((tableName) => actual.has(tableName));
+}
+
+async function assertRequiredColumns(client, expectedColumns) {
+  const tableNames = Object.keys(expectedColumns);
+  const result = await client.query(
+    `SELECT table_name, column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = ANY($1::text[])`,
+    [tableNames],
+  );
+  const actual = new Map();
+  for (const row of result.rows) {
+    if (!actual.has(row.table_name)) actual.set(row.table_name, new Set());
+    actual.get(row.table_name).add(row.column_name);
+  }
+  return Object.entries(expectedColumns).every(([tableName, columnNames]) => (
+    columnNames.every((columnName) => actual.get(tableName)?.has(columnName))
+  ));
+}
+
+async function assertRequiredDatabaseObjects(client, { indexes = [], constraints = [] }) {
+  const [indexResult, constraintResult] = await Promise.all([
+    client.query(`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($1::text[])`, [indexes]),
+    client.query(
+      `SELECT c.conname
+       FROM pg_constraint c
+       JOIN pg_namespace n ON n.oid = c.connamespace
+       WHERE n.nspname = 'public' AND c.conname = ANY($1::text[])`,
+      [constraints],
+    ),
+  ]);
+  const actualIndexes = new Set(indexResult.rows.map((row) => row.indexname));
+  const actualConstraints = new Set(constraintResult.rows.map((row) => row.conname));
+  return indexes.every((name) => actualIndexes.has(name))
+    && constraints.every((name) => actualConstraints.has(name));
+}
+
+async function assertPermissionsAndAdminGrant(client, permissionCodes) {
+  const result = await client.query(
+    `SELECT p.code, p.group_name,
+      EXISTS (
+        SELECT 1 FROM role_permissions rp
+        JOIN roles r ON r.id = rp.role_id
+        WHERE rp.permission_id = p.id AND r.slug = 'admin'
+      ) AS admin_granted
+     FROM permissions p
+     WHERE p.code = ANY($1::varchar[])`,
+    [permissionCodes],
+  );
+  return permissionCodes.every((code) => {
+    const permission = result.rows.find((row) => row.code === code);
+    return permission?.group_name === 'Compras e fornecedores' && permission.admin_granted;
+  });
+}
+
 async function assertMigrationState(client, filename) {
+  if (filename === '20260731_purchases_suppliers_module.sql') {
+    const tableNames = [
+      'material_groups', 'suppliers', 'supplier_material_groups', 'purchase_counters',
+      'purchase_requests', 'purchase_request_items', 'purchase_request_history',
+      'purchase_quote_requests', 'purchase_quote_items', 'purchase_quote_suppliers',
+      'purchase_quote_dispatches', 'supplier_proposals', 'supplier_proposal_items',
+      'purchase_quote_selections', 'purchases', 'purchase_items', 'purchase_receipts',
+      'purchase_receipt_items', 'purchase_domain_events',
+    ];
+    const requiredColumns = {
+      material_groups: ['id', 'name', 'normalized_name', 'is_active', 'created_at', 'updated_at'],
+      suppliers: ['id', 'person_type', 'legal_name', 'tax_id', 'is_active', 'created_at', 'updated_at'],
+      supplier_material_groups: ['supplier_id', 'material_group_id'],
+      purchase_counters: ['counter_type', 'counter_year', 'last_value'],
+      purchase_requests: ['id', 'number', 'requester_id', 'sector_id', 'status', 'purpose', 'is_preapproved'],
+      purchase_request_items: ['id', 'request_id', 'description', 'unit', 'quantity', 'product_id'],
+      purchase_request_history: ['id', 'request_id', 'user_id', 'new_status', 'action'],
+      purchase_quote_requests: ['id', 'number', 'purchase_request_id', 'status', 'responsible_id'],
+      purchase_quote_items: ['id', 'quote_request_id', 'request_item_id', 'description', 'unit', 'quantity'],
+      purchase_quote_suppliers: ['quote_request_id', 'supplier_id', 'added_at'],
+      purchase_quote_dispatches: ['id', 'quote_request_id', 'supplier_id', 'channel', 'sent_by'],
+      supplier_proposals: ['id', 'quote_request_id', 'supplier_id', 'proposal_date', 'total_value'],
+      supplier_proposal_items: ['id', 'proposal_id', 'request_item_id', 'unit_value', 'quote_item_id'],
+      purchase_quote_selections: ['id', 'quote_request_id', 'request_item_id', 'supplier_id', 'quote_item_id'],
+      purchases: ['id', 'number', 'purchase_request_id', 'quote_request_id', 'supplier_id', 'buyer_id', 'status'],
+      purchase_items: ['id', 'purchase_id', 'request_item_id', 'quantity', 'received_quantity'],
+      purchase_receipts: ['id', 'purchase_id', 'receipt_date', 'responsible_id'],
+      purchase_receipt_items: ['id', 'receipt_id', 'purchase_item_id', 'quantity', 'has_discrepancy', 'is_damaged', 'is_rejected'],
+      purchase_domain_events: ['id', 'event_type', 'aggregate_type', 'aggregate_id', 'payload', 'processed_at'],
+    };
+    const indexes = [
+      'idx_suppliers_search', 'idx_suppliers_active', 'idx_supplier_groups_group',
+      'idx_purchase_requests_status', 'idx_purchase_requests_requester',
+      'idx_purchase_request_items_request', 'idx_purchase_request_history_request',
+      'idx_quote_requests_status', 'idx_quote_requests_request', 'idx_proposals_quote',
+      'idx_purchases_status', 'idx_purchases_request', 'idx_purchase_items_purchase',
+      'idx_receipts_purchase', 'idx_domain_events_pending',
+    ];
+    const constraints = [
+      'material_groups_pkey', 'material_groups_normalized_name_key', 'suppliers_pkey',
+      'suppliers_tax_id_key', 'supplier_material_groups_pkey', 'purchase_counters_pkey',
+      'purchase_requests_pkey', 'purchase_requests_number_key', 'purchase_request_items_pkey',
+      'purchase_quote_requests_pkey', 'purchase_quote_requests_number_key', 'purchases_pkey',
+      'purchases_number_key', 'purchase_receipts_pkey', 'purchase_receipt_items_pkey',
+    ];
+    const permissionCodes = [
+      'suppliers.view', 'suppliers.create', 'suppliers.edit', 'suppliers.deactivate',
+      'supplier_groups.manage', 'purchases.view', 'purchases.create_request',
+      'purchases.edit_own_request', 'purchases.approve', 'purchases.create_preapproved',
+      'purchases.create_direct', 'purchases.cancel', 'purchases.receive',
+      'purchases.view_values', 'purchase_quotes.create', 'purchase_quotes.send',
+      'purchase_quotes.register_response', 'purchase_quotes.choose_supplier', 'purchase_quotes.pdf',
+    ];
+    const expectedGroups = [
+      'rolamentos', 'ferragens', 'aço e chapas', 'ferramentas', 'soldagem', 'elétrica',
+      'hidráulica', 'pintura', 'motores', 'usinagem', 'equipamentos de proteção', 'administrativo',
+    ];
+    const materialGroups = await client.query('SELECT normalized_name FROM material_groups');
+    const actualGroups = new Set(materialGroups.rows.map((row) => row.normalized_name));
+    const valid = await assertRequiredTables(client, tableNames)
+      && await assertRequiredColumns(client, requiredColumns)
+      && await assertRequiredDatabaseObjects(client, { indexes, constraints })
+      && await assertPermissionsAndAdminGrant(client, permissionCodes)
+      && expectedGroups.every((groupName) => actualGroups.has(groupName));
+    if (!valid) throw new Error(`O banco não corresponde ao estado esperado de ${filename}.`);
+    return 'Tabelas, colunas, índices, constraints, permissões, grants e grupos de materiais de Compras validados.';
+  }
+
+  if (filename === '20260731_z_purchase_import_catalog_direct_quotes.sql') {
+    const tableNames = [
+      'supplier_item_mappings', 'supplier_item_price_history',
+      'purchase_import_batches', 'purchase_import_items',
+    ];
+    const requiredColumns = {
+      company_settings: ['delivery_address', 'purchase_response_email', 'purchase_response_whatsapp', 'purchase_responsible_name'],
+      products: ['internal_code'],
+      purchase_quote_requests: ['quote_type', 'contact_responsible_name'],
+      purchase_quote_items: ['id', 'description', 'material_group_id', 'unit', 'quantity', 'internal_product_id', 'supplier_item_code'],
+      supplier_proposal_items: ['quote_item_id', 'supplier_item_code', 'supplier_item_description', 'internal_product_id', 'unit'],
+      purchase_quote_selections: ['quote_item_id'],
+      purchase_items: ['quote_item_id', 'internal_product_id', 'supplier_item_code'],
+      supplier_item_mappings: ['id', 'supplier_id', 'supplier_item_description', 'normalized_description', 'internal_product_id', 'is_active'],
+      supplier_item_price_history: ['id', 'supplier_id', 'supplier_item_description', 'source', 'unit_price'],
+      purchase_import_batches: ['id', 'context', 'source_type', 'confirmed_by', 'confirmed_at'],
+      purchase_import_items: ['id', 'batch_id', 'line_number', 'description', 'link_action', 'warnings'],
+    };
+    const indexes = [
+      'idx_products_internal_code_unique', 'idx_quote_items_request_item_unique',
+      'idx_quote_items_quote', 'idx_proposal_items_quote_item_unique',
+      'idx_quote_selections_quote_item_unique', 'idx_supplier_mapping_active_code',
+      'idx_supplier_mapping_active_description', 'idx_supplier_mappings_product',
+      'idx_supplier_mappings_search', 'idx_supplier_prices_mapping_date',
+      'idx_supplier_prices_supplier_date', 'idx_supplier_prices_product_date',
+    ];
+    const constraints = [
+      'purchase_quote_requests_type_check', 'purchase_quote_requests_origin_check',
+      'purchase_quote_items_pkey', 'purchase_quote_items_quantity_check',
+      'supplier_proposal_items_quote_item_id_fkey', 'purchase_quote_selections_quote_item_id_fkey',
+      'purchase_items_quote_item_id_fkey', 'purchase_items_internal_product_id_fkey',
+      'supplier_item_mappings_pkey', 'supplier_item_price_history_pkey',
+      'purchase_import_batches_pkey', 'purchase_import_items_pkey',
+    ];
+    const permissionCodes = [
+      'purchase_items.import', 'supplier_catalog.manage', 'supplier_catalog.view',
+      'purchase_imports.create_product', 'supplier_prices.view',
+    ];
+    const data = await client.query(`
+      SELECT
+        (SELECT COUNT(*) FROM purchase_quote_requests
+         WHERE NOT ((quote_type = 'request' AND purchase_request_id IS NOT NULL)
+           OR (quote_type = 'direct' AND purchase_request_id IS NULL)))::int AS invalid_quote_origins,
+        (SELECT COUNT(*) FROM purchase_quote_items
+         WHERE id IS NULL OR description IS NULL OR unit IS NULL OR quantity IS NULL OR quantity <= 0)::int AS invalid_quote_items,
+        (SELECT COUNT(*) FROM supplier_proposal_items spi
+         JOIN supplier_proposals sp ON sp.id = spi.proposal_id
+         JOIN purchase_quote_items qi ON qi.id = spi.quote_item_id
+         WHERE qi.quote_request_id <> sp.quote_request_id)::int AS invalid_proposal_links,
+        (SELECT COUNT(*) FROM purchase_quote_selections s
+         JOIN purchase_quote_items qi ON qi.id = s.quote_item_id
+         WHERE qi.quote_request_id <> s.quote_request_id)::int AS invalid_selection_links
+    `);
+    const state = data.rows[0];
+    const valid = await assertRequiredTables(client, tableNames)
+      && await assertRequiredColumns(client, requiredColumns)
+      && await assertRequiredDatabaseObjects(client, { indexes, constraints })
+      && await assertPermissionsAndAdminGrant(client, permissionCodes)
+      && Object.values(state).every((count) => count === 0);
+    if (!valid) throw new Error(`O banco não corresponde ao estado esperado de ${filename}.`);
+    return 'Cotações diretas, catálogo, importações, permissões, constraints, índices e vínculos de dados validados.';
+  }
+
   if (filename === '20260728_employee_awards.sql') {
     const expectedColumns = [
       'id', 'employee_id', 'amount', 'award_date', 'performance_description',

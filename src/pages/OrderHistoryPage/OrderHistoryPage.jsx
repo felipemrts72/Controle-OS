@@ -57,7 +57,7 @@ export function OrderHistoryPage() {
       const response = await api.get(`/internal-orders/${orderId}`);
       setSelectedOrder(response.data);
     } catch {
-      toast.error('Não foi possível carregar os detalhes da OS.');
+      toast.error('Não foi possível carregar os detalhes da ordem de produção.');
     }
   }
 
@@ -73,7 +73,7 @@ export function OrderHistoryPage() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Histórico de Ordens</h1>
-          <p className="order-history-page__subtitle">Consulta e auditoria das Ordens de Serviço.</p>
+          <p className="order-history-page__subtitle">Consulta e auditoria das ordens de produção.</p>
         </div>
       </div>
 
@@ -119,7 +119,7 @@ export function OrderHistoryPage() {
 
       <ConfirmModal
         open={Boolean(selectedOrder)}
-        title={`OS ${selectedOrder?.sale_number || ''}`}
+        title={`Ordem de produção ${selectedOrder?.sale_number || ''}`}
         onCancel={() => setSelectedOrder(null)}
         actions={null}
       >

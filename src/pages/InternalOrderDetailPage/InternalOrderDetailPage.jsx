@@ -5,9 +5,14 @@ import { StatusBadge } from '../../components/StatusBadge/StatusBadge.jsx';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { VolumeEditor } from '../../components/VolumeEditor/VolumeEditor.jsx';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
+import { LabelGenerationModal } from '../../components/LabelGenerationModal/LabelGenerationModal.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission } from '../../utils/permissions.js';
+import { createSoldItemLabels, downloadSoldItemLabels, generateThenDownloadLabels, labelErrorMessage } from '../../utils/labelWorkflow.js';
 import './InternalOrderDetailPage.css';
+
+const availableForLabels = (volume) => ['released_for_label', 'ready_without_label', 'label_generated'].includes(volume.label_status)
+  || (volume.label_status === 'shipped' && (volume.shipment_code || volume.was_ready_without_label));
 
 export function InternalOrderDetailPage() {
   const { id } = useParams();
@@ -18,7 +23,11 @@ export function InternalOrderDetailPage() {
   const canPrintLabels = canAccessPermission(user, 'labels.print');
   const canMarkWithoutLabel = canAccessPermission(user, 'labels.mark_without_label');
   const [order, setOrder] = useState(null);
-  const [modalVolumeIds, setModalVolumeIds] = useState([]);
+  const [completionVolumeIds, setCompletionVolumeIds] = useState([]);
+  const [labelVolumeIds, setLabelVolumeIds] = useState([]);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [labelBusy, setLabelBusy] = useState(false);
+  const [downloadRetryGroups, setDownloadRetryGroups] = useState(null);
 
   async function load() {
     const response = await api.get(`/internal-orders/${id}`);
@@ -28,7 +37,10 @@ export function InternalOrderDetailPage() {
 
   useEffect(() => { load(); }, [id]);
 
-  const readyVolumes = useMemo(() => order?.volumes?.filter((volume) => volume.label_status === 'released_for_label') || [], [order]);
+  const readyVolumes = useMemo(
+    () => order?.volumes?.filter((volume) => volume.label_status === 'released_for_label') || [],
+    [order],
+  );
 
   async function markReady(taskId) {
     if (!canCompleteServices) return;
@@ -39,7 +51,7 @@ export function InternalOrderDetailPage() {
       toast.success('Tarefa marcada como pronta.');
       if (nextReadyVolumes.length > readyVolumes.length) {
         toast.success('Item liberado para etiqueta.');
-        setModalVolumeIds(nextReadyVolumes.map((volume) => volume.id));
+        setCompletionVolumeIds(nextReadyVolumes.map((volume) => volume.id));
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Não foi possível marcar a tarefa como pronta.');
@@ -51,27 +63,120 @@ export function InternalOrderDetailPage() {
     try {
       await api.put(`/internal-orders/${id}`, order);
       await load();
-      toast.success('Ordem de Serviço atualizada.');
-    } catch {
-      toast.error('Não foi possível atualizar a Ordem de Serviço.');
+      toast.success('Ordem de produção atualizada.');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível atualizar a ordem de produção.');
     }
+  }
+
+  function closeLabelModal() {
+    setLabelVolumeIds([]);
+    setInvoiceNumber('');
+    setDownloadRetryGroups(null);
+  }
+
+  function openLabelModal(volumeIds) {
+    if (!volumeIds.length) {
+      toast.error('Os volumes precisam ser salvos antes de gerar as etiquetas.');
+      return;
+    }
+    setCompletionVolumeIds([]);
+    setLabelVolumeIds(volumeIds);
+    setInvoiceNumber(order.invoice_number || '');
+    setDownloadRetryGroups(null);
   }
 
   async function generateModalLabels() {
     if (!canPrintLabels) return;
-    for (const volumeId of modalVolumeIds) await api.post(`/labels/${volumeId}/generate`);
-    setModalVolumeIds([]);
-    await load();
+    const nextInvoiceNumber = invoiceNumber.trim();
+    if (!nextInvoiceNumber) {
+      toast.error('Informe a Nota Fiscal antes de gerar as etiquetas.');
+      return;
+    }
+
+    const selectedVolumes = order.volumes.filter((volume) => labelVolumeIds.includes(volume.id));
+    const groups = [...new Set(selectedVolumes.map((volume) => volume.sold_item_id))].map((soldItemId) => ({
+      soldItemId,
+      saleNumber: order.sale_number,
+      needsCreation: selectedVolumes.some((volume) => volume.sold_item_id === soldItemId && !volume.shipment_code),
+    }));
+    if (!groups.length) {
+      toast.error('Os volumes precisam ser salvos antes de gerar as etiquetas.');
+      return;
+    }
+
+    setLabelBusy(true);
+    try {
+      const outcome = await generateThenDownloadLabels({
+        create: async () => {
+          for (const group of groups.filter((entry) => entry.needsCreation)) {
+            await createSoldItemLabels(group.soldItemId, nextInvoiceNumber);
+          }
+          return groups;
+        },
+        refresh: load,
+        download: async () => {
+          for (const group of groups) await downloadSoldItemLabels(group.soldItemId, group.saleNumber, '15x10');
+        },
+      });
+      if (outcome.status === 'download_failed') {
+        setDownloadRetryGroups(groups);
+        toast.error('As etiquetas foram geradas, mas o PDF não pôde ser baixado.');
+      } else {
+        toast.success('Etiquetas geradas e PDF baixado.');
+        closeLabelModal();
+      }
+    } catch (error) {
+      toast.error(labelErrorMessage(error, 'Não foi possível gerar as etiquetas.'));
+    } finally {
+      setLabelBusy(false);
+    }
+  }
+
+  async function retryModalDownload() {
+    if (!downloadRetryGroups?.length) return;
+    setLabelBusy(true);
+    try {
+      for (const group of downloadRetryGroups) await downloadSoldItemLabels(group.soldItemId, group.saleNumber, '15x10');
+      toast.success('PDF baixado com as etiquetas já geradas.');
+      closeLabelModal();
+    } catch {
+      toast.error('Não foi possível baixar o PDF. As etiquetas existentes foram preservadas.');
+    } finally {
+      setLabelBusy(false);
+    }
   }
 
   async function markModalWithoutLabel() {
     if (!canMarkWithoutLabel) return;
-    for (const volumeId of modalVolumeIds) await api.post(`/labels/${volumeId}/without-label`);
-    setModalVolumeIds([]);
-    await load();
+    try {
+      for (const volumeId of completionVolumeIds) await api.post(`/labels/${volumeId}/without-label`);
+      setCompletionVolumeIds([]);
+      await load();
+      toast.success('Item liberado sem etiqueta. As etiquetas poderão ser geradas posteriormente.');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível liberar o item sem etiqueta.');
+    }
   }
 
   if (!order) return <div className="panel">Carregando...</div>;
+
+  const selectedLabelVolumes = order.volumes.filter((volume) => labelVolumeIds.includes(volume.id));
+  const availableLabelVolumes = order.volumes.filter(availableForLabels);
+  const pendingLabelVolumes = availableLabelVolumes.filter((volume) => !volume.shipment_code);
+  const selectedProducts = [...new Set(selectedLabelVolumes
+    .map((volume) => order.items.find((item) => item.id === volume.sold_item_id)?.product_name_snapshot)
+    .filter(Boolean))];
+  const labelModalDetails = selectedLabelVolumes.length ? {
+    sale_number: order.sale_number,
+    customer_name: order.customer_name,
+    product_name: selectedProducts.join(', '),
+    total: selectedLabelVolumes.length,
+    delivery_type: order.delivery_type,
+    destination_city: order.destination_city,
+    destination_uf: order.destination_uf,
+    contains_ready_without_label: selectedLabelVolumes.some((volume) => volume.label_status === 'ready_without_label'),
+  } : null;
 
   const taskColumns = [
     { key: 'task_name', label: 'Tarefa' },
@@ -100,17 +205,17 @@ export function InternalOrderDetailPage() {
     <section className="page internal-order-detail-page">
       <div className="page__header">
         <div>
-          <h1 className="page__title">Ordem de Serviço Interna {order.sale_number}</h1>
+          <h1 className="page__title">Ordem de produção {order.sale_number}</h1>
           <p className="internal-order-detail-page__subtitle">{order.customer_name} · {order.customer_phone || '-'}</p>
         </div>
         <div className="page__actions">
-          {canEdit && <Link className="button" to={`/os/${order.id}/editar`}>Editar OS</Link>}
+          {canEdit && <Link className="button" to={`/os/${order.id}/editar`}>Editar ordem de produção</Link>}
           <StatusBadge value={order.status} />
         </div>
       </div>
 
       <div className="panel internal-order-detail-page__summary">
-        <span>Data de Entrega: {new Date(order.promised_date).toLocaleDateString('pt-BR')}</span>
+        <span>Data de entrega: {new Date(order.promised_date).toLocaleDateString('pt-BR')}</span>
         <span>Status: <StatusBadge value={order.status} /></span>
       </div>
 
@@ -139,24 +244,43 @@ export function InternalOrderDetailPage() {
       <div className="panel">
         <div className="internal-order-detail-page__section-header">
           <h2>Volumes de expedição</h2>
-          {canEdit && <button className="button button_primary" type="button" onClick={saveVolumes}>Salvar volumes</button>}
+          <div className="page__actions">
+            {canPrintLabels && availableLabelVolumes.length > 0 && (
+              <button className="button" type="button" onClick={() => openLabelModal(availableLabelVolumes.map((volume) => volume.id))}>
+                {pendingLabelVolumes.length > 0 ? 'Gerar etiquetas agora' : 'Baixar etiquetas novamente'}
+              </button>
+            )}
+            {canEdit && <button className="button button_primary" type="button" onClick={saveVolumes}>Salvar volumes</button>}
+          </div>
         </div>
         <VolumeEditor volumes={order.volumes} onChange={(volumes) => setOrder({ ...order, volumes })} />
       </div>
 
       <ConfirmModal
-        open={modalVolumeIds.length > 0}
+        open={completionVolumeIds.length > 0}
         title="Todas as tarefas deste item foram concluídas."
-        onCancel={() => setModalVolumeIds([])}
+        onCancel={() => setCompletionVolumeIds([])}
         actions={(
           <>
-            {canPrintLabels && <button className="button button_primary" type="button" onClick={generateModalLabels}>Gerar Etiquetas em PDF</button>}
-            {canMarkWithoutLabel && <button className="button" type="button" onClick={markModalWithoutLabel}>Marcar Pronto sem Etiqueta</button>}
+            {canPrintLabels && <button className="button button_primary" type="button" onClick={() => openLabelModal(completionVolumeIds)}>Gerar etiquetas</button>}
+            {canMarkWithoutLabel && <button className="button" type="button" onClick={markModalWithoutLabel}>Marcar pronto sem etiqueta</button>}
           </>
         )}
       >
-        Deseja gerar as etiquetas dos volumes?
+        Deseja gerar as etiquetas dos volumes agora?
       </ConfirmModal>
+
+      <LabelGenerationModal
+        open={labelVolumeIds.length > 0}
+        details={labelModalDetails}
+        invoiceNumber={invoiceNumber}
+        onInvoiceChange={setInvoiceNumber}
+        onCancel={closeLabelModal}
+        onConfirm={generateModalLabels}
+        onRetryDownload={retryModalDownload}
+        busy={labelBusy}
+        downloadFailed={Boolean(downloadRetryGroups)}
+      />
     </section>
   );
 }

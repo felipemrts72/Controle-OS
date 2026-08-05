@@ -9,7 +9,7 @@ export function errorMiddleware(error, req, res, _next) {
   if (error.code === '23505') {
     status = 409;
     message = error.constraint?.includes('sale_number')
-      ? 'Já existe uma OS cadastrada com este número de venda.'
+      ? 'Já existe uma ordem de produção cadastrada com este número de venda.'
       : 'Já existe um registro cadastrado com estes dados.';
     code = error.constraint?.includes('sale_number') ? 'SALE_NUMBER_ALREADY_EXISTS' : 'UNIQUE_VIOLATION';
     field = error.constraint?.includes('sale_number') ? 'sale_number' : undefined;

@@ -17,10 +17,10 @@ export function InternalOrderEditPage() {
   async function submit(payload) {
     try {
       await api.put(`/internal-orders/${id}`, payload);
-      toast.success('Ordem de Serviço atualizada.');
+      toast.success('Ordem de produção atualizada.');
       navigate(`/os/${id}`);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Não foi possível atualizar a Ordem de Serviço.');
+      toast.error(error.response?.data?.message || 'Não foi possível atualizar a ordem de produção.');
     }
   }
 
@@ -29,9 +29,9 @@ export function InternalOrderEditPage() {
   return (
     <section className="page internal-order-create-page">
       <div className="page__header">
-        <h1 className="page__title">Editar Ordem de Serviço {order.sale_number}</h1>
+        <h1 className="page__title">Editar ordem de produção {order.sale_number}</h1>
       </div>
-      <InternalOrderForm initialOrder={order} onSubmit={submit} submitLabel="Salvar Ordem de Serviço" />
+      <InternalOrderForm initialOrder={order} onSubmit={submit} submitLabel="Salvar ordem de produção" />
     </section>
   );
 }

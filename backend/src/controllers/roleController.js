@@ -79,7 +79,7 @@ export async function createRole(req, res, next) {
     const role = await transaction(async (client) => {
       const name = String(req.body.name || '').trim();
       const slug = slugify(req.body.slug || name);
-      if (!name || !slug) throw httpError(400, 'Informe nome e identificador da role.');
+      if (!name || !slug) throw httpError(400, 'Informe nome e identificador do perfil.');
 
       const created = await client.query(
         `INSERT INTO roles (name, slug, description, is_system, is_active)
@@ -101,7 +101,7 @@ export async function createRole(req, res, next) {
     });
     res.status(201).json(role);
   } catch (error) {
-    if (error.code === '23505') return next(httpError(409, 'Já existe uma role com esse identificador.'));
+    if (error.code === '23505') return next(httpError(409, 'Já existe um perfil com esse identificador.'));
     next(error);
   }
 }
@@ -110,11 +110,11 @@ export async function updateRole(req, res, next) {
   try {
     const role = await transaction(async (client) => {
       const current = await client.query('SELECT * FROM roles WHERE id = $1', [req.params.id]);
-      if (!current.rows[0]) throw httpError(404, 'Role não encontrada.');
+      if (!current.rows[0]) throw httpError(404, 'Perfil não encontrado.');
 
       const nextIsActive = req.body.is_active ?? current.rows[0].is_active;
       if (current.rows[0].is_system && nextIsActive === false) {
-        throw httpError(400, 'Roles de sistema não podem ser desativadas.');
+        throw httpError(400, 'Perfis de sistema não podem ser desativados.');
       }
 
       const name = String(req.body.name || current.rows[0].name).trim();
@@ -152,7 +152,7 @@ export async function updateRole(req, res, next) {
     });
     res.json(role);
   } catch (error) {
-    if (error.code === '23505') return next(httpError(409, 'Já existe uma role com esse identificador.'));
+    if (error.code === '23505') return next(httpError(409, 'Já existe um perfil com esse identificador.'));
     next(error);
   }
 }

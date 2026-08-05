@@ -61,9 +61,9 @@ export function InternalOrdersPage() {
       setOrderToDelete(null);
       await load();
       await loadShipped(shippedPage);
-      toast.success('Ordem de Serviço excluída.');
+      toast.success('Ordem de produção excluída.');
     } catch {
-      toast.error('Não foi possível excluir a Ordem de Serviço.');
+      toast.error('Não foi possível excluir a ordem de produção.');
     }
   }
 
@@ -72,8 +72,8 @@ export function InternalOrdersPage() {
   return (
     <section className="page internal-orders-page">
       <div className="page__header">
-        <h1 className="page__title">Ordens de Serviço</h1>
-        {canCreate && <Link className="button button_primary" to="/os/nova">Nova OS</Link>}
+        <h1 className="page__title">Ordens de produção</h1>
+        {canCreate && <Link className="button button_primary" to="/os/nova">Nova ordem de produção</Link>}
       </div>
 
       <div className="internal-orders-page__list">
@@ -98,7 +98,7 @@ export function InternalOrdersPage() {
             )}
           </article>
         ))}
-        {activeOrders.length === 0 && <div className="panel">Nenhuma OS encontrada.</div>}
+        {activeOrders.length === 0 && <div className="panel">Nenhuma ordem de produção encontrada.</div>}
       </div>
 
       {canViewHistory && <section className="internal-orders-page__shipped">
@@ -122,7 +122,7 @@ export function InternalOrdersPage() {
               </Link>
             </article>
           ))}
-          {shippedOrders.length === 0 && <div className="panel">Nenhuma OS expedida encontrada.</div>}
+          {shippedOrders.length === 0 && <div className="panel">Nenhuma ordem de produção expedida encontrada.</div>}
         </div>
         <div className="internal-orders-page__pagination">
           <button className="button" type="button" disabled={shippedPage <= 1} onClick={() => loadShipped(shippedPage - 1)}>Anterior</button>
@@ -133,11 +133,11 @@ export function InternalOrdersPage() {
 
       <ConfirmModal
         open={Boolean(orderToDelete)}
-        title="Excluir Ordem de Serviço"
+        title="Excluir ordem de produção"
         onCancel={() => setOrderToDelete(null)}
         actions={<button className="button button_danger" type="button" onClick={deleteOrder}>Excluir</button>}
       >
-        Deseja excluir a OS {orderToDelete?.sale_number}? Ela sairá das listagens operacionais, mas ficará preservada no histórico.
+        Deseja excluir a ordem de produção {orderToDelete?.sale_number}? Ela sairá das listagens operacionais, mas ficará preservada no histórico.
       </ConfirmModal>
     </section>
   );

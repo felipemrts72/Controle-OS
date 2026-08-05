@@ -42,9 +42,8 @@ function ProtectedRoute({ children }) {
 function RoleRoute({ permission, children }) {
   const user = getStoredUser();
   if (!user) return <Navigate to="/entrar" replace />;
-  const defaultRoute = getDefaultRoute(user);
   if (canAccessPermission(user, permission)) return children;
-  return defaultRoute === '/acesso-negado' ? <AccessDenied /> : <Navigate to={defaultRoute} replace />;
+  return <AccessDenied />;
 }
 
 function AccessDenied() {
@@ -61,7 +60,7 @@ function SessionLoading() {
   return (
     <main className="session-loading" aria-live="polite" aria-busy="true">
       <div className="session-loading__card">
-        <div className="session-loading__mark" aria-hidden="true">OS</div>
+        <div className="session-loading__mark" aria-hidden="true">OP</div>
         <div>
           <strong className="session-loading__brand">OliMen Gestão</strong>
           <p className="session-loading__text">Validando sessao...</p>
@@ -95,8 +94,8 @@ export function AppRoutes() {
       try {
         const response = await api.get('/auth/me');
         setSession(token, response.data.user);
-      } catch {
-        clearSession();
+      } catch (error) {
+        if (error.response?.status === 401 && getStoredToken()) clearSession();
       } finally {
         setIsCheckingSession(false);
       }
@@ -157,6 +156,7 @@ export function AppRoutes() {
         <Route path="/compras/aprovacoes" element={<RoleRoute permission="purchases.approve"><PurchasesPage section="approvals" /></RoleRoute>} />
         <Route path="/compras/cotacoes" element={<RoleRoute permission="purchases.view"><PurchasesPage section="quotes" /></RoleRoute>} />
         <Route path="/compras/pedidos" element={<RoleRoute permission="purchases.view"><PurchasesPage section="orders" /></RoleRoute>} />
+        <Route path="/compras/recebimentos" element={<RoleRoute permission="purchases.receive"><PurchasesPage section="receipts" /></RoleRoute>} />
         <Route path="/compras/fornecedores" element={<RoleRoute permission="suppliers.view"><PurchasesPage section="suppliers" /></RoleRoute>} />
         <Route path="/compras/grupos" element={<RoleRoute permission="supplier_groups.manage"><PurchasesPage section="groups" /></RoleRoute>} />
         <Route path="/acesso-negado" element={<AccessDenied />} />

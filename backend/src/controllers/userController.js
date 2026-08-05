@@ -9,7 +9,7 @@ const LEGACY_ROLES = ['admin', 'manager', 'shipping', 'viewer'];
 async function getRoleAssignment(client, roleId, fallbackRole = 'viewer') {
   if (!roleId) return { roleId: null, legacyRole: fallbackRole };
   const role = await client.query('SELECT id, slug, name FROM roles WHERE id = $1 AND is_active = TRUE', [roleId]);
-  if (!role.rows[0]) throw httpError(400, 'Role inválida ou inativa.');
+  if (!role.rows[0]) throw httpError(400, 'Perfil inválido ou inativo.');
   return {
     roleId: role.rows[0].id,
     legacyRole: LEGACY_ROLES.includes(role.rows[0].slug) ? role.rows[0].slug : fallbackRole,
