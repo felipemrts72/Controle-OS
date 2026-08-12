@@ -6,7 +6,7 @@ export function DataTable({ columns, rows, emptyText = 'Nenhum registro encontra
       <table className="data-table__table">
         <thead>
           <tr>
-            {columns.map((column) => <th key={column.key}>{column.label}</th>)}
+            {columns.map((column) => <th key={column.key} className={column.className}>{column.label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -20,7 +20,7 @@ export function DataTable({ columns, rows, emptyText = 'Nenhum registro encontra
               {columns.map((column) => {
                 const mobileLabel = column.mobileLabel || (typeof column.label === 'string' ? column.label : column.key);
                 return (
-                  <td key={column.key} data-label={mobileLabel}>
+                  <td key={column.key} data-label={mobileLabel} className={column.className}>
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 );

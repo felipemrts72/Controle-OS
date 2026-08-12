@@ -10,7 +10,9 @@ O PostgreSQL concentra a persistência operacional. O backend acessa o banco com
 
 As áreas visuais são Dashboard, Produção, Estoque, Compras, Expedição, Administrativo e Configurações. Comercial e Financeiro serão adicionados somente quando tiverem funcionalidades próprias.
 
-A apresentação modular é definida centralmente em `src/config/modulePresentation.js`. Identificadores técnicos legados — inclusive rotas `/os`, endpoints, tabelas e códigos de permissões — permanecem preservados. Não há integração automática entre os módulos: Estoque ainda não movimenta saldos, Recebimentos não cria entrada de estoque e Expedição não cria saída de estoque.
+A apresentação modular é definida centralmente em `src/config/modulePresentation.js`. Identificadores técnicos legados — inclusive rotas `/os`, endpoints, tabelas e códigos de permissões — permanecem preservados. Compras pode criar Produtos preliminares pendentes de revisão com uma foto opcional, sem gerar saldo ou movimentação. Não há integração automática entre os módulos: Estoque ainda não movimenta saldos, Recebimentos não cria entrada de estoque e Expedição não cria saída de estoque.
+
+No domínio de Compras, os itens referenciam `products` e preservam a descrição como snapshot. `measurement_units` centraliza os códigos válidos, e os metadados de revisão permanecem na própria tabela `products`, sem tabela de saldo. `purchase_quote_suppliers` guarda participantes explícitos; sugestões por grupos e catálogo são calculadas em leitura e não são persistidas apenas por visualização.
 
 ## 2. Diagrama de alto nível
 

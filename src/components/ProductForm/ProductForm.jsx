@@ -3,66 +3,75 @@ import { api } from '../../services/api.js';
 import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import { ProductComponentsEditor } from '../ProductComponentsEditor/ProductComponentsEditor.jsx';
 import { ProductManufacturingRouteEditor } from '../ProductManufacturingRouteEditor/ProductManufacturingRouteEditor.jsx';
+import { MeasurementUnitSelect } from '../MeasurementUnitSelect/MeasurementUnitSelect.jsx';
+import { ProductPhotoEditor } from '../ProductPhotoEditor/ProductPhotoEditor.jsx';
 import './ProductForm.css';
 
-export function ProductForm({ initialProduct, onSubmit }) {
+export function ProductForm({ initialProduct, onSubmit, onPhotoUploaded }) {
   const toast = useToast();
   const [sectors, setSectors] = useState([]);
-  const [materialProducts, setMaterialProducts] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
-  const [form, setForm] = useState(initialProduct || { name: '', type: 'manufactured', default_volume_quantity: 1, default_total_weight_kg: 1, is_active: true, components: [] });
-  const shippingSector = sectors.find((sector) => sector.slug === 'expedicao');
+  const [form, setForm] = useState(initialProduct || { name: '', type: 'manufactured', measurement_unit_code: '', default_volume_quantity: 1, default_total_weight_kg: 1, is_active: true, components: [] });
+  const [pendingPhoto, setPendingPhoto] = useState(null);
 
   useEffect(() => {
     api.get('/sectors').then((response) => setSectors(response.data.filter((sector) => sector.is_active)));
-    api.get('/products/search?type=material_prima').then((response) => setMaterialProducts(response.data));
     api.get('/products/types').then((response) => setProductTypes(response.data.filter((type) => type.is_active)));
   }, []);
-
-  useEffect(() => {
-    if (form.type === 'resale' && shippingSector?.id && form.sector_id !== shippingSector.id) {
-      setForm((current) => ({ ...current, sector_id: shippingSector.id }));
-    }
-  }, [form.type, form.sector_id, shippingSector?.id]);
 
   function change(event) {
     const value = event.target.type === 'number' ? Number(event.target.value) : event.target.value;
     setForm((current) => ({ ...current, [event.target.name]: value }));
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
-    if (!form.name || !form.default_volume_quantity || !form.default_total_weight_kg) {
+    if (!form.name || !form.measurement_unit_code || !form.default_volume_quantity || !form.default_total_weight_kg) {
       toast.error('Preencha os campos obrigatórios.');
       return;
     }
-    if (form.type !== 'resale' && !form.sector_id) {
-      toast.error('Produto fabricado ou matéria-prima precisa de setor responsável.');
+    if (!form.sector_id) {
+      toast.error('Informe o setor responsável do Produto.');
       return;
     }
-    onSubmit(form);
+    if (initialProduct?.type !== 'resale' && form.type === 'resale' && (form.manufacturing_steps || []).length) {
+      toast.error('Remova e salve o roteiro de fabricação antes de alterar o tipo para Revenda.');
+      return;
+    }
+    const result = await onSubmit(form, pendingPhoto);
+    if (result?.product) setForm(result.product);
   }
 
   return (
     <form className="product-form panel" onSubmit={submit}>
-      <div className="form-grid">
+      <div className="product-form__identity">
         <label className="field">
           <span className="field__label">Nome</span>
           <input className="field__input" name="name" value={form.name} onChange={change} required />
         </label>
+        <ProductPhotoEditor
+          product={form}
+          pendingFile={pendingPhoto}
+          onPendingFileChange={setPendingPhoto}
+          creationUploadToken={form.photo_upload_token || ''}
+          onPhotoChange={(hasPhoto) => setForm((current) => ({ ...current, has_photo: hasPhoto }))}
+          onUploadComplete={onPhotoUploaded}
+        />
+      </div>
+      <div className="form-grid">
         <label className="field">
           <span className="field__label">Tipo</span>
           <select className="field__input" name="type" value={form.type} onChange={change}>
             {productTypes.map((type) => <option key={type.code} value={type.code}>{type.name}</option>)}
           </select>
         </label>
+        <MeasurementUnitSelect value={form.measurement_unit_code||''} onChange={(event)=>setForm((current)=>({...current,measurement_unit_code:event.target.value}))} label="Unidade padrão" />
         <label className="field">
           <span className="field__label">Setor responsável</span>
-          <select className="field__input" name="sector_id" value={form.sector_id || ''} onChange={change} disabled={form.type === 'resale'} required={form.type !== 'resale'}>
+          <select className="field__input" name="sector_id" value={form.sector_id || ''} onChange={change} required>
             <option value="">Selecione</option>
             {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
           </select>
-          {form.type === 'resale' && <span className="field__label">Revenda usa Expedição automaticamente.</span>}
         </label>
         <label className="field">
           <span className="field__label">Quantidade padrão de volumes</span>
@@ -73,23 +82,26 @@ export function ProductForm({ initialProduct, onSubmit }) {
           <input className="field__input" type="number" min="0.01" step="0.01" name="default_total_weight_kg" value={form.default_total_weight_kg} onChange={change} required />
         </label>
       </div>
+      {form.review_status === 'pending_review' && <div className="panel"><strong>Produto pendente de revisão</strong><p>Complete o cadastro e confirme abaixo para aprová-lo. Esta aprovação não cria saldo nem movimentação.</p><label><input type="checkbox" checked={form.review_status==='approved'} onChange={(event)=>setForm((current)=>({...current,review_status:event.target.checked?'approved':'pending_review'}))}/> Marcar cadastro como revisado</label></div>}
       <ProductComponentsEditor
         components={form.components || []}
-        materialProducts={materialProducts}
+        productId={form.id || null}
         sectors={sectors}
         onChange={(components) => {
           setForm((current) => ({ ...current, components }));
         }}
       />
-      <ProductManufacturingRouteEditor
-        steps={form.manufacturing_steps || []}
-        sectors={sectors}
-        onChange={(manufacturingSteps) => setForm((current) => ({ ...current, manufacturing_steps: manufacturingSteps }))}
-      />
+      {form.type !== 'resale' && (
+        <ProductManufacturingRouteEditor
+          steps={form.manufacturing_steps || []}
+          sectors={sectors}
+          onChange={(manufacturingSteps) => setForm((current) => ({ ...current, manufacturing_steps: manufacturingSteps }))}
+        />
+      )}
       {form.type === 'manufactured' && !(form.manufacturing_steps || []).length && (
         <p className="product-form__hint">Este produto ainda utiliza o processo antigo de geração de tarefas. Cadastre um roteiro de fabricação para utilizar dependências.</p>
       )}
-      <button className="button button_primary product-form__button" type="submit">Salvar produto</button>
+      <button className="button button_primary product-form__button" type="submit" disabled={Boolean(form.id && form.photo_upload_token && pendingPhoto)}>{form.id && form.photo_upload_token ? (pendingPhoto ? 'Produto criado — envie novamente a foto' : 'Concluir cadastro') : 'Salvar produto'}</button>
     </form>
   );
 }

@@ -10,6 +10,8 @@ A navegação é organizada visualmente por Dashboard, Produção, Estoque, Comp
 
 Rotas, endpoints, tabelas e códigos de permissões legados são preservados por compatibilidade. A organização por módulos é de apresentação: não cria integrações automáticas entre áreas. Estoque ainda não possui movimentações; Recebimentos não gera entrada automática e Expedição não gera saída automática.
 
+Compras consulta o cadastro compartilhado de Produtos e um catálogo central de unidades. Novos itens usam Produto interno e unidade padronizada; Produtos criados no fluxo de Compras ficam pendentes de revisão e podem receber uma foto opcional no cadastro preliminar. Fornecedores sugeridos em Cotações são calculados dinamicamente, enquanto participantes explícitos permanecem no histórico. Registros antigos sem vínculo ou com unidade legada continuam legíveis.
+
 A aplicação centraliza as principais áreas da operação:
 
 - ordens de serviço e clientes;

@@ -33,9 +33,12 @@ export const quotesDefaults = handler(() => service.getQuoteDefaults());
 export const quotesSuggest = handler((req) => service.suggestSuppliers(req.params.requestId));
 export const quotesDispatch = handler((req) => service.registerQuoteDispatch(req.params.id, req.body, req.user), 201);
 export const quotesProposal = handler((req) => service.registerProposal(req.params.id, req.body, req.user), 201);
+export const quotesParticipantAdd = handler((req) => service.addQuoteParticipant(req.params.id, req.body.supplier_id, req.user, req.body), 201);
+export const quotesParticipantRemove = handler((req) => service.removeQuoteParticipant(req.params.id, req.params.supplierId, req.user));
 export const quotesSelect = handler((req) => service.selectQuoteSuppliers(req.params.id, req.body, req.user));
 export const quotesCopied = handler((req) => service.auditQuoteAction(req.params.id, req.user));
 export const purchasesIndex = handler((req) => service.listPurchases(req.query, req.user));
+export const purchasesReceiptsIndex = handler((req) => service.listReceivablePurchases(req.query, req.user));
 export const purchasesShow = handler((req) => service.getPurchase(req.params.id, req.user));
 export const purchasesDirect = handler((req) => service.createDirectPurchase(req.body, req.user), 201);
 export const purchasesReceive = handler((req) => service.receivePurchase(req.params.id, req.body, req.user), 201);
@@ -45,20 +48,22 @@ export const importsPreview = handler((req) => importService.previewImport(req.b
 export const importsConfirm = handler((req) => importService.confirmImport(req.body, req.user), 201);
 export const importsCreateProduct = handler((req) => importService.createProductFromImport(req.body, req.user), 201);
 export const importsProducts = handler((req) => importService.listImportProducts(req.query.search));
+export const purchasesProducts = handler((req) => importService.listImportProducts(req.query.search, req.query));
 
 export async function quotesText(req, res, next) { try {
   const [quote, company] = await Promise.all([service.quoteTextData(req.params.id), getCompanyPdfData()]);
   const companyName = company.nome_fantasia || company.razao_social || 'Nossa empresa';
   const lines = [`A empresa ${companyName} solicita orçamento dos itens relacionados abaixo. Favor informar preço, marca, prazo de entrega, condição de pagamento e validade da proposta.`, '', `Cotação: ${quote.number}`];
-  quote.items.forEach((item, index) => lines.push(`${index + 1}. ${item.description} — ${item.quantity} ${item.unit}${item.technical_specification ? ` — ${item.technical_specification}` : ''}`));
+  quote.items.forEach((item, index) => lines.push(`${index + 1}. ${[item.internal_code,item.internal_product_name||item.description].filter(Boolean).join(' — ')} — ${item.quantity} ${item.unit}${item.internal_product_name&&item.description!==item.internal_product_name?` — descrição: ${item.description}`:''}${item.technical_specification ? ` — especificação: ${item.technical_specification}` : ''}`));
   lines.push('', `Prazo para resposta: ${quote.response_deadline || 'a combinar'}`, `Local de entrega: ${quote.delivery_address || 'a combinar'}`, `Retorno: ${[quote.response_email, quote.response_whatsapp].filter(Boolean).join(' | ') || 'a combinar'}`);
   if (quote.notes) lines.push(`Observações: ${quote.notes}`); lines.push(`Responsável: ${quote.contact_responsible_name || quote.responsible_name}`); res.json({ text: lines.join('\n') });
 } catch (error) { next(error); } }
 
 export async function quotesPdf(req, res, next) { try {
-  const [quote, company] = await Promise.all([service.getQuoteRequest(req.params.id), getCompanyPdfData()]);
-  const supplier = req.query.supplier_id ? quote.suppliers.find((item) => item.id === req.query.supplier_id) : null;
+  let [quote, company] = await Promise.all([service.getQuoteRequest(req.params.id), getCompanyPdfData()]);
+  let supplier = req.query.supplier_id ? quote.suppliers.find((item) => item.id === req.query.supplier_id) : null;
   if (req.query.supplier_id && !supplier) return next(Object.assign(new Error('Fornecedor não pertence à cotação.'), { status: 400 }));
+  if(supplier&&!supplier.is_participant){quote=await service.addQuoteParticipant(req.params.id,supplier.id,req.user,{outsideGroupConfirmed:true});supplier=quote.participants.find(item=>item.id===supplier.id);}
   const pdf = await buildPurchaseQuotePdf(quote, supplier, company);
   await service.auditQuoteAction(req.params.id, req.user, 'pdf_generated');
   sendPdfResponse(res, pdf, `cotacao-${quote.number}${supplier ? `-${supplier.trade_name || supplier.legal_name}` : ''}.pdf`);

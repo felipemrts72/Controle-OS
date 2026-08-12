@@ -7,3 +7,10 @@ export function formatPurchaseDate(value, emptyLabel = 'Sem prazo') {
   if (Number.isNaN(dateTime.getTime())) return emptyLabel;
   return dateTime.toLocaleDateString('pt-BR');
 }
+
+export const getSupplierStatusLabel = (value) => value ? 'Ativo' : 'Inativo';
+export const getMaterialGroupStatusLabel = (value) => value ? 'Ativo' : 'Inativo';
+export const getProductReviewStatusLabel = (value) => value === 'pending_review' ? 'Pendente de revisão' : 'Revisado';
+export const getPurchaseRequestStatusLabel = (status) => ({draft:'Rascunho',pending_approval:'Aguardando aprovação',returned:'Devolvida',rejected:'Rejeitada',approved:'Aprovada — aguardando cotação ou compra',quoting:'Em cotação',supplier_selected:'Fornecedor escolhido',purchased:'Compra realizada',partially_received:'Parcialmente recebida',received:'Recebida',cancelled:'Cancelada'})[status] || status;
+export const getQuoteStatusLabel = (status) => ({draft:'Rascunho',sent:'Enviada',responses_received:'Com respostas',completed:'Concluída',cancelled:'Cancelada'})[status] || status;
+export const getPurchaseOrderStatusLabel = (status) => ({preparing:'Pedido em preparação',ordered:'Pedido realizado',partially_received:'Parcialmente recebido',received:'Recebido',cancelled:'Cancelado'})[status] || status;

@@ -67,6 +67,16 @@
   overflow-wrap: anywhere;
 }
 
+.product-components-editor__row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.product-components-editor__type {
+  display: block;
+  font-size: 0.82rem;
+}
+
 .product-components-editor__check {
   align-items: center;
   color: var(--color-text-muted);

@@ -1116,3 +1116,5 @@ WHERE username = 'admin';
 -- O include preserva uma única fonte SQL para o schema consolidado e para o migration runner.
 \ir migrations/20260731_purchases_suppliers_module.sql
 \ir migrations/20260731_z_purchase_import_catalog_direct_quotes.sql
+\ir migrations/20260805_purchase_units_product_review.sql
+\ir migrations/20260805_z_product_preliminary_photo.sql

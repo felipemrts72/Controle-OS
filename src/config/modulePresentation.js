@@ -143,7 +143,7 @@ export const PERMISSION_PRESENTATION = {
   'purchase_items.import': permission('Compras', null, 'Importar itens de compras'),
   'supplier_catalog.manage': permission('Compras', null, 'Gerenciar vínculos do catálogo de fornecedores'),
   'supplier_catalog.view': permission('Compras', null, 'Visualizar catálogo vinculado'),
-  'purchase_imports.create_product': permission('Compras', null, 'Criar produto durante importação'),
+  'purchase_imports.create_product': permission('Compras', null, 'Criar produto preliminar em Compras'),
   'supplier_prices.view': permission('Compras', null, 'Visualizar histórico de preços de fornecedores'),
 
   'labels.view': permission('Expedição', null, 'Ver fila de etiquetas'),

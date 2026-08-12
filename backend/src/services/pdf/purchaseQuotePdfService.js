@@ -10,9 +10,10 @@ export async function buildPurchaseQuotePdf(quote, supplier, company) {
   ]);
   addSectionTitle(context, 'Itens solicitados');
   addTable(context, { columns: [
-    { key: 'description', label: 'Descrição', width: 3 }, { key: 'quantity', label: 'Qtd.', width: 0.8, align: 'right' },
-    { key: 'unit', label: 'Un.', width: 0.7 }, { key: 'technical_specification', label: 'Especificação', width: 3 },
-  ], rows: quote.items });
+    { key: 'internal_code', label: 'Código', width: 1 }, { key: 'product_name', label: 'Produto', width: 2.2 },
+    { key: 'description_snapshot', label: 'Descrição', width: 2 }, { key: 'quantity', label: 'Qtd.', width: 0.7, align: 'right' },
+    { key: 'unit', label: 'Un.', width: 0.7 }, { key: 'specification', label: 'Especificação', width: 2.2 },
+  ], rows: quote.items.map(item=>({internal_code:item.internal_code||'-',product_name:item.internal_product_name||item.description||'-',description_snapshot:item.internal_product_name&&item.description!==item.internal_product_name?item.description:'-',quantity:item.quantity,unit:item.unit||'-',specification:item.technical_specification||'-'})) });
   addSectionTitle(context, 'Orientações');
   addParagraph(context, 'Favor informar preço, marca, prazo de entrega, condição de pagamento, validade da proposta, frete e impostos adicionais.');
   addParagraph(context, `Local de entrega: ${safeText(quote.delivery_address)}`);

@@ -17,6 +17,7 @@ import { roleRoutes } from './routes/roleRoutes.js';
 import { companySettingsRoutes } from './routes/companySettingsRoutes.js';
 import { awardRoutes } from './routes/awardRoutes.js';
 import { materialGroupRoutes, purchaseRoutes, supplierRoutes } from './routes/purchaseRoutes.js';
+import { measurementUnitRoutes } from './routes/measurementUnitRoutes.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
 
 export const app = express();
@@ -33,6 +34,7 @@ app.use('/api/company-settings', companySettingsRoutes);
 app.use('/api/awards', awardRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/material-groups', materialGroupRoutes);
+app.use('/api/measurement-units', measurementUnitRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/sectors', sectorRoutes);
 app.use('/api/products', productRoutes);

@@ -1244,7 +1244,12 @@ async function postPendingInstallmentsForCycle(client, cycle, user) {
     const posted = await postInstallment(client, {
       cycle,
       installment,
-      employee: plan,
+      employee: {
+        id: plan.employee_id,
+        full_name: plan.full_name,
+        current_salary: plan.current_salary,
+        employment_status: plan.employment_status,
+      },
       user,
       receiptAt: `${todayDate} 00:00:00`,
       receiptDate: todayDate,

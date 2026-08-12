@@ -1,6 +1,7 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import * as c from '../controllers/purchaseController.js';
 import { authenticate, requireAnyPermission, requirePermission } from '../middlewares/authMiddleware.js';
+import { remove as removeProductImage, upload as uploadProductImage } from '../controllers/productImageController.js';
 
 export const supplierRoutes = Router();
 supplierRoutes.use(authenticate);
@@ -27,7 +28,10 @@ purchaseRoutes.get('/dashboard', requirePermission('purchases.view'), c.purchase
 purchaseRoutes.post('/imports/preview', requirePermission('purchase_items.import'), c.importsPreview);
 purchaseRoutes.post('/imports/confirm', requirePermission('purchase_items.import'), c.importsConfirm);
 purchaseRoutes.post('/imports/products', requirePermission('purchase_imports.create_product'), c.importsCreateProduct);
+purchaseRoutes.put('/imports/products/:id/photo', requirePermission('purchase_imports.create_product'), express.raw({type:['image/png','image/jpeg'],limit:process.env.PRODUCT_IMAGE_MAX_BYTES||'5mb'}), uploadProductImage);
+purchaseRoutes.delete('/imports/products/:id/photo', requirePermission('purchase_imports.create_product'), removeProductImage);
 purchaseRoutes.get('/imports/products', requireAnyPermission('purchase_items.import','supplier_catalog.manage'), c.importsProducts);
+purchaseRoutes.get('/products', requireAnyPermission('purchases.view','purchases.create_request','purchases.create_direct','purchase_quotes.create','purchase_items.import','purchase_imports.create_product'), c.purchasesProducts);
 purchaseRoutes.get('/requests', requireAnyPermission('purchases.view','purchases.approve'), c.requestsIndex);
 purchaseRoutes.get('/requests/:id', requireAnyPermission('purchases.view','purchases.approve'), c.requestsShow);
 purchaseRoutes.post('/requests', requirePermission('purchases.create_request'), c.requestsStore);
@@ -44,9 +48,12 @@ purchaseRoutes.post('/quotes', requirePermission('purchase_quotes.create'), c.qu
 purchaseRoutes.post('/quotes/direct', requirePermission('purchase_quotes.create'), c.quotesDirectStore);
 purchaseRoutes.post('/quotes/:id/dispatches', requirePermission('purchase_quotes.send'), c.quotesDispatch);
 purchaseRoutes.post('/quotes/:id/proposals', requirePermission('purchase_quotes.register_response'), c.quotesProposal);
+purchaseRoutes.post('/quotes/:id/participants', requireAnyPermission('purchase_quotes.send','purchase_quotes.register_response','purchase_quotes.create'), c.quotesParticipantAdd);
+purchaseRoutes.delete('/quotes/:id/participants/:supplierId', requirePermission('purchase_quotes.create'), c.quotesParticipantRemove);
 purchaseRoutes.post('/quotes/:id/select', requirePermission('purchase_quotes.choose_supplier'), c.quotesSelect);
 purchaseRoutes.post('/quotes/:id/copied', requirePermission('purchases.view'), c.quotesCopied);
 purchaseRoutes.get('/orders', requireAnyPermission('purchases.view','purchases.receive'), c.purchasesIndex);
+purchaseRoutes.get('/receipts', requireAnyPermission('purchases.view','purchases.receive'), c.purchasesReceiptsIndex);
 purchaseRoutes.get('/orders/:id', requireAnyPermission('purchases.view','purchases.receive'), c.purchasesShow);
 purchaseRoutes.post('/orders/direct', requirePermission('purchases.create_direct'), c.purchasesDirect);
 purchaseRoutes.post('/orders/:id/receipts', requirePermission('purchases.receive'), c.purchasesReceive);
