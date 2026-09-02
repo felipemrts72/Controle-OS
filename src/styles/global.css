@@ -2,10 +2,6 @@
   box-sizing: border-box;
 }
 
-html {
-  min-width: 320px;
-}
-
 body {
   margin: 0;
   background: var(--color-bg);
@@ -34,6 +30,7 @@ input,
 select,
 textarea {
   font: inherit;
+  max-width: 100%;
 }
 
 button {
@@ -134,12 +131,32 @@ input:focus-visible {
 
 .field__input {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-white);
   color: var(--color-text);
   min-height: 42px;
   padding: 11px 12px;
+}
+
+.field__input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.78;
+}
+
+.field__input:disabled {
+  background: color-mix(in srgb, var(--color-bg) 80%, var(--color-white));
+  color: var(--color-text-muted);
+}
+
+.field__input:-webkit-autofill,
+.field__input:-webkit-autofill:hover,
+.field__input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text);
+  caret-color: var(--color-text);
+  box-shadow: 0 0 0 1000px var(--color-white) inset;
 }
 
 .field__input:focus {
@@ -240,10 +257,6 @@ input:focus-visible {
 }
 
 @media (max-width: 760px) {
-  body {
-    overflow-x: hidden;
-  }
-
   .page {
     gap: 14px;
   }
@@ -275,6 +288,7 @@ input:focus-visible {
   }
 
   .field__input {
+    font-size: 16px;
     min-height: 44px;
   }
 

@@ -44,7 +44,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     min-height: 58px;
-    padding: 8px 10px 8px 66px;
+    padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px max(66px, calc(env(safe-area-inset-left) + 56px));
     gap: 8px;
   }
 
@@ -68,7 +68,7 @@
 
 @media (max-width: 380px) {
   .header {
-    padding-left: 60px;
+    padding-left: max(60px, calc(env(safe-area-inset-left) + 54px));
   }
 
   .header__button {

@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { query } from '../database/pool.js';
-import { buildAuthUser, hasPermission } from '../services/permissionService.js';
+import { buildAuthUser, hasPermission, isSuperAdmin } from '../services/permissionService.js';
 import { httpError } from '../utils/httpError.js';
 
 export async function authenticate(req, _res, next) {
@@ -51,7 +51,7 @@ export function requirePermission(permissionCode) {
 
 export function requirePermissionOrAdmin(permissionCode, message = 'Acesso não autorizado.') {
   return (req, _res, next) => {
-    if (req.user?.is_super_admin || req.user?.role_slug === 'admin' || req.user?.role === 'admin' || hasPermission(req.user, permissionCode)) {
+    if (isSuperAdmin(req.user) || hasPermission(req.user, permissionCode)) {
       return next();
     }
     return next(httpError(403, message));

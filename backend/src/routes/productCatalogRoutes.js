@@ -1,0 +1,21 @@
+import express, { Router } from 'express';
+import * as controller from '../controllers/productCatalogController.js';
+import { authenticate, requireAnyPermission, requirePermission } from '../middlewares/authMiddleware.js';
+
+export const productCatalogRoutes = Router();
+productCatalogRoutes.use(authenticate);
+productCatalogRoutes.get('/', requirePermission('commercial.catalog.view'), controller.index);
+productCatalogRoutes.get('/operational-products', requirePermission('commercial.catalog.view'), controller.operationalProducts);
+productCatalogRoutes.get('/products/:commercialProductId', requirePermission('commercial.catalog.view'), controller.showCommercialProduct);
+productCatalogRoutes.post('/products', requirePermission('commercial.catalog.create'), controller.storeCommercialProduct);
+productCatalogRoutes.put('/products/:commercialProductId', requirePermission('commercial.catalog.edit'), controller.updateCommercialProduct);
+productCatalogRoutes.get('/product/:productId', requirePermission('commercial.catalog.view'), controller.showByProduct);
+productCatalogRoutes.post('/', requirePermission('commercial.catalog.create'), controller.store);
+productCatalogRoutes.put('/:catalogId', requirePermission('commercial.catalog.edit'), controller.update);
+productCatalogRoutes.post('/:catalogId/versions', requirePermission('commercial.catalog.edit'), controller.createVersion);
+productCatalogRoutes.put('/versions/:versionId', requirePermission('commercial.catalog.edit'), controller.updateVersion);
+productCatalogRoutes.post('/versions/:versionId/publish', requirePermission('commercial.catalog.publish'), controller.publishVersion);
+productCatalogRoutes.post('/versions/:versionId/images', requirePermission('commercial.catalog.edit'), express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: process.env.CATALOG_IMAGE_MAX_BYTES || '8mb' }), controller.uploadImage);
+productCatalogRoutes.patch('/images/:imageId', requirePermission('commercial.catalog.edit'), controller.updateImage);
+productCatalogRoutes.delete('/images/:imageId', requirePermission('commercial.catalog.edit'), controller.removeImage);
+productCatalogRoutes.get('/images/:imageId/content', requireAnyPermission('commercial.catalog.view', 'commercial.quotes.view', 'commercial.quotes.create', 'commercial.quotes.edit'), controller.imageContent);

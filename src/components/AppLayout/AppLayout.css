@@ -12,6 +12,8 @@
 .app-layout__content {
   min-width: 0;
   padding: clamp(14px, 2vw, 28px);
+  padding-left: max(clamp(14px, 2vw, 28px), env(safe-area-inset-left));
+  padding-right: max(clamp(14px, 2vw, 28px), env(safe-area-inset-right));
   width: 100%;
 }
 
@@ -40,9 +42,9 @@
     display: inline-flex;
     height: 44px;
     justify-content: center;
-    left: 14px;
+    left: max(14px, env(safe-area-inset-left));
     position: fixed;
-    top: 8px;
+    top: max(8px, env(safe-area-inset-top));
     width: 44px;
     z-index: 18;
   }
@@ -72,10 +74,12 @@
 @media (max-width: 480px) {
   .app-layout__content {
     padding: 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
   }
 
   .app-layout__sidebar-toggle {
-    left: 10px;
-    top: 7px;
+    left: max(10px, env(safe-area-inset-left));
+    top: max(7px, env(safe-area-inset-top));
   }
 }

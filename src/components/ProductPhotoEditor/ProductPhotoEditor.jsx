@@ -104,8 +104,8 @@ export function ProductPhotoEditor({
   }
 
   return (
-    <section className="product-photo-editor" aria-label="Foto do produto">
-      <strong>{product?.id ? 'Foto do Produto' : 'Foto do produto (opcional)'}</strong>
+    <section className="product-photo-editor" aria-label="Foto principal operacional do Produto">
+      <strong>{product?.id ? 'Foto principal do Produto' : 'Foto principal operacional (opcional)'}</strong>
       {previewUrl && <img className="product-photo-editor__preview" src={previewUrl} alt={`Foto de ${product.name || 'Produto'}`} />}
       {!previewUrl && !product.has_photo && <span className="product-form__hint">Nenhuma foto selecionada.</span>}
       {canManage && (

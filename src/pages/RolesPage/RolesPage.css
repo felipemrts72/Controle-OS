@@ -60,13 +60,34 @@
 .roles-page__status,
 .roles-page__check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
 .roles-page__status input,
 .roles-page__check input {
   flex: 0 0 auto;
+}
+
+.roles-page__check input {
+  margin-top: 4px;
+}
+
+.roles-page__permission-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.roles-page__permission-details code {
+  color: var(--color-primary);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.roles-page__permission-details small {
+  color: var(--color-text-muted);
+  line-height: 1.35;
 }
 
 .roles-page__permissions {

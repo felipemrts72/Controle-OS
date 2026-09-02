@@ -12,9 +12,9 @@ after(async () => {
   await applicationPool.end();
 });
 
-test('banco preserva 99 permissões e as atribuições dos perfis reais', async () => {
+test('banco preserva atribuições comerciais explícitas de admin e gerente sem concedê-las ao estoque', async () => {
   const permissionCount = await pool.query('SELECT COUNT(*)::int AS count FROM permissions');
-  assert.equal(permissionCount.rows[0].count, 99);
+  assert.ok([99, 102, 107, 115].includes(permissionCount.rows[0].count), 'o banco deve refletir uma etapa conhecida das migrations do Comercial');
 
   const roles = await pool.query(`
     SELECT r.slug, COUNT(rp.permission_id)::int AS permission_count
@@ -24,11 +24,11 @@ test('banco preserva 99 permissões e as atribuições dos perfis reais', async 
     ORDER BY r.slug
   `);
   assert.deepEqual(Object.fromEntries(roles.rows.map((row) => [row.slug, row.permission_count])), {
-    admin: 99,
+    admin: permissionCount.rows[0].count,
     entregas: 7,
-    estoquista: 31,
+    estoquista: permissionCount.rows[0].count === 115 ? 33 : 31,
     expedicao_teste: 2,
-    manager: 87,
+    manager: permissionCount.rows[0].count === 115 ? 103 : 87,
     shipping: 6,
     viewer: 1,
   });
@@ -41,15 +41,32 @@ test('banco preserva 99 permissões e as atribuições dos perfis reais', async 
     GROUP BY r.id, r.slug
     ORDER BY r.slug
   `);
-  assert.deepEqual(Object.fromEntries(fingerprints.rows.map((row) => [row.slug, row.fingerprint])), {
-    admin: 'aa08d06801f09e91192a026c14597466',
+  const fingerprintByRole = Object.fromEntries(fingerprints.rows.map((row) => [row.slug, row.fingerprint]));
+  assert.deepEqual({
+    entregas: fingerprintByRole.entregas,
+    estoquista: fingerprintByRole.estoquista,
+    expedicao_teste: fingerprintByRole.expedicao_teste,
+    manager: fingerprintByRole.manager,
+    shipping: fingerprintByRole.shipping,
+    viewer: fingerprintByRole.viewer,
+  }, {
     entregas: 'ee65b28cbedcf0c15781c95ed2b3d735',
-    estoquista: '4147de53fecb8cceed603f9bd4417d98',
+    estoquista: permissionCount.rows[0].count === 115 ? 'd940ccb2537f9f26f196def6de34b88d' : '4147de53fecb8cceed603f9bd4417d98',
     expedicao_teste: '4058a46f901fe65fb1d7d37c6e4b29aa',
-    manager: '5c316695de8fac14dade87805e755812',
+    manager: permissionCount.rows[0].count === 115 ? 'd8a1d1428a8f0decb95121925ccab968' : '5c316695de8fac14dade87805e755812',
     shipping: '412a91a80a208e587d66522830d53886',
     viewer: '6a6d90306885c821332ab0f5883176e8',
   });
+
+  const adminCatalog = await pool.query(`
+    SELECT
+      MD5(STRING_AGG(code, ',' ORDER BY code)) AS catalog_fingerprint,
+      COUNT(*) FILTER (WHERE code LIKE 'commercial.%')::int AS commercial_permissions
+    FROM permissions
+  `);
+  assert.equal(fingerprintByRole.admin, adminCatalog.rows[0].catalog_fingerprint);
+  const expectedCommercial = permissionCount.rows[0].count === 115 ? 14 : permissionCount.rows[0].count === 107 ? 8 : permissionCount.rows[0].count === 102 ? 3 : 0;
+  assert.equal(adminCatalog.rows[0].commercial_permissions, expectedCommercial);
 });
 
 test('todos os perfis reais possuem uma rota inicial acessível', async () => {

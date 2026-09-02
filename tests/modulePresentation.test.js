@@ -9,20 +9,23 @@ import {
   isNavigationItemActive,
 } from '../src/config/modulePresentation.js';
 import { canAccessPermission, getDefaultRoute } from '../src/utils/permissions.js';
+import { PERMISSIONS } from '../backend/src/services/permissionService.js';
 
 const userWith = (...permissions) => ({ role_slug: 'synthetic', permissions });
 
-test('apresentação central cobre as 99 permissões sem módulos futuros', () => {
-  assert.equal(Object.keys(PERMISSION_PRESENTATION).length, 99);
+test('apresentação central inclui Clientes, Orçamentos e Catálogo no Comercial', () => {
+  assert.equal(Object.keys(PERMISSION_PRESENTATION).length, 115);
   assert.deepEqual(NAVIGATION_ENTRIES.map((entry) => entry.label), [
-    'Dashboard', 'Produção', 'Estoque', 'Compras', 'Expedição', 'Administrativo', 'Configurações',
+    'Dashboard', 'Produção', 'Estoque', 'Comercial', 'Compras', 'Expedição', 'Administrativo', 'Configurações',
   ]);
-  assert.equal(NAVIGATION_ENTRIES.some((entry) => ['Comercial', 'Financeiro'].includes(entry.label)), false);
+  assert.equal(NAVIGATION_ENTRIES.some((entry) => entry.label === 'Financeiro'), false);
+  assert.deepEqual(NAVIGATION_ENTRIES.find((entry) => entry.id === 'commercial').items.map((item) => item.label), ['Clientes', 'Orçamentos', 'Catálogo']);
   assert.deepEqual(NAVIGATION_ENTRIES.find((entry) => entry.id === 'stock').items.map((item) => item.label), ['Produtos']);
   assert.equal(NAVIGATION_ENTRIES[0].type, 'link');
 });
 
 test('nomes visuais preservam os códigos técnicos', () => {
+  assert.equal(PERMISSION_PRESENTATION['commercial.customers.view'].module, 'Comercial');
   assert.equal(PERMISSION_PRESENTATION['orders.create'].name, 'Criar ordem de produção');
   assert.equal(PERMISSION_PRESENTATION['tv.view'].module, 'Produção');
   assert.equal(PERMISSION_PRESENTATION['roles.manage'].name, 'Gerenciar perfis');
@@ -30,7 +33,19 @@ test('nomes visuais preservam os códigos técnicos', () => {
   assert.equal(PERMISSION_PRESENTATION['sectors.view'].subdivision, 'Setores');
 });
 
+test('catálogo técnico e apresentação compartilham nomes, descrições e módulos', () => {
+  assert.equal(PERMISSIONS.length, 115);
+  PERMISSIONS.forEach((item) => {
+    assert.equal(item.name, PERMISSION_PRESENTATION[item.code].name, item.code);
+    assert.equal(item.group_name, PERMISSION_PRESENTATION[item.code].module, item.code);
+    assert.match(item.description, /^Permite .+\.$/, item.code);
+  });
+});
+
 test('sidebar oculta itens e módulos sem permissão', () => {
+  const commercial = getVisibleNavigation(userWith('commercial.customers.view'), canAccessPermission);
+  assert.deepEqual(commercial.map((entry) => entry.label), ['Comercial']);
+  assert.deepEqual(commercial[0].items.map((item) => item.label), ['Clientes']);
   const receiver = getVisibleNavigation(userWith('purchases.receive'), canAccessPermission);
   assert.deepEqual(receiver.map((entry) => entry.label), ['Compras']);
   assert.deepEqual(receiver[0].items.map((item) => item.label), ['Recebimentos']);
@@ -59,6 +74,9 @@ test('sidebar oculta itens e módulos sem permissão', () => {
 
 test('rota padrão usa dashboard ou a primeira rota realmente acessível', () => {
   assert.equal(getDefaultRoute(userWith('dashboard.view', 'purchases.view')), '/dashboard');
+  assert.equal(getDefaultRoute(userWith('commercial.customers.view')), '/comercial/clientes');
+  assert.equal(getDefaultRoute(userWith('commercial.quotes.view')), '/comercial/orcamentos');
+  assert.equal(getDefaultRoute(userWith('commercial.catalog.view')), '/comercial/catalogo');
   assert.equal(getDefaultRoute(userWith('purchases.approve')), '/compras/aprovacoes');
   assert.equal(getDefaultRoute(userWith('purchases.receive')), '/compras/recebimentos');
   assert.equal(getDefaultRoute(userWith('shipping.audit.view')), '/auditoria-expedicoes');
@@ -75,11 +93,15 @@ test('rotas dinâmicas ativam os subitens corretos', () => {
   const newOrder = items.find((item) => item.to === '/os/nova');
   const tv = items.find((item) => item.to === '/tv');
   const employees = items.find((item) => item.to === '/funcionarios');
+  const customers = items.find((item) => item.to === '/comercial/clientes');
+  const quotes = items.find((item) => item.to === '/comercial/orcamentos');
   assert.equal(isNavigationItemActive(orders, '/os/abc/editar'), true);
   assert.equal(isNavigationItemActive(orders, '/os/nova'), false);
   assert.equal(isNavigationItemActive(newOrder, '/os/nova'), true);
   assert.equal(isNavigationItemActive(tv, '/tv/montagem'), true);
   assert.equal(isNavigationItemActive(employees, '/funcionarios/abc'), true);
+  assert.equal(isNavigationItemActive(customers, '/comercial/clientes/abc/editar'), true);
+  assert.equal(isNavigationItemActive(quotes, '/comercial/orcamentos/abc/editar'), true);
 });
 
 test('rotas legadas, fullscreen, localStorage e regras mobile permanecem declaradas', () => {
@@ -88,7 +110,9 @@ test('rotas legadas, fullscreen, localStorage e regras mobile permanecem declara
   const sidebarCss = fs.readFileSync(new URL('../src/components/Sidebar/Sidebar.css', import.meta.url), 'utf8');
   [
     '/dashboard', '/os', '/os/nova', '/os/:id', '/os/:id/editar', '/painel-tv', '/tv/:setorSlug',
-    '/compras/recebimentos', '/funcionarios/:id', '/vales/:id',
+    '/compras/recebimentos', '/funcionarios/:id', '/vales/:id', '/comercial/clientes', '/comercial/clientes/:id',
+    '/comercial/orcamentos', '/comercial/orcamentos/:id',
+    '/comercial/catalogo', '/comercial/catalogo/novo', '/comercial/catalogo/:commercialProductId',
   ].forEach((path) => assert.match(routes, new RegExp(path.replace(/[/:]/g, (value) => `\\${value}`))));
   assert.ok(routes.indexOf('path="/tv"') < routes.indexOf('path="/dashboard"'));
   assert.match(sidebar, /olimen-gestao:sidebar-open-groups/);

@@ -17,6 +17,8 @@ export const legacyRolePermissions = {
     'products.edit',
     'products.delete',
     'products.types.manage',
+    'products.cost.view',
+    'products.cost.edit',
     'sectors.view',
     'sectors.manage',
     'services.view',
@@ -42,7 +44,7 @@ export const legacyRolePermissions = {
 };
 
 export function isSuperAdmin(user) {
-  return user?.is_super_admin || user?.username === 'admin' || user?.role_slug === 'admin' || user?.role === 'admin';
+  return user?.is_super_admin === true || user?.username === 'admin';
 }
 
 export function getDefaultRoute(user) {

@@ -39,11 +39,11 @@
 @media (max-width: 760px) {
   .confirm-modal {
     align-items: flex-start;
-    padding: 12px;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
 
   .confirm-modal__content {
-    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
     padding: 16px;
   }
 

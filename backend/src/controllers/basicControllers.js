@@ -15,6 +15,13 @@ import {
 
 const LEGACY_ROLES = ['admin', 'manager', 'shipping', 'viewer'];
 
+function concealProductCost(value, user) {
+  if (hasPermission(user, 'products.cost.view')) return value;
+  if (Array.isArray(value)) return value.map(({ operational_cost: _cost, ...item }) => item);
+  if (value && typeof value === 'object') { const { operational_cost: _cost, ...item } = value; return item; }
+  return value;
+}
+
 async function getRoleAssignment(client, roleId, fallbackRole = 'viewer') {
   if (!roleId) return { roleId: null, legacyRole: fallbackRole };
   const role = await client.query('SELECT id, slug, name FROM roles WHERE id = $1 AND is_active = TRUE', [roleId]);
@@ -237,7 +244,7 @@ export async function listProducts(req, res, next) {
       ]);
       const total = countResult.rows[0]?.total || 0;
       return res.json({
-        items: itemsResult.rows,
+        items: concealProductCost(itemsResult.rows, req.user),
         page,
         limit,
         total,
@@ -263,7 +270,7 @@ export async function listProducts(req, res, next) {
        WHERE COALESCE(p.is_active, TRUE) = TRUE
        ORDER BY p.name`,
     );
-    res.json(result.rows);
+    res.json(concealProductCost(result.rows, req.user));
   } catch (error) { next(error); }
 }
 
@@ -306,7 +313,7 @@ export async function searchProducts(req, res, next) {
        LIMIT 40`,
       params,
     );
-    res.json(result.rows);
+    res.json(concealProductCost(result.rows, req.user));
   } catch (error) { next(error); }
 }
 
@@ -375,7 +382,7 @@ export async function getProduct(req, res, next) {
       [req.params.id],
     );
     const manufacturingSteps = await getProductManufacturingSteps({ query }, req.params.id);
-    res.json({ ...product.rows[0], components: components.rows, manufacturing_steps: manufacturingSteps });
+    res.json(concealProductCost({ ...product.rows[0], components: components.rows, manufacturing_steps: manufacturingSteps }, req.user));
   } catch (error) { next(error); }
 }
 
@@ -504,6 +511,14 @@ export async function saveProduct(req, res, next) {
 
       const previous=req.params.id?(await client.query('SELECT * FROM products WHERE id=$1 FOR UPDATE',[req.params.id])).rows[0]:null;
       if (req.params.id && !previous) throw httpError(404, 'Produto não encontrado.');
+      const canEditCost = hasPermission(req.user, 'products.cost.edit');
+      if (req.body.operational_cost !== undefined && !canEditCost) throw httpError(403, 'Você não possui permissão para alterar o custo do Produto.');
+      let operationalCost = previous?.operational_cost ?? null;
+      if (req.body.operational_cost !== undefined && req.body.operational_cost !== null && req.body.operational_cost !== '') {
+        const normalizedCost = String(req.body.operational_cost).trim().replace(',', '.');
+        if (!/^\d{1,12}(?:\.\d{1,2})?$/.test(normalizedCost)) throw httpError(400, 'Custo operacional inválido.', { field: 'operational_cost' });
+        operationalCost = normalizedCost;
+      } else if (req.body.operational_cost === null || req.body.operational_cost === '') operationalCost = null;
       const existingManufacturingSteps = req.params.id
         ? (await client.query('SELECT id FROM product_manufacturing_steps WHERE product_id=$1 FOR UPDATE', [req.params.id])).rows
         : [];
@@ -528,16 +543,19 @@ export async function saveProduct(req, res, next) {
         : existingComponents;
       await validateProductComponents(client, req.params.id || null, components, existingComponents);
       const reviewStatus=previous?.review_status==='pending_review'&&req.body.review_status!=='approved'?'pending_review':'approved';
+      if ((!previous || (previous.review_status === 'pending_review' && reviewStatus === 'approved')) && operationalCost === null) {
+        throw httpError(400, 'Informe o custo operacional do Produto.', { field: 'operational_cost', code: 'PRODUCT_OPERATIONAL_COST_REQUIRED' });
+      }
       const product = req.params.id
         ? await client.query(
-          `UPDATE products SET name = $1, type = $2, sector_id = $3, default_volume_quantity = $4, default_total_weight_kg = $5, is_active = $6, measurement_unit_code=$7,review_status=$8::varchar(30),reviewed_by=CASE WHEN review_status='pending_review' AND $8::varchar(30)='approved' THEN $9 ELSE reviewed_by END,reviewed_at=CASE WHEN review_status='pending_review' AND $8::varchar(30)='approved' THEN NOW() ELSE reviewed_at END,updated_at = NOW()
-           WHERE id = $10 RETURNING *`,
-          [req.body.name, req.body.type, sectorId, req.body.default_volume_quantity, req.body.default_total_weight_kg, req.body.is_active ?? true,measurementUnitCode,reviewStatus,req.user?.id,req.params.id],
+          `UPDATE products SET name = $1, type = $2, sector_id = $3, default_volume_quantity = $4, default_total_weight_kg = $5, is_active = $6, measurement_unit_code=$7,review_status=$8::varchar(30),reviewed_by=CASE WHEN review_status='pending_review' AND $8::varchar(30)='approved' THEN $9 ELSE reviewed_by END,reviewed_at=CASE WHEN review_status='pending_review' AND $8::varchar(30)='approved' THEN NOW() ELSE reviewed_at END,operational_cost=$10,updated_at = NOW()
+           WHERE id = $11 RETURNING *`,
+          [req.body.name, req.body.type, sectorId, req.body.default_volume_quantity, req.body.default_total_weight_kg, req.body.is_active ?? true,measurementUnitCode,reviewStatus,req.user?.id,operationalCost,req.params.id],
         )
         : await client.query(
-          `INSERT INTO products (name, type, sector_id, default_volume_quantity, default_total_weight_kg,measurement_unit_code,review_status,creation_origin)
-           VALUES ($1, $2, $3, $4, $5,$6,'approved','manual') RETURNING *`,
-          [req.body.name, req.body.type, sectorId, req.body.default_volume_quantity, req.body.default_total_weight_kg,measurementUnitCode],
+          `INSERT INTO products (name, type, sector_id, default_volume_quantity, default_total_weight_kg,measurement_unit_code,review_status,creation_origin,operational_cost)
+           VALUES ($1, $2, $3, $4, $5,$6,'approved','manual',$7) RETURNING *`,
+          [req.body.name, req.body.type, sectorId, req.body.default_volume_quantity, req.body.default_total_weight_kg,measurementUnitCode,operationalCost],
         );
       if (!product.rows[0]) throw httpError(404, 'Produto não encontrado.');
       await syncProductComponents(client, product.rows[0].id, components, existingComponents);
@@ -548,8 +566,9 @@ export async function saveProduct(req, res, next) {
       if(previous&&previous.measurement_unit_code!==measurementUnitCode)await logAudit(client,{entityType:'product',entityId:product.rows[0].id,action:'measurement_unit_changed',previousValue:{measurement_unit_code:previous.measurement_unit_code},newValue:{measurement_unit_code:measurementUnitCode},userId:req.user?.id});
       return product.rows[0];
     });
-    res.status(req.params.id ? 200 : 201).json(req.params.id ? result : {
-      ...result,
+    const visibleResult = concealProductCost(result, req.user);
+    res.status(req.params.id ? 200 : 201).json(req.params.id ? visibleResult : {
+      ...visibleResult,
       photo_upload_token: createProductImageUploadToken(result.id, req.user),
     });
   } catch (error) { next(error); }

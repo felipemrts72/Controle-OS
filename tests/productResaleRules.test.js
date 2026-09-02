@@ -58,6 +58,7 @@ function payload(id, type, sectorId, overrides = {}) {
     default_total_weight_kg: 1,
     is_active: true,
     measurement_unit_code: 'UN',
+    operational_cost: 0,
     review_status: 'approved',
     components: [],
     ...overrides,

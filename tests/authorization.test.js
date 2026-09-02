@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { requireAnyPermission, requirePermission } from '../backend/src/middlewares/authMiddleware.js';
 import { assertPurchaseRequestTransitionPermission } from '../backend/src/services/purchaseService.js';
 import fs from 'node:fs';
+import { canAccessPermission, isSuperAdmin as isFrontendSuperAdmin } from '../src/utils/permissions.js';
 
 function run(middleware, permissions) {
   let received;
@@ -82,6 +83,27 @@ test('administrador continua autorizado sem depender de permissão individual', 
   let received;
   requirePermission('roles.manage')({ user: { username: 'admin', permissions: [] } }, {}, (error) => { received = error || null; });
   assert.equal(received, null);
+});
+
+test('perfil com slug admin usa role_permissions e não um bypass concorrente', () => {
+  assert.equal(run(requirePermission('commercial.customers.view'), [{ code: 'invalid' }])?.status, 403);
+  let received;
+  requirePermission('commercial.customers.view')({
+    user: { username: 'felipe', role: 'admin', role_slug: 'admin', permissions: ['commercial.customers.view'] },
+  }, {}, (error) => { received = error || null; });
+  assert.equal(received, null);
+
+  requirePermission('commercial.customers.edit')({
+    user: { username: 'felipe', role: 'admin', role_slug: 'admin', permissions: ['commercial.customers.view'] },
+  }, {}, (error) => { received = error || null; });
+  assert.equal(received?.status, 403);
+
+  const frontendUser = {
+    username: 'felipe', role: 'admin', role_slug: 'admin', permissions: ['commercial.customers.view'],
+  };
+  assert.equal(isFrontendSuperAdmin(frontendUser), false);
+  assert.equal(canAccessPermission(frontendUser, 'commercial.customers.view'), true);
+  assert.equal(canAccessPermission(frontendUser, 'commercial.customers.edit'), false);
 });
 
 test('ação direta de aprovação sem purchases.approve retorna 403 em memória', () => {

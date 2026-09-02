@@ -229,15 +229,15 @@ export async function getCompanyLogo() {
   return { buffer, mimeType: path.extname(row.logo_path).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg' };
 }
 
-export async function getCompanyPdfData() {
-  const row = await fetchRow();
+export async function getCompanyPdfData(database = { query }) {
+  const row = await fetchRow(database);
   if (!row) return { ...publicSettings(null), logo: null };
   let logo = null;
   if (row.logo_path) {
     try {
-      logo = (await getCompanyLogo()).buffer;
+      logo = await fs.readFile(resolveStoredLogoPath(row.logo_path));
     } catch (error) {
-      if (error.status !== 404) throw error;
+      if (error.code !== 'ENOENT') throw error;
     }
   }
   return { ...publicSettings(row), logo };

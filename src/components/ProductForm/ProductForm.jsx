@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../services/api.js';
+import { api, getStoredUser } from '../../services/api.js';
+import { canAccessPermission } from '../../utils/permissions.js';
 import { useToast } from '../ToastProvider/ToastProvider.jsx';
 import { ProductComponentsEditor } from '../ProductComponentsEditor/ProductComponentsEditor.jsx';
 import { ProductManufacturingRouteEditor } from '../ProductManufacturingRouteEditor/ProductManufacturingRouteEditor.jsx';
@@ -9,6 +10,9 @@ import './ProductForm.css';
 
 export function ProductForm({ initialProduct, onSubmit, onPhotoUploaded }) {
   const toast = useToast();
+  const user = getStoredUser();
+  const canViewCost = canAccessPermission(user, 'products.cost.view');
+  const canEditCost = canAccessPermission(user, 'products.cost.edit');
   const [sectors, setSectors] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [form, setForm] = useState(initialProduct || { name: '', type: 'manufactured', measurement_unit_code: '', default_volume_quantity: 1, default_total_weight_kg: 1, is_active: true, components: [] });
@@ -81,6 +85,11 @@ export function ProductForm({ initialProduct, onSubmit, onPhotoUploaded }) {
           <span className="field__label">Peso total padrão (kg)</span>
           <input className="field__input" type="number" min="0.01" step="0.01" name="default_total_weight_kg" value={form.default_total_weight_kg} onChange={change} required />
         </label>
+        {canViewCost && <label className="field">
+          <span className="field__label">Custo operacional (R$)</span>
+          <input className="field__input" type="number" min="0" step="0.01" name="operational_cost" value={form.operational_cost ?? ''} onChange={change} disabled={!canEditCost} required={canEditCost && (!initialProduct || (initialProduct.review_status === 'pending_review' && form.review_status === 'approved'))} />
+          <small className="product-form__hint">Informação operacional sensível; não é preço de venda.</small>
+        </label>}
       </div>
       {form.review_status === 'pending_review' && <div className="panel"><strong>Produto pendente de revisão</strong><p>Complete o cadastro e confirme abaixo para aprová-lo. Esta aprovação não cria saldo nem movimentação.</p><label><input type="checkbox" checked={form.review_status==='approved'} onChange={(event)=>setForm((current)=>({...current,review_status:event.target.checked?'approved':'pending_review'}))}/> Marcar cadastro como revisado</label></div>}
       <ProductComponentsEditor

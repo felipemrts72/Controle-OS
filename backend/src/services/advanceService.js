@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { transaction } from '../database/pool.js';
 import { logAudit } from './auditService.js';
-import { hasPermission } from './permissionService.js';
+import { hasPermission, isSuperAdmin } from './permissionService.js';
 import { httpError } from '../utils/httpError.js';
 
 const listStatusLabels = {
@@ -19,7 +20,7 @@ function assertCan(user, permission) {
 }
 
 function isAdvanceAdmin(user) {
-  return user?.is_super_admin || user?.role_slug === 'admin' || user?.role === 'admin';
+  return isSuperAdmin(user);
 }
 
 function assertSpecificAdvancePermission(user, permission, message) {
@@ -127,7 +128,7 @@ function buildSalaryMissingDetails({ employee, amount, accumulatedBefore }) {
 
 async function fetchList(client, listId, lock = false) {
   const result = await client.query(
-    `SELECT al.*, ac.status AS cycle_status, ac.opened_at, ac.closed_at
+    `SELECT al.*, al.xmin::text AS row_version, ac.status AS cycle_status, ac.opened_at, ac.closed_at
      FROM advance_lists al
      JOIN advance_cycles ac ON ac.id = al.cycle_id
      WHERE al.id = $1 AND al.deleted_at IS NULL
@@ -205,69 +206,26 @@ function buildCycleLimitResult(employee, accumulated) {
   };
 }
 
-async function validateLimit(client, { list, employee, amount, excludingItemId, user, thresholdWarningConfirmed, overrideConfirmed }) {
-  const accumulatedBefore = await accumulatedInCycle(client, list.cycle_id, employee.id, excludingItemId);
+// All advance writers take this lock before any row lock. This also serializes
+// individual advances, installments and cycle closure with list approval.
+function advanceWriteTransaction(callback) {
+  return transaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('advances:write'))");
+    return callback(client);
+  });
+}
+
+function classifyListLimit(employee, accumulatedBefore, amount) {
   const salary = Number(employee.current_salary);
-  const userCanOverride = can(user, 'advances.override_limits', false);
-
-  if (!Number.isFinite(salary) || salary <= 0) {
-    const details = buildSalaryMissingDetails({ employee, amount, accumulatedBefore });
-    if (userCanOverride && overrideConfirmed) {
-      return {
-        details,
-        overrideUsed: true,
-        thresholdWarningConfirmed: false,
-        warningPercentage: null,
-        maximumPercentage: null,
-      };
-    }
-    throw httpError(userCanOverride ? 409 : 400, 'Funcionario sem salario cadastrado. Atualize a ficha do funcionario antes de calcular o limite.', {
-      code: userCanOverride ? 'LIMIT_OVERRIDE_REQUIRED' : 'SALARY_MISSING',
-      details,
-    });
-  }
-
-  const details = buildLimitDetails({ employee, salary, accumulatedBefore, amount });
-  const projected = details.projected_total;
-  const warningLimit = details.warning_limit;
-  const maximumLimit = details.maximum_limit;
-  const exceedsWarning = projected > warningLimit;
-  const exceedsCommonHardLimit = projected > maximumLimit;
-
-  if (exceedsCommonHardLimit) {
-    if (userCanOverride && overrideConfirmed) {
-      return {
-        details,
-        overrideUsed: true,
-        thresholdWarningConfirmed: true,
-        warningPercentage: details.warning_percentage,
-        maximumPercentage: details.maximum_percentage,
-      };
-    }
-    throw httpError(409, userCanOverride
-      ? 'Este valor ultrapassa o limite permitido para usuarios comuns.'
-      : details.low_salary
-        ? 'Este valor fara o funcionario ultrapassar o limite maximo de 40%.'
-        : 'Este valor ultrapassa o limite maximo de 60% permitido.', {
-      code: userCanOverride ? 'LIMIT_OVERRIDE_REQUIRED' : 'LIMIT_BLOCKED',
-      details,
-    });
-  }
-
-  if (!details.low_salary && exceedsWarning && !thresholdWarningConfirmed) {
-    throw httpError(409, 'Este vale fara o funcionario ultrapassar 40% do salario.', {
-      code: 'LIMIT_WARNING',
-      details,
-    });
-  }
-
-  return {
-    details,
-    overrideUsed: false,
-    thresholdWarningConfirmed: !details.low_salary && exceedsWarning,
-    warningPercentage: details.warning_percentage,
-    maximumPercentage: details.maximum_percentage,
-  };
+  const details = Number.isFinite(salary) && salary > 0
+    ? buildLimitDetails({ employee, salary, accumulatedBefore, amount })
+    : buildSalaryMissingDetails({ employee, amount, accumulatedBefore });
+  const rule = !details.salary ? 'SALARY_MISSING'
+    : details.projected_total > details.maximum_limit ? 'MAXIMUM_EXCEEDED'
+      : !details.low_salary && details.projected_total > details.warning_limit ? 'WARNING_EXCEEDED' : 'WITHIN_LIMIT';
+  const classification = rule === 'WITHIN_LIMIT' ? 'OK'
+    : rule === 'WARNING_EXCEEDED' ? 'WARNING' : 'OVERRIDE_REQUIRED';
+  return { ...details, rule, classification };
 }
 
 function assertListEditable(list, user) {
@@ -403,7 +361,7 @@ export async function listCycles() {
 
 export async function createCycle(user) {
   assertCan(user, 'advances.cycles.create');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const existing = await client.query("SELECT id FROM advance_cycles WHERE status = 'open'");
     if (existing.rows[0]) throw httpError(409, 'Ja existe um ciclo de vales aberto.');
     const created = await client.query(
@@ -426,7 +384,7 @@ export async function createCycle(user) {
 
 export async function closeCycle(cycleId, body, user) {
   assertSpecificAdvancePermission(user, 'advances.cycles.close', 'Você não possui permissão para fechar ciclos de vales.');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const current = await client.query("SELECT * FROM advance_cycles WHERE id = $1 FOR UPDATE", [cycleId]);
     const cycle = current.rows[0];
     if (!cycle) throw httpError(404, 'Ciclo nao encontrado.');
@@ -472,7 +430,7 @@ export async function closeCycle(cycleId, body, user) {
 
 export async function createAdvanceList(body, user) {
   assertCan(user, 'advances.create');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const cycleResult = await client.query("SELECT * FROM advance_cycles WHERE status = 'open'");
     const cycle = cycleResult.rows[0];
     if (!cycle) throw httpError(400, 'Inicie um ciclo de vales antes de criar listas.');
@@ -494,7 +452,7 @@ export async function createAdvanceList(body, user) {
 }
 
 export async function updateAdvanceList(listId, body, user) {
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const list = await fetchList(client, listId, true);
     assertListEditable(list, user);
     const updated = await client.query(
@@ -521,148 +479,48 @@ export async function getAdvanceList(listId) {
 }
 
 export async function saveAdvanceItem(listId, itemId, body, user) {
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const list = await fetchList(client, listId, true);
     assertListEditable(list, user);
-    await client.query('SELECT id FROM advance_cycles WHERE id = $1 FOR UPDATE', [list.cycle_id]);
-
     const amount = money(body.amount);
     let currentItem = null;
     if (itemId) {
-      const itemResult = await client.query(
-        `SELECT * FROM advance_list_items
-         WHERE id = $1 AND list_id = $2 AND status = 'active' AND removed_at IS NULL
-         FOR UPDATE`,
+      const result = await client.query(
+        "SELECT * FROM advance_list_items WHERE id = $1 AND list_id = $2 AND status = 'active' AND removed_at IS NULL FOR UPDATE",
         [itemId, listId],
       );
-      currentItem = itemResult.rows[0];
+      currentItem = result.rows[0];
       if (!currentItem) throw httpError(404, 'Item da lista nao encontrado.');
     }
-
     const employeeId = body.employee_id || currentItem?.employee_id;
     if (!employeeId) throw httpError(400, 'Selecione um funcionario.');
     const employee = await fetchEmployeeForAdvance(client, employeeId, true);
-    const validation = await validateLimit(client, {
-      list,
-      employee,
-      amount,
-      excludingItemId: itemId || null,
-      user,
-      thresholdWarningConfirmed: Boolean(body.threshold_warning_confirmed),
-      overrideConfirmed: Boolean(body.override_confirmed),
-    });
-
-    const snapshot = validation.details;
-    let saved;
-    if (currentItem) {
-      saved = await client.query(
-        `UPDATE advance_list_items
-         SET employee_id = $1,
-             amount = $2,
-             confirmed = TRUE,
-             threshold_warning_confirmed = $3,
-             override_used = $4,
-             override_by = $5,
-             salary_at_confirmation = $6,
-             accumulated_before = $7,
-             accumulated_after = $8,
-             warning_percentage = $9,
-             maximum_percentage = $10,
-             projected_percentage = $11,
-             updated_by = $12,
-             updated_at = NOW()
-         WHERE id = $13
-         RETURNING *`,
-        [
-          employee.id,
-          amount,
-          validation.thresholdWarningConfirmed,
-          validation.overrideUsed,
-          validation.overrideUsed ? user.id : null,
-          snapshot.salary,
-          snapshot.accumulated_before,
-          snapshot.projected_total,
-          validation.warningPercentage,
-          validation.maximumPercentage,
-          snapshot.projected_percentage,
-          user.id,
-          itemId,
-        ],
-      );
-      await logAudit(client, {
-        entityType: 'advance_list',
-        entityId: listId,
-        action: 'item_update',
-        previousValue: { item_id: itemId, employee_id: currentItem.employee_id, amount: currentItem.amount },
-        newValue: { item_id: itemId, employee_id: employee.id, amount },
-        userId: user.id,
-      });
-    } else {
-      saved = await client.query(
-        `INSERT INTO advance_list_items (
-          list_id, employee_id, amount, confirmed, threshold_warning_confirmed, override_used, override_by,
-          salary_at_confirmation, accumulated_before, accumulated_after, warning_percentage, maximum_percentage,
-          projected_percentage, created_by, updated_by
-        )
-        VALUES ($1, $2, $3, TRUE, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
-        RETURNING *`,
-        [
-          listId,
-          employee.id,
-          amount,
-          validation.thresholdWarningConfirmed,
-          validation.overrideUsed,
-          validation.overrideUsed ? user.id : null,
-          snapshot.salary,
-          snapshot.accumulated_before,
-          snapshot.projected_total,
-          validation.warningPercentage,
-          validation.maximumPercentage,
-          snapshot.projected_percentage,
-          user.id,
-        ],
-      );
-      await logAudit(client, {
-        entityType: 'advance_list',
-        entityId: listId,
-        action: 'item_add',
-        newValue: { item_id: saved.rows[0].id, employee_id: employee.id, employee_name: employee.full_name, amount },
-        userId: user.id,
-      });
-    }
-
-    if (validation.thresholdWarningConfirmed) {
-      await logAudit(client, {
-        entityType: 'advance_list',
-        entityId: listId,
-        action: 'threshold_warning_confirmed',
-        newValue: snapshot,
-        userId: user.id,
-      });
-    }
-    if (validation.overrideUsed) {
-      await logAudit(client, {
-        entityType: 'advance_list',
-        entityId: listId,
-        action: 'override_limits',
-        newValue: snapshot,
-        userId: user.id,
-      });
-    }
+    // Confirmed means the line was entered, not that a limit was authorized.
+    // Never accept authorization flags on draft writes.
+    const saved = currentItem ? await client.query(
+      `UPDATE advance_list_items SET employee_id = $1, amount = $2, confirmed = TRUE,
+        threshold_warning_confirmed = FALSE, override_used = FALSE, override_by = NULL,
+        salary_at_confirmation = NULL, accumulated_before = NULL, accumulated_after = NULL,
+        warning_percentage = NULL, maximum_percentage = NULL, projected_percentage = NULL,
+        limit_review_rejected_at = NULL, limit_review_rejected_by = NULL,
+        updated_by = $3, updated_at = clock_timestamp() WHERE id = $4 RETURNING *`,
+      [employee.id, amount, user.id, itemId],
+    ) : await client.query(
+      `INSERT INTO advance_list_items (list_id, employee_id, amount, confirmed, created_by, updated_by)
+       VALUES ($1, $2, $3, TRUE, $4, $4) RETURNING *`,
+      [listId, employee.id, amount, user.id],
+    );
     await logAudit(client, {
-      entityType: 'advance_list',
-      entityId: listId,
-      action: 'item_confirm',
-      newValue: { item_id: saved.rows[0].id, employee_id: employee.id, amount },
-      userId: user.id,
+      entityType: 'advance_list', entityId: listId, action: currentItem ? 'item_update' : 'item_add',
+      previousValue: currentItem,
+      newValue: { item_id: saved.rows[0].id, employee_id: employee.id, amount }, userId: user.id,
     });
-
     return hydrateList(client, listId);
   });
 }
 
 export async function removeAdvanceItem(listId, itemId, user) {
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const list = await fetchList(client, listId, true);
     assertListEditable(list, user);
     const item = await client.query(
@@ -686,7 +544,7 @@ export async function removeAdvanceItem(listId, itemId, user) {
 
 export async function deleteAdvanceList(listId, user) {
   assertSpecificAdvancePermission(user, 'advances.lists.delete', 'Você não possui permissão para excluir listas de vales.');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const list = await fetchList(client, listId, true);
     await client.query('SELECT id FROM advance_cycles WHERE id = $1 FOR UPDATE', [list.cycle_id]);
     const admin = isAdvanceAdmin(user);
@@ -792,7 +650,7 @@ export async function deleteAdvanceList(listId, user) {
 }
 
 export async function submitAdvanceList(listId, user) {
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const list = await fetchList(client, listId, true);
     assertListEditable(list, user);
     const count = await client.query(
@@ -821,65 +679,120 @@ export async function submitAdvanceList(listId, user) {
   });
 }
 
-async function assertApprovalConsistency(client, list, user, overrideConfirmed) {
-  const duplicate = await client.query(
-    `SELECT employee_id, COUNT(*)::int
-     FROM advance_list_items
-     WHERE list_id = $1 AND status = 'active' AND removed_at IS NULL
-     GROUP BY employee_id
-     HAVING COUNT(*) > 1`,
-    [list.id],
+async function buildListReview(client, list, user) {
+  // Deterministic lock order protects current salaries against concurrent edits.
+  await client.query(
+    `SELECT e.id FROM employees e WHERE e.id IN (
+      SELECT employee_id FROM advance_list_items WHERE list_id = $1 AND status = 'active' AND removed_at IS NULL
+    ) ORDER BY e.id FOR UPDATE`, [list.id],
   );
-  if (duplicate.rows[0]) throw httpError(400, 'A lista possui funcionario duplicado.');
-
-  const items = await client.query(
-    `SELECT * FROM advance_list_items
-     WHERE list_id = $1 AND status = 'active' AND removed_at IS NULL
-     ORDER BY created_at`,
-    [list.id],
+  const result = await client.query(
+    `SELECT ali.*, ali.xmin::text AS row_version, e.xmin::text AS employee_version,
+       e.full_name, e.current_salary, e.employment_status, e.deleted_at AS employee_deleted_at,
+       COALESCE(t.total, 0) - CASE WHEN ali.confirmed THEN ali.amount ELSE 0 END AS cycle_accumulated
+     FROM advance_list_items ali
+     JOIN employees e ON e.id = ali.employee_id
+     LEFT JOIN (
+       SELECT other.employee_id, SUM(other.amount) AS total
+       FROM advance_list_items other JOIN advance_lists al ON al.id = other.list_id
+       WHERE al.cycle_id = $2 AND al.status <> 'cancelled' AND al.deleted_at IS NULL
+         AND other.status = 'active' AND other.removed_at IS NULL AND other.confirmed = TRUE
+       GROUP BY other.employee_id
+     ) t ON t.employee_id = ali.employee_id
+     WHERE ali.list_id = $1 AND ali.status = 'active' AND ali.removed_at IS NULL
+     ORDER BY ali.employee_id, ali.id`, [list.id, list.cycle_id],
   );
-  if (!items.rows.length) throw httpError(400, 'A lista nao possui itens.');
-
-  for (const item of items.rows) {
+  if (!result.rows.length) throw httpError(400, 'A lista nao possui itens.');
+  const employeeIds = new Set();
+  const items = result.rows.map((item) => {
+    if (employeeIds.has(item.employee_id)) throw httpError(400, 'A lista possui funcionario duplicado.');
+    employeeIds.add(item.employee_id);
     if (!item.confirmed) throw httpError(400, 'Todos os itens precisam estar confirmados.');
-    const employee = await fetchEmployeeForAdvance(client, item.employee_id, true);
-    const validationUser = item.override_used
-      ? { ...user, permissions: [...new Set([...(user.permissions || []), 'advances.override_limits'])] }
-      : user;
-    await validateLimit(client, {
-      list,
-      employee,
-      amount: Number(item.amount),
-      excludingItemId: item.id,
-      user: validationUser,
-      thresholdWarningConfirmed: item.threshold_warning_confirmed,
-      overrideConfirmed: item.override_used || overrideConfirmed,
-    });
-  }
+    if (item.employee_deleted_at || item.employment_status === 'desligado') {
+      throw httpError(400, 'Funcionario removido ou desligado nao pode receber vale. Edite a lista.');
+    }
+    const details = classifyListLimit({ id: item.employee_id, full_name: item.full_name, current_salary: item.current_salary },
+      Number(item.cycle_accumulated), Number(item.amount));
+    return { ...details, line_id: item.id, row_version: item.row_version,
+      employee_version: item.employee_version, updated_at: item.updated_at,
+      rejected_at: item.limit_review_rejected_at,
+      can_authorize: details.classification !== 'OVERRIDE_REQUIRED' || can(user, 'advances.override_limits', false) };
+  });
+  const reviewToken = createHash('sha256').update(JSON.stringify({
+    list_id: list.id, cycle_id: list.cycle_id, list_date: list.list_date,
+    status: list.status, updated_at: list.updated_at, version: list.row_version, items,
+  })).digest('hex');
+  return { items, review_token: reviewToken, review_items: items.filter((item) => item.classification !== 'OK') };
 }
 
-export async function approveAdvanceList(listId, body, user) {
+export async function approveAdvanceList(listId, body = {}, user) {
   assertSpecificAdvancePermission(user, 'advances.approve', 'Você não possui permissão para aprovar listas de vales.');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const list = await fetchList(client, listId, true);
+    if (list.status === 'approved') throw httpError(409, 'Esta lista ja foi aprovada. Atualize a pagina.', { code: 'LIST_ALREADY_APPROVED' });
     if (list.cycle_status !== 'open') throw httpError(400, 'Ciclo fechado nao permite aprovacao.');
     if (list.status !== 'pending_approval') throw httpError(400, 'Apenas listas aguardando aprovacao podem ser aprovadas.');
-    await client.query('SELECT id FROM advance_cycles WHERE id = $1 FOR UPDATE', [list.cycle_id]);
-    await assertApprovalConsistency(client, list, user, Boolean(body.override_confirmed));
+    const review = await buildListReview(client, list, user);
+    const requiresEdit = async () => ({ requires_review: false, requires_edit: true,
+      message: 'Autorização negada. Edite ou remova explicitamente as linhas rejeitadas antes de aprovar. Nenhuma autorização foi salva.',
+      list: await hydrateList(client, listId) });
+    if (review.items.some((item) => item.rejected_at)) return requiresEdit();
+    const hasSubmission = body.review_token !== undefined || body.decisions !== undefined;
+    const stale = hasSubmission && body.review_token !== review.review_token;
+    const reviewResponse = () => ({ requires_review: true, requires_edit: false,
+      code: stale ? 'LIST_REVIEW_STALE' : 'LIST_REVIEW_REQUIRED',
+      message: stale ? 'Os dados mudaram. Revise os valores atualizados e escolha novamente.' : 'Revise os limites antes de aprovar a lista.',
+      review_token: review.review_token, review_items: review.review_items });
+    // Even if a change removes every warning, an old confirmation cannot approve it.
+    if (stale || (!hasSubmission && review.review_items.length)) return reviewResponse();
+    if (hasSubmission) {
+      if (!Array.isArray(body.decisions)) throw httpError(400, 'Envie todas as decisões da revisão.');
+      const decisions = new Map();
+      const required = new Map(review.review_items.map((item) => [item.line_id, item]));
+      for (const decision of body.decisions) {
+        if (!decision || !required.has(decision.line_id) || decisions.has(decision.line_id)
+          || !['approve', 'reject'].includes(decision.decision)) throw httpError(400, 'Decisões inválidas ou duplicadas.');
+        if (decision.decision === 'approve' && !required.get(decision.line_id).can_authorize) {
+          throw httpError(403, 'Você não possui permissão para autorizar override de limites.');
+        }
+        decisions.set(decision.line_id, decision.decision);
+      }
+      if (decisions.size !== required.size) throw httpError(400, 'Decida todas as pendências antes de confirmar.');
+      const rejected = review.review_items.filter((item) => decisions.get(item.line_id) === 'reject');
+      if (rejected.length) {
+        for (const item of rejected) {
+          await client.query(`UPDATE advance_list_items SET limit_review_rejected_at = clock_timestamp(),
+            limit_review_rejected_by = $1, updated_by = $1, updated_at = clock_timestamp() WHERE id = $2`, [user.id, item.line_id]);
+          await logAudit(client, { entityType: 'advance_list', entityId: listId, action: 'limit_authorization_rejected',
+            newValue: { ...item, list_id: listId, decision: 'reject' }, userId: user.id });
+        }
+        return requiresEdit();
+      }
+    }
+    for (const item of review.items) {
+      const override = item.classification === 'OVERRIDE_REQUIRED';
+      const warning = item.classification === 'WARNING';
+      await client.query(
+        `UPDATE advance_list_items SET threshold_warning_confirmed = $1, override_used = $2, override_by = $3,
+          salary_at_confirmation = $4, accumulated_before = $5, accumulated_after = $6,
+          warning_percentage = $7, maximum_percentage = $8, projected_percentage = $9,
+          updated_by = $10, updated_at = clock_timestamp() WHERE id = $11`,
+        [warning || (override && Boolean(item.salary)), override, override ? user.id : null,
+          item.salary, item.accumulated_before, item.projected_total, item.warning_percentage ?? null,
+          item.maximum_percentage ?? null, item.projected_percentage ?? null, user.id, item.line_id],
+      );
+      if (warning || override) await logAudit(client, {
+        entityType: 'advance_list', entityId: listId, action: override ? 'override_limits' : 'threshold_warning_confirmed',
+        newValue: { ...item, list_id: listId, decision: 'approve', review_token: review.review_token }, userId: user.id,
+      });
+    }
     const updated = await client.query(
-      `UPDATE advance_lists
-       SET status = 'approved', approved_by = $1, approved_at = NOW(), updated_by = $1, updated_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [user.id, listId],
+      `UPDATE advance_lists SET status = 'approved', approved_by = $1, approved_at = NOW(),
+       updated_by = $1, updated_at = clock_timestamp() WHERE id = $2 RETURNING *`, [user.id, listId],
     );
     await logAudit(client, {
-      entityType: 'advance_list',
-      entityId: listId,
-      action: 'approve',
-      previousValue: { status: list.status },
-      newValue: { status: updated.rows[0].status, approved_by: user.id, approved_at: updated.rows[0].approved_at },
-      userId: user.id,
+      entityType: 'advance_list', entityId: listId, action: 'approve', previousValue: { status: list.status },
+      newValue: { status: updated.rows[0].status, approved_by: user.id, approved_at: updated.rows[0].approved_at }, userId: user.id,
     });
     return hydrateList(client, listId);
   });
@@ -1274,7 +1187,7 @@ async function postPendingInstallmentsForCycle(client, cycle, user) {
 
 export async function createIndividualAdvance(body, user) {
   assertCan(user, 'advances.create_individual');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const openCycle = await fetchOpenCycle(client);
     if (!openCycle) throw httpError(400, 'Inicie um ciclo de vales antes de lançar vale individual.');
 
@@ -1414,7 +1327,7 @@ export async function listEligibleIndividualAdvances(employeeId, user) {
 
 export async function convertIndividualAdvanceToInstallments(itemId, body, user) {
   assertSpecificAdvancePermission(user, 'advances.installments.convert', 'Você não possui permissão para parcelar vales.');
-  return transaction(async (client) => {
+  return advanceWriteTransaction(async (client) => {
     const installmentsCount = validateInstallmentsCount(body.installments_count, { min: 2 });
     const current = await client.query(
       `SELECT ali.*, al.cycle_id, al.status AS list_status, ac.status AS cycle_status,

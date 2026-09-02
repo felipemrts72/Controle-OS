@@ -1,0 +1,121 @@
+.commercial-customers__subtitle {
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+}
+
+.commercial-customers__filters {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 220px) auto;
+}
+
+.commercial-customers__table-panel {
+  overflow: hidden;
+}
+
+.commercial-customers__summary {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.commercial-customers__identity {
+  display: grid;
+  gap: 3px;
+}
+
+.commercial-customers__identity span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.commercial-customers__status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.commercial-customers__status_active {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.commercial-customers__status_inactive {
+  background: rgba(100, 116, 139, 0.14);
+  color: var(--color-text-muted);
+}
+
+.commercial-customers__actions,
+.commercial-customers__pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.commercial-customers__actions .button {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.commercial-customers__pagination {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.commercial-customers__feedback {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.commercial-customers__feedback_error {
+  color: #b91c1c;
+}
+
+.commercial-customer-form__content,
+.commercial-customer-form__section {
+  display: grid;
+  gap: 16px;
+}
+
+.commercial-customer-form__section h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.commercial-customer-form__wide {
+  grid-column: 1 / -1;
+}
+
+.commercial-customer-form__textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.commercial-customer-form__footer {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .commercial-customers__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .commercial-customers__filters .button,
+  .commercial-customers__actions,
+  .commercial-customers__actions .button,
+  .commercial-customer-form__footer,
+  .commercial-customer-form__footer .button {
+    width: 100%;
+  }
+
+  .commercial-customers__pagination {
+    justify-content: space-between;
+  }
+}

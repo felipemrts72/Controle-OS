@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Briefcase,
   Building2,
   ClipboardCheck,
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   IdCard,
   LayoutDashboard,
   Package,
+  BookOpen,
   QrCode,
   ReceiptText,
   Settings,
@@ -40,6 +42,14 @@ export const NAVIGATION_ENTRIES = [
     type: 'module', id: 'stock', label: 'Estoque', icon: Package,
     items: [
       { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products.view', match: (path) => path === '/produtos' || path.startsWith('/produtos/') },
+    ],
+  },
+  {
+    type: 'module', id: 'commercial', label: 'Comercial', icon: Briefcase,
+    items: [
+      { to: '/comercial/clientes', label: 'Clientes', icon: Users, permission: 'commercial.customers.view', match: (path) => path === '/comercial/clientes' || path.startsWith('/comercial/clientes/') },
+      { to: '/comercial/orcamentos', label: 'Orçamentos', icon: ReceiptText, permission: 'commercial.quotes.view', match: (path) => path === '/comercial/orcamentos' || path.startsWith('/comercial/orcamentos/') },
+      { to: '/comercial/catalogo', label: 'Catálogo', icon: BookOpen, permission: 'commercial.catalog.view', match: (path) => path === '/comercial/catalogo' || path.startsWith('/comercial/catalogo/') },
     ],
   },
   {
@@ -103,6 +113,20 @@ const permission = (module, subdivision, name) => ({ module, subdivision, name }
 
 export const PERMISSION_PRESENTATION = {
   'dashboard.view': permission('Dashboard', null, 'Ver dashboard'),
+  'commercial.customers.view': permission('Comercial', 'Clientes', 'Ver clientes'),
+  'commercial.customers.create': permission('Comercial', 'Clientes', 'Criar clientes'),
+  'commercial.customers.edit': permission('Comercial', 'Clientes', 'Editar, ativar ou inativar clientes'),
+  'commercial.quotes.view': permission('Comercial', 'Orçamentos', 'Ver orçamentos'),
+  'commercial.quotes.create': permission('Comercial', 'Orçamentos', 'Criar orçamentos'),
+  'commercial.quotes.edit': permission('Comercial', 'Orçamentos', 'Editar orçamentos'),
+  'commercial.quotes.approve': permission('Comercial', 'Orçamentos', 'Aprovar orçamentos'),
+  'commercial.quotes.cancel': permission('Comercial', 'Orçamentos', 'Cancelar orçamentos'),
+  'commercial.catalog.view': permission('Comercial', 'Catálogo', 'Ver Catálogo Comercial'),
+  'commercial.catalog.create': permission('Comercial', 'Catálogo', 'Criar Catálogo Comercial'),
+  'commercial.catalog.edit': permission('Comercial', 'Catálogo', 'Editar Catálogo Comercial'),
+  'commercial.catalog.sop.view': permission('Comercial', 'Catálogo', 'Ver SOP Comercial'),
+  'commercial.catalog.sop.edit': permission('Comercial', 'Catálogo', 'Editar SOP Comercial'),
+  'commercial.catalog.publish': permission('Comercial', 'Catálogo', 'Publicar Catálogo Comercial'),
   'orders.view': permission('Produção', null, 'Ver ordens de produção'),
   'orders.create': permission('Produção', null, 'Criar ordem de produção'),
   'orders.edit': permission('Produção', null, 'Editar ordem de produção'),
@@ -117,6 +141,8 @@ export const PERMISSION_PRESENTATION = {
   'products.edit': permission('Estoque', null, 'Editar produtos'),
   'products.delete': permission('Estoque', null, 'Excluir produtos'),
   'products.types.manage': permission('Estoque', null, 'Gerenciar tipos de produto'),
+  'products.cost.view': permission('Estoque', 'Produtos', 'Ver custo de Produtos'),
+  'products.cost.edit': permission('Estoque', 'Produtos', 'Editar custo de Produtos'),
 
   'suppliers.view': permission('Compras', null, 'Ver fornecedores'),
   'suppliers.manage': permission('Compras', null, 'Gerenciar fornecedores'),
@@ -209,7 +235,7 @@ export const PERMISSION_PRESENTATION = {
 };
 
 export const PERMISSION_MODULE_ORDER = [
-  'Dashboard', 'Produção', 'Estoque', 'Compras', 'Expedição', 'Administrativo', 'Configurações',
+  'Dashboard', 'Produção', 'Estoque', 'Comercial', 'Compras', 'Expedição', 'Administrativo', 'Configurações',
 ];
 
 export function groupPermissionsForPresentation(permissions) {

@@ -1,7 +1,21 @@
 import { query } from '../database/pool.js';
 
-export const PERMISSIONS = [
+const RAW_PERMISSIONS = [
   { code: 'dashboard.view', name: 'Ver dashboard', group_name: 'Dashboard' },
+  { code: 'commercial.customers.view', name: 'Ver clientes do Comercial', group_name: 'Comercial' },
+  { code: 'commercial.customers.create', name: 'Criar clientes do Comercial', group_name: 'Comercial' },
+  { code: 'commercial.customers.edit', name: 'Editar clientes do Comercial', group_name: 'Comercial' },
+  { code: 'commercial.quotes.view', name: 'Ver orçamentos', group_name: 'Comercial' },
+  { code: 'commercial.quotes.create', name: 'Criar orçamentos', group_name: 'Comercial' },
+  { code: 'commercial.quotes.edit', name: 'Editar orçamentos', group_name: 'Comercial' },
+  { code: 'commercial.quotes.approve', name: 'Aprovar orçamentos', group_name: 'Comercial' },
+  { code: 'commercial.quotes.cancel', name: 'Cancelar orçamentos', group_name: 'Comercial' },
+  { code: 'commercial.catalog.view', name: 'Ver Catálogo Comercial', group_name: 'Comercial' },
+  { code: 'commercial.catalog.create', name: 'Criar Catálogo Comercial', group_name: 'Comercial' },
+  { code: 'commercial.catalog.edit', name: 'Editar Catálogo Comercial', group_name: 'Comercial' },
+  { code: 'commercial.catalog.sop.view', name: 'Ver SOP Comercial', group_name: 'Comercial' },
+  { code: 'commercial.catalog.sop.edit', name: 'Editar SOP Comercial', group_name: 'Comercial' },
+  { code: 'commercial.catalog.publish', name: 'Publicar Catálogo Comercial', group_name: 'Comercial' },
   { code: 'orders.view', name: 'Ver OS', group_name: 'Ordens de Serviço' },
   { code: 'orders.create', name: 'Criar OS', group_name: 'Ordens de Serviço' },
   { code: 'orders.edit', name: 'Editar OS', group_name: 'Ordens de Serviço' },
@@ -12,6 +26,8 @@ export const PERMISSIONS = [
   { code: 'products.edit', name: 'Editar produtos', group_name: 'Produtos' },
   { code: 'products.delete', name: 'Excluir produtos', group_name: 'Produtos' },
   { code: 'products.types.manage', name: 'Gerenciar tipos de produto', group_name: 'Produtos' },
+  { code: 'products.cost.view', name: 'Ver custo de Produtos', group_name: 'Produtos' },
+  { code: 'products.cost.edit', name: 'Editar custo de Produtos', group_name: 'Produtos' },
   { code: 'sectors.view', name: 'Ver setores', group_name: 'Setores' },
   { code: 'sectors.manage', name: 'Gerenciar setores', group_name: 'Setores' },
   { code: 'services.view', name: 'Ver serviços', group_name: 'Serviços' },
@@ -102,6 +118,48 @@ export const PERMISSIONS = [
   { code: 'advances.cycles.close', name: 'Fechar ciclos de vales', group_name: 'Vales' },
 ];
 
+const PERMISSION_NAME_OVERRIDES = {
+  'commercial.customers.create': 'Criar clientes',
+  'commercial.customers.edit': 'Editar, ativar ou inativar clientes',
+  'commercial.customers.view': 'Ver clientes',
+  'employees.meal_allowance.manage': 'Gerenciar vale-alimentação',
+  'employees.meal_allowance.view': 'Ver vale-alimentação',
+  'orders.create': 'Criar ordem de produção',
+  'orders.delete': 'Excluir ordem de produção',
+  'orders.edit': 'Editar ordem de produção',
+  'orders.history.view': 'Ver histórico de produção',
+  'orders.view': 'Ver ordens de produção',
+  'purchase_imports.create_product': 'Criar produto preliminar em Compras',
+  'purchases.create_direct': 'Criar compras diretas',
+  'roles.manage': 'Gerenciar perfis',
+  'roles.view': 'Ver perfis',
+  'tv.view': 'Ver painel de produção',
+};
+
+function permissionModule(code) {
+  if (code === 'dashboard.view') return 'Dashboard';
+  if (code.startsWith('commercial.')) return 'Comercial';
+  if (code.startsWith('orders.') || code.startsWith('services.') || code === 'tv.view') return 'Produção';
+  if (code.startsWith('products.')) return 'Estoque';
+  if (
+    code.startsWith('purchases.') || code.startsWith('purchase_')
+    || code.startsWith('suppliers.') || code.startsWith('supplier_')
+  ) return 'Compras';
+  if (code.startsWith('labels.') || code.startsWith('shipping.')) return 'Expedição';
+  if (code.startsWith('employees.') || code.startsWith('awards.') || code.startsWith('advances.')) return 'Administrativo';
+  return 'Configurações';
+}
+
+export const PERMISSIONS = RAW_PERMISSIONS.map((permission) => {
+  const name = PERMISSION_NAME_OVERRIDES[permission.code] || permission.name;
+  return {
+    ...permission,
+    name,
+    description: `Permite ${name.charAt(0).toLowerCase()}${name.slice(1)}.`,
+    group_name: permissionModule(permission.code),
+  };
+});
+
 export const ALL_PERMISSION_CODES = PERMISSIONS.map((permission) => permission.code);
 
 export const LEGACY_ROLE_PERMISSIONS = {
@@ -118,6 +176,8 @@ export const LEGACY_ROLE_PERMISSIONS = {
     'products.edit',
     'products.delete',
     'products.types.manage',
+    'products.cost.view',
+    'products.cost.edit',
     'sectors.view',
     'sectors.manage',
     'services.view',
@@ -143,7 +203,7 @@ export const LEGACY_ROLE_PERMISSIONS = {
 };
 
 export function isSuperAdmin(user) {
-  return user?.username === 'admin';
+  return user?.is_super_admin === true || user?.username === 'admin';
 }
 
 export async function getUserPermissions(userId) {

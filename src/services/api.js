@@ -34,6 +34,22 @@ export function handleApiError(error) {
   return Promise.reject(error);
 }
 
+export function apiErrorMessage(error, fallback = 'Não foi possível concluir a operação.') {
+  const status = error.response?.status;
+  const serverMessage = error.response?.data?.message;
+
+  if (status === 401) return 'Sessão expirada. Entre novamente.';
+  if (status === 403) return 'Acesso não autorizado.';
+  if (status === 404) return 'Funcionalidade indisponível no servidor atual (HTTP 404).';
+  if (status >= 500) return serverMessage || 'Erro interno do servidor.';
+  if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+    return 'O servidor demorou demais para responder.';
+  }
+  if (!error.response) return 'Servidor indisponível. Verifique sua conexão.';
+
+  return serverMessage || error.message || fallback;
+}
+
 export function setSession(token, user) {
   isRedirectingToLogin = false;
   localStorage.setItem('token', token);

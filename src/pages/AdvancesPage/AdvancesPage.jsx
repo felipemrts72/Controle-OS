@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Check, FileText, HandCoins, Layers, Pencil, Plus, RotateCcw, Save, Search, Trash2, XCircle } from 'lucide-react';
 import { api, getStoredUser } from '../../services/api.js';
@@ -7,6 +7,7 @@ import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { canAccessPermission, isSuperAdmin } from '../../utils/permissions.js';
 import { formatDate, formatMoney, toDateInput } from '../EmployeesPage/employeeUtils.js';
 import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
+import { AdvanceLimitReview } from './AdvanceLimitReview.jsx';
 import './AdvancesPage.css';
 
 const emptyLine = { employee_id: '', amount: '' };
@@ -66,22 +67,6 @@ function splitPreview(total, count) {
   return values.map((value) => value / 100);
 }
 
-function LimitFacts({ details }) {
-  if (!details) return null;
-  return (
-    <dl className="advances-page__facts">
-      <div className={factClass('employee')}><dt>Funcionário</dt><dd>{details.employee_name || '-'}</dd></div>
-      <div className={factClass('salary')}><dt>Salário atual</dt><dd>{details.salary ? formatMoney(details.salary) : 'Não cadastrado'}</dd></div>
-      {details.maximum_limit !== undefined && <div className={factClass('limit')}><dt>Limite máximo</dt><dd>{formatMoney(details.maximum_limit)} {details.maximum_percentage ? `(${details.maximum_percentage}%)` : ''}</dd></div>}
-      <div className={factClass('used')}><dt>Já acumulado</dt><dd>{formatMoney(details.accumulated_before)}</dd></div>
-      <div className={factClass('amount')}><dt>Novo vale</dt><dd>{formatMoney(details.amount)}</dd></div>
-      <div className={factClass('projected')}><dt>Total projetado</dt><dd>{formatMoney(details.projected_total)}</dd></div>
-      {details.projected_percentage !== undefined && <div className={factClass('percentage')}><dt>Percentual projetado</dt><dd><Percent value={details.projected_percentage} /></dd></div>}
-      <div className={factClass('remaining')}><dt>Restante disponível</dt><dd>{formatMoney(details.remaining)}</dd></div>
-    </dl>
-  );
-}
-
 export function AdvancesPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -108,7 +93,6 @@ export function AdvancesPage() {
   const [line, setLine] = useState(emptyLine);
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [limitModal, setLimitModal] = useState(null);
   const [limitLookup, setLimitLookup] = useState(emptyLimitLookup);
   const [individual, setIndividual] = useState(emptyIndividual);
   const [individualResult, setIndividualResult] = useState(null);
@@ -116,7 +100,10 @@ export function AdvancesPage() {
   const [deleteListModal, setDeleteListModal] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [closeModal, setCloseModal] = useState(false);
-  const [approvalModal, setApprovalModal] = useState(null);
+  const [review, setReview] = useState(null);
+  const [reviewError, setReviewError] = useState('');
+  const approvalRequest = useRef(0);
+  const approvalInFlight = useRef(false);
 
   async function loadHome() {
     const [homeResponse, cyclesResponse] = await Promise.all([
@@ -150,7 +137,11 @@ export function AdvancesPage() {
   }, []);
 
   useEffect(() => {
+    setReview(null);
+    approvalInFlight.current = false;
+    setBusy(false);
     Promise.all([loadList(), loadEmployees()]).catch(() => toast.error('Não foi possível abrir a lista.'));
+    return () => { approvalRequest.current += 1; };
   }, [id]);
 
   const employeeOptions = useMemo(() => {
@@ -204,25 +195,8 @@ export function AdvancesPage() {
     }
   }
 
-  function handleLimitError(error, retry) {
-    const data = error.response?.data;
-    if (!['LIMIT_WARNING', 'LIMIT_OVERRIDE_REQUIRED', 'LIMIT_BLOCKED', 'SALARY_MISSING'].includes(data?.code)) return false;
-    const blocked = data.code === 'LIMIT_BLOCKED' || data.code === 'SALARY_MISSING';
-    setLimitModal({
-      title: data.code === 'LIMIT_WARNING' ? 'ATENÇÃO' : blocked ? 'Limite máximo atingido' : 'Override de limite',
-      message: data.message,
-      details: data.details,
-      confirmLabel: data.code === 'LIMIT_WARNING' ? 'Continuar mesmo assim' : 'Confirmar override',
-      blocked,
-      onConfirm: data.code === 'LIMIT_WARNING'
-        ? () => retry({ threshold_warning_confirmed: true })
-        : () => retry({ override_confirmed: true, threshold_warning_confirmed: true }),
-    });
-    return true;
-  }
-
-  async function saveItem(itemId, values, flags = {}) {
-    const payload = { ...values, ...flags };
+  async function saveItem(itemId, values) {
+    const payload = values;
     const request = itemId
       ? () => api.put(`/advances/lists/${id}/items/${itemId}`, payload)
       : () => api.post(`/advances/lists/${id}/items`, payload);
@@ -232,13 +206,10 @@ export function AdvancesPage() {
       setList(response.data);
       setLine(emptyLine);
       setEditing(null);
-      setLimitModal(null);
       toast.success('Linha confirmada.');
       await loadHome();
     } catch (error) {
-      if (!handleLimitError(error, (nextFlags) => saveItem(itemId, values, nextFlags))) {
-        toast.error(apiErrorMessage(error, 'Não foi possível confirmar a linha.'));
-      }
+      toast.error(apiErrorMessage(error, 'Não foi possível confirmar a linha.'));
     } finally {
       setBusy(false);
     }
@@ -272,20 +243,45 @@ export function AdvancesPage() {
     }
   }
 
-  async function approveList(flags = {}) {
+  function cancelReview() {
+    if (approvalInFlight.current) return;
+    approvalRequest.current += 1;
+    setReview(null);
+    setReviewError('');
+  }
+
+  async function approveList(payload = {}) {
+    if (approvalInFlight.current) return;
+    approvalInFlight.current = true;
+    const requestId = ++approvalRequest.current;
     setBusy(true);
+    setReviewError('');
     try {
-      const response = await api.post(`/advances/lists/${id}/approve`, flags);
-      setList(response.data);
-      setApprovalModal(null);
-      toast.success('Lista aprovada.');
+      const response = await api.post(`/advances/lists/${id}/approve`, payload);
+      if (requestId !== approvalRequest.current) return;
+      if (response.data.requires_review) {
+        // Remount for EVERY new server review, so no previous decision survives.
+        setReview({ ...response.data, requestId });
+        return;
+      }
+      setReview(null);
+      setList(response.data.requires_edit ? response.data.list : response.data);
+      if (response.data.requires_edit) toast.error(response.data.message);
+      else toast.success('Lista aprovada.');
       await loadHome();
     } catch (error) {
-      if (!handleLimitError(error, (nextFlags) => approveList(nextFlags))) {
-        toast.error(apiErrorMessage(error, 'Não foi possível aprovar a lista.'));
-      }
+      if (requestId !== approvalRequest.current) return;
+      const message = apiErrorMessage(error, 'Não foi possível aprovar a lista.');
+      if (error.response?.data?.code === 'LIST_ALREADY_APPROVED') {
+        setReview(null);
+        await loadList();
+      } else setReviewError(message);
+      toast.error(message);
     } finally {
-      setBusy(false);
+      if (requestId === approvalRequest.current) {
+        approvalInFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -585,7 +581,7 @@ export function AdvancesPage() {
             </div>
 
             {list.items.map((item) => (
-              <div className="advances-page__line" key={item.id}>
+              <div className={`advances-page__line ${item.limit_review_rejected_at ? 'advances-page__line_rejected' : ''}`} key={item.id}>
                 {editing?.id === item.id ? (
                   <>
                     <select className="field__input" value={editing.employee_id} onChange={(event) => setEditing({ ...editing, employee_id: event.target.value })}>
@@ -597,7 +593,7 @@ export function AdvancesPage() {
                   </>
                 ) : (
                   <>
-                    <div><strong>{item.employee_name}</strong><span>{item.override_used ? 'Limite ultrapassado por autorização' : item.threshold_warning_confirmed ? 'Confirmação acima de 40%' : 'Confirmado'}</span></div>
+                    <div><strong>{item.employee_name}</strong><span>{item.limit_review_rejected_at ? 'REJEITADA · Autorização negada. Edite ou remova esta linha.' : item.override_used ? 'Limite ultrapassado por autorização' : item.threshold_warning_confirmed ? 'Confirmação acima de 40%' : 'Confirmado'}</span></div>
                     <strong>{formatMoney(item.amount)}</strong>
                     {canEditCurrentList && (
                       <div className="advances-page__line-actions">
@@ -624,7 +620,7 @@ export function AdvancesPage() {
 
           <div className="page__actions advances-page__footer-actions">
             {canEditCurrentList && <button className="button button_primary" type="button" onClick={submitList} disabled={busy}><Save size={18} /><span>Salvar lista</span></button>}
-            {canApprove && list.status === 'pending_approval' && <button className="button button_primary" type="button" onClick={() => setApprovalModal(true)}><Check size={18} /><span>Aprovar lista</span></button>}
+            {canApprove && list.status === 'pending_approval' && <button className="button button_primary" type="button" onClick={() => approveList()} disabled={busy || Boolean(editing || line.employee_id || line.amount)} title={editing || line.employee_id || line.amount ? 'Confirme a linha em edição antes de aprovar' : 'Validar e aprovar a lista'}><Check size={18} /><span>Aprovar lista</span></button>}
           </div>
         </>
       )}
@@ -873,27 +869,8 @@ export function AdvancesPage() {
         </div>
       )}
 
-      <ConfirmModal
-        open={Boolean(limitModal)}
-        title={limitModal?.title}
-        onCancel={() => setLimitModal(null)}
-        showCancel={!limitModal?.blocked}
-        cancelLabel="Cancelar"
-        actions={!limitModal?.blocked && <button className="button button_primary" type="button" onClick={limitModal?.onConfirm}>{limitModal?.confirmLabel}</button>}
-      >
-        <p>{limitModal?.message}</p>
-        <LimitFacts details={limitModal?.details} />
-        {limitModal?.blocked && <button className="button button_primary" type="button" onClick={() => setLimitModal(null)}>Entendi</button>}
-      </ConfirmModal>
-
-      <ConfirmModal
-        open={Boolean(approvalModal)}
-        title="Aprovar lista"
-        onCancel={() => setApprovalModal(null)}
-        actions={<button className="button button_primary" type="button" onClick={() => approveList()}>Aprovar lista</button>}
-      >
-        <p>O backend vai recalcular todos os itens, checar duplicidades e registrar aprovação com data e usuário.</p>
-      </ConfirmModal>
+      {review && <AdvanceLimitReview key={review.requestId} review={review} busy={busy} error={reviewError}
+        onCancel={cancelReview} onConfirm={approveList} />}
 
       <ConfirmModal
         open={Boolean(deleteListModal)}

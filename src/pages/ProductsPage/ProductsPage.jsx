@@ -23,6 +23,7 @@ export function ProductsPage() {
   const canEdit = canAccessPermission(user, 'products.edit');
   const canDelete = canAccessPermission(user, 'products.delete');
   const canManageTypes = canAccessPermission(user, 'products.types.manage');
+  const canViewCost = canAccessPermission(user, 'products.cost.view');
   const [products, setProducts] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [sectors, setSectors] = useState([]);
@@ -153,6 +154,7 @@ export function ProductsPage() {
     { key: 'default_volume_quantity', label: 'Volumes', className: 'products-page__secondary-column' },
     { key: 'default_total_weight_kg', label: 'Peso total', className: 'products-page__secondary-column', render: (row) => `${row.default_total_weight_kg} kg` },
     { key: 'measurement_unit_code', label: 'Unidade', render: (row) => row.measurement_unit_code || 'Legada — não definida' },
+    ...(canViewCost ? [{ key: 'operational_cost', label: 'Custo', render: (row) => row.operational_cost == null ? 'Não informado' : Number(row.operational_cost).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }] : []),
     {
       key: 'review_status',
       label: 'Revisão',
@@ -161,7 +163,7 @@ export function ProductsPage() {
     { key: 'creation_origin', label: 'Origem', render: (row) => row.creation_origin === 'purchases' ? 'Compras' : 'Cadastro regular' },
     {
       key: 'has_photo',
-      label: 'Foto',
+      label: 'Foto principal',
       render: (row) => row.has_photo
         ? <button className="button products-page__photo-button" type="button" onClick={() => setPhotoProduct(row)}>Ver foto</button>
         : '—',
@@ -275,7 +277,7 @@ export function ProductsPage() {
         )}
       </div>
 
-      <ConfirmModal open={Boolean(photoProduct)} title="Foto do Produto" onCancel={() => setPhotoProduct(null)}>
+      <ConfirmModal open={Boolean(photoProduct)} title="Foto principal do Produto" onCancel={() => setPhotoProduct(null)}>
         {photoProduct && (
           <ProductPhotoEditor
             product={photoProduct}

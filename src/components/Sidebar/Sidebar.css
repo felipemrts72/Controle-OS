@@ -127,7 +127,7 @@
     bottom: 0;
     left: 0;
     max-width: min(320px, 86vw);
-    padding: 14px;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
     position: fixed;
     top: 0;
     transform: translateX(-100%);

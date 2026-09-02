@@ -3,18 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-"scripts": {
-  "dev": "vite",
-  "build": "vite build",
-  "test": "node --test",
-  "preview": "vite preview",
-  "frontend:prod": "node server.js",
-  "server": "node backend/src/server.js",
-  "server:dev": "nodemon backend/src/server.js",
-  "migrate": "node scripts/migrate.js up",
-  "migrate:status": "node scripts/migrate.js status",
-  "migrate:repair": "node scripts/migrate.js repair"
-},
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "node --test --test-concurrency=1",
+    "preview": "vite preview",
+    "frontend:prod": "node server.js",
+    "server": "node backend/src/server.js",
+    "server:dev": "nodemon backend/src/server.js",
+    "migrate": "node scripts/migrate.js up",
+    "migrate:status": "node scripts/migrate.js status",
+    "migrate:repair": "node scripts/migrate.js repair",
+    "rbac:audit": "node scripts/audit-permissions.js"
+  },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
     "axios": "^1.7.9",
@@ -31,7 +32,8 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.7",

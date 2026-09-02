@@ -33,6 +33,13 @@ import { AdvanceIndividualReportPage } from '../pages/AdvancesPage/AdvanceIndivi
 import { CompanySettingsPage } from '../pages/CompanySettingsPage/CompanySettingsPage.jsx';
 import { AwardsPage } from '../pages/AwardsPage/AwardsPage.jsx';
 import { PurchasesPage } from '../pages/PurchasesPage/PurchasesPage.jsx';
+import { CustomersPage } from '../pages/CommercialCustomersPage/CustomersPage.jsx';
+import { CustomerFormPage } from '../pages/CommercialCustomersPage/CustomerFormPage.jsx';
+import { QuotesPage } from '../pages/CommercialQuotesPage/QuotesPage.jsx';
+import { QuoteFormPage } from '../pages/CommercialQuotesPage/QuoteFormPage.jsx';
+import { QuoteDetailPage } from '../pages/CommercialQuotesPage/QuoteDetailPage.jsx';
+import { CatalogPage } from '../pages/CommercialCatalogPage/CatalogPage.jsx';
+import { CatalogEditorPage } from '../pages/CommercialCatalogPage/CatalogEditorPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -126,6 +133,18 @@ export function AppRoutes() {
         )}
       >
         <Route path="/dashboard" element={<RoleRoute permission="dashboard.view"><DashboardPage /></RoleRoute>} />
+        <Route path="/comercial/clientes" element={<RoleRoute permission="commercial.customers.view"><CustomersPage /></RoleRoute>} />
+        <Route path="/comercial/clientes/novo" element={<RoleRoute permission="commercial.customers.create"><CustomerFormPage mode="create" /></RoleRoute>} />
+        <Route path="/comercial/clientes/:id/editar" element={<RoleRoute permission="commercial.customers.edit"><CustomerFormPage mode="edit" /></RoleRoute>} />
+        <Route path="/comercial/clientes/:id" element={<RoleRoute permission="commercial.customers.view"><CustomerFormPage mode="view" /></RoleRoute>} />
+        <Route path="/comercial/orcamentos" element={<RoleRoute permission="commercial.quotes.view"><QuotesPage /></RoleRoute>} />
+        <Route path="/comercial/orcamentos/novo" element={<RoleRoute permission="commercial.quotes.create"><QuoteFormPage mode="create" /></RoleRoute>} />
+        <Route path="/comercial/orcamentos/antigos/:id" element={<RoleRoute permission="commercial.quotes.view"><QuoteDetailPage legacy /></RoleRoute>} />
+        <Route path="/comercial/orcamentos/:id/editar" element={<RoleRoute permission="commercial.quotes.edit"><QuoteFormPage mode="edit" /></RoleRoute>} />
+        <Route path="/comercial/orcamentos/:id" element={<RoleRoute permission="commercial.quotes.view"><QuoteDetailPage /></RoleRoute>} />
+        <Route path="/comercial/catalogo" element={<RoleRoute permission="commercial.catalog.view"><CatalogPage /></RoleRoute>} />
+        <Route path="/comercial/catalogo/novo" element={<RoleRoute permission="commercial.catalog.create"><CatalogEditorPage /></RoleRoute>} />
+        <Route path="/comercial/catalogo/:commercialProductId" element={<RoleRoute permission="commercial.catalog.view"><CatalogEditorPage /></RoleRoute>} />
         <Route path="/os" element={<RoleRoute permission="orders.view"><InternalOrdersPage /></RoleRoute>} />
         <Route path="/os/nova" element={<RoleRoute permission="orders.create"><InternalOrderCreatePage /></RoleRoute>} />
         <Route path="/os/:id/editar" element={<RoleRoute permission="orders.edit"><InternalOrderEditPage /></RoleRoute>} />

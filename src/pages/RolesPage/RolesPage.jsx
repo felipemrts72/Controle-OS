@@ -166,7 +166,11 @@ export function RolesPage() {
                             disabled={!canManage}
                             onChange={() => togglePermission(permission.code)}
                           />
-                          <span>{permission.visualName}</span>
+                          <span className="roles-page__permission-details">
+                            <strong>{permission.visualName}</strong>
+                            <code>{permission.code}</code>
+                            <small>{permission.description || `Permite ${permission.visualName.toLowerCase()}.`}</small>
+                          </span>
                         </label>
                       ))}
                     </div>

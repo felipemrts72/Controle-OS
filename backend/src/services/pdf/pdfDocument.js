@@ -154,6 +154,7 @@ export function createPdfDocument({
   margins = DEFAULT_MARGINS,
   emittedAt = new Date(),
   timeZone = undefined,
+  headerRenderer = addDocumentHeader,
 } = {}) {
   const normalizedMargins = { ...DEFAULT_MARGINS, ...margins };
   const layout = orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -186,10 +187,11 @@ export function createPdfDocument({
     timeZone,
     margins: normalizedMargins,
     orientation: layout,
+    headerRenderer,
   };
   context.addPage = () => {
     doc.addPage({ size: 'A4', layout, margins: { ...normalizedMargins, bottom: 0 } });
-    addDocumentHeader(context);
+    headerRenderer(context);
   };
   context.addPage();
   return context;
@@ -312,6 +314,7 @@ function drawTableRow(context, columns, row, { header = false, shaded = false } 
   const rowHeight = tableRowHeight(doc, columns, values, font, fontSize, padding);
   const y = doc.y;
   let x = margins.left;
+  doc.save();
 
   for (const column of columns) {
     const rawValue = header
@@ -330,11 +333,11 @@ function drawTableRow(context, columns, row, { header = false, shaded = false } 
     doc.fillColor(header ? COLORS.white : COLORS.text).font(font).fontSize(fontSize)
       .text(safeText(rawValue), x + padding, y + padding, {
         width: column.renderedWidth - padding * 2,
-        height: rowHeight - padding * 2,
         align: column.align || 'left',
       });
     x += column.renderedWidth;
   }
+  doc.restore();
   doc.y = y + rowHeight;
   return rowHeight;
 }
@@ -357,7 +360,7 @@ export function addTable(context, {
 
   rows.forEach((row, index) => {
     const estimatedHeight = tableRowHeight(context.doc, renderedColumns, row, 'Helvetica', 8.5, 6);
-    const requiredHeight = estimatedHeight + (index === rows.length - 1 ? keepWithNextHeight : 0);
+    const requiredHeight = estimatedHeight + 18 + (index === rows.length - 1 ? keepWithNextHeight : 0);
     if (ensurePageSpace(context, requiredHeight)) {
       drawTableRow(context, renderedColumns, {}, { header: true });
     }
@@ -408,20 +411,29 @@ function addDocumentFooters(context) {
   const range = doc.bufferedPageRange();
   for (let index = range.start; index < range.start + range.count; index += 1) {
     doc.switchToPage(index);
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.x = margins.left;
+    doc.y = 0;
     const width = contentWidth(context);
     const lineY = doc.page.height - margins.bottom + 8;
     const textY = lineY + 7;
+    doc.save();
     doc.strokeColor(COLORS.border).lineWidth(0.5)
       .moveTo(margins.left, lineY)
       .lineTo(doc.page.width - margins.right, lineY)
       .stroke();
     doc.fillColor(COLORS.muted).font('Helvetica').fontSize(7.5)
-      .text(`Gerado pelo ${PRODUCT_NAME}`, margins.left, textY, { width: width * 0.7, lineBreak: false });
-    doc.text(`Página ${index - range.start + 1} de ${range.count}`, margins.left, textY, {
-      width,
+      .text(`Gerado pelo ${PRODUCT_NAME}`, margins.left, textY, { width: width * 0.64, height: 10 });
+    doc.x = margins.left + width * 0.64;
+    doc.y = textY;
+    doc.text(`Página ${index - range.start + 1} de ${range.count}`, margins.left + width * 0.64, textY, {
+      width: width * 0.36,
+      height: 10,
       align: 'right',
-      lineBreak: false,
     });
+    doc.restore();
+    doc.page.margins.bottom = originalBottomMargin;
   }
 }
 
