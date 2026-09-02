@@ -1118,3 +1118,4 @@ WHERE username = 'admin';
 \ir migrations/20260731_z_purchase_import_catalog_direct_quotes.sql
 \ir migrations/20260805_purchase_units_product_review.sql
 \ir migrations/20260805_z_product_preliminary_photo.sql
+\ir migrations/20260902_commercial_catalog_operational_products.sql

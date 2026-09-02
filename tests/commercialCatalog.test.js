@@ -98,6 +98,7 @@ test('Produto Comercial é independente, aceita vínculo opcional e centraliza C
     }, user);
     assert.equal(technical.catalog_configured, true);
     assert.equal(technical.versions.length, 1);
+    assert.ok(technical.operational_product_id);
 
     const quote = await createCommercialQuote({ items: [{ commercial_product_id: created.commercial_product_id, quantity: 1, unit_price: '49000.00' }] }, user);
     assert.equal(quote.items[0].commercial_product_id, created.commercial_product_id);

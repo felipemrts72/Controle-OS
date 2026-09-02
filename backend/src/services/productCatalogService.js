@@ -6,6 +6,7 @@ import { pool, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
 import { hasPermission } from './permissionService.js';
+import { ensureCommercialProductOperationalProduct } from './commercialProductOperationalService.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const uploadRoot = path.resolve(process.env.CATALOG_IMAGE_UPLOAD_DIR || path.join(projectRoot, 'uploads', 'commercial-catalog'));
@@ -310,7 +311,7 @@ export async function createCatalog(payload, user) {
       commercialProduct = (await client.query('SELECT * FROM commercial_products WHERE id=$1 FOR UPDATE', [payload.commercial_product_id])).rows[0];
       if (!commercialProduct) throw httpError(404, 'Produto Comercial não encontrado.');
       if (!commercialProduct.is_active) throw httpError(409, 'Não é possível criar Catálogo Técnico para Produto Comercial inativo.');
-      if (commercialProduct.operational_product_id) product = (await client.query('SELECT * FROM products WHERE id=$1', [commercialProduct.operational_product_id])).rows[0];
+      product = (await ensureCommercialProductOperationalProduct(client, commercialProduct.id)).product;
     } else {
       product = (await client.query('SELECT * FROM products WHERE id=$1 FOR UPDATE', [payload.product_id])).rows[0];
       if (!product) throw httpError(404, 'Produto não encontrado.');
