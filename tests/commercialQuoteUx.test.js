@@ -49,6 +49,11 @@ test('listagens comerciais respondem à largura útil do container com ações i
   assert.match(css, /commercial-quotes__actions[^}]*white-space:\s*nowrap/s);
   assert.match(list, /commercial-quotes__actions-compact/);
   assert.match(list, /aria-label="Abrir orçamento"/);
+  assert.match(list, /aria-label="Mais ações do orçamento"/);
+  assert.match(list, /commercial-quotes__card-meta/);
+  assert.match(list, /commercial-quotes__card-total/);
+  assert.doesNotMatch(css, /commercial-quotes__cards\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
+  assert.match(css, /commercial-quotes__card-actions[^}]*border-top:/s);
   assert.match(salesCss, /container-name:\s*commercial-sales/);
   assert.match(salesCss, /@container commercial-sales \(max-width: 820px\)/);
   assert.match(salesList, /commercial-sales__cards/);

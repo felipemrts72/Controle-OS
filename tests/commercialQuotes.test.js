@@ -98,6 +98,7 @@ test('RBAC separa leitura, criação, edição, aprovação e cancelamento', () 
 test('migrations são aditivas, numerações são atômicas e aprovação delega a Venda transacional', () => {
   const migration = fs.readFileSync(new URL('../database/migrations/20260817_zz_commercial_quotes.sql', import.meta.url), 'utf8');
   const commercialNumberMigration = fs.readFileSync(new URL('../database/migrations/20260824_commercial_quote_commercial_number.sql', import.meta.url), 'utf8');
+  const commercialNumberBackfill = fs.readFileSync(new URL('../database/migrations/20260904_zz_commercial_quote_number_backfill.sql', import.meta.url), 'utf8');
   const service = fs.readFileSync(new URL('../backend/src/services/commercialQuoteService.js', import.meta.url), 'utf8');
   const saleService = fs.readFileSync(new URL('../backend/src/services/commercialSaleService.js', import.meta.url), 'utf8');
   assert.match(service, /ON CONFLICT \(counter_year\) DO UPDATE/);
@@ -109,6 +110,11 @@ test('migrations são aditivas, numerações são atômicas e aprovação delega
   assert.doesNotMatch(service, /\bMAX\s*\(/);
   assert.doesNotMatch(migration, /DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX)/i);
   assert.doesNotMatch(commercialNumberMigration, /DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX)/i);
+  assert.match(commercialNumberBackfill, /WHERE commercial_number IS NULL[\s\S]*ORDER BY created_at, id/);
+  assert.match(commercialNumberBackfill, /ALTER COLUMN commercial_number SET NOT NULL/);
+  assert.match(commercialNumberBackfill, /next_commercial_quote_number\('global'\)/);
+  assert.doesNotMatch(commercialNumberBackfill, /(UPDATE|INSERT INTO)\s+commercial_legacy_quotes/i);
+  assert.doesNotMatch(commercialNumberBackfill, /DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX)/i);
   assert.match(service, /createSaleForApprovedQuote/);
   assert.match(saleService, /internal_orders/);
   assert.match(saleService, /internal_tasks/);
