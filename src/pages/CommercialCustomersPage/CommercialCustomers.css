@@ -102,6 +102,9 @@
   gap: 14px;
 }
 
+:root[data-theme="dark"] .commercial-customers__status_active { color: #86efac; }
+:root[data-theme="dark"] .commercial-customers__feedback_error { color: #fca5a5; }
+
 @media (max-width: 760px) {
   .commercial-customers__filters {
     grid-template-columns: 1fr;

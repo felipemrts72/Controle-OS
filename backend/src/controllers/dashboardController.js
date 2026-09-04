@@ -28,6 +28,7 @@ export async function tvPanel(_req, res, next) {
         s.name AS sector_name,
         s.slug AS sector_slug,
         io.sale_number,
+        cs.sale_number AS commercial_sale_number,
         io.customer_name,
         io.promised_date,
         io.status AS order_status,
@@ -37,6 +38,7 @@ export async function tvPanel(_req, res, next) {
        JOIN sectors s ON s.id = it.sector_id
        JOIN sold_items si ON si.id = it.sold_item_id
        JOIN internal_orders io ON io.id = si.internal_order_id
+       LEFT JOIN commercial_sales cs ON cs.id = io.commercial_sale_id
        WHERE s.is_active = TRUE
          AND it.status = 'pending'
          AND it.is_released = TRUE
@@ -71,6 +73,7 @@ export async function tvBySector(req, res, next) {
         s.name AS sector_name,
         s.slug AS sector_slug,
         io.sale_number,
+        cs.sale_number AS commercial_sale_number,
         io.customer_name,
         io.promised_date,
         io.status AS order_status,
@@ -80,6 +83,7 @@ export async function tvBySector(req, res, next) {
        JOIN sectors s ON s.id = it.sector_id
        JOIN sold_items si ON si.id = it.sold_item_id
        JOIN internal_orders io ON io.id = si.internal_order_id
+       LEFT JOIN commercial_sales cs ON cs.id = io.commercial_sale_id
        WHERE s.slug = $1
          AND s.is_active = TRUE
          AND it.status = 'pending'

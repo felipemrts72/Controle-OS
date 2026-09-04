@@ -51,7 +51,7 @@ export function QuotesPage() {
       const response = await api.post(row.origin_type === 'legacy'
         ? `/commercial/quotes/legacy/${row.id}/duplicate`
         : `/commercial/quotes/${row.id}/duplicate`);
-      toast.success(`${quoteCommercialLabel(response.data)} criado como rascunho.`);
+      toast.success(`${quoteCommercialLabel(response.data)} criado.`);
       await load();
     } catch (requestError) {
       toast.error(requestError.response?.data?.message || 'Não foi possível duplicar o orçamento.');
@@ -61,25 +61,32 @@ export function QuotesPage() {
   }
 
   const columns = [
-    { key: 'number', label: 'Número', render: (row) => <div className="commercial-quotes__identity"><strong>{quoteCommercialLabel(row)}</strong>{row.origin_type === 'legacy' && <span>ERP original #{row.source_legacy_number}</span>}</div> },
-    { key: 'customer', label: 'Cliente', render: (row) => row.customer_name_snapshot },
-    { key: 'date', label: 'Data', render: (row) => formatDate(row.quote_date) },
-    { key: 'items', label: 'Itens', render: (row) => `${row.item_count} ${Number(row.item_count) === 1 ? 'item' : 'itens'}` },
-    { key: 'validity', label: 'Validade', render: (row) => formatDate(row.valid_until) },
-    { key: 'total', label: 'Total', render: (row) => <strong>{formatMoney(row.total)}</strong> },
+    { key: 'number', label: 'Número', className: 'commercial-quotes__column-number', render: (row) => <div className="commercial-quotes__identity"><strong>{quoteCommercialLabel(row)}</strong>{row.origin_type === 'legacy' && <span>ERP original #{row.source_legacy_number}</span>}</div> },
+    { key: 'customer', label: 'Cliente', className: 'commercial-quotes__column-customer', render: (row) => row.customer_name_snapshot },
+    { key: 'date', label: 'Data', className: 'commercial-quotes__column-secondary', render: (row) => formatDate(row.quote_date) },
+    { key: 'items', label: 'Itens', className: 'commercial-quotes__column-secondary', render: (row) => `${row.item_count} ${Number(row.item_count) === 1 ? 'item' : 'itens'}` },
+    { key: 'validity', label: 'Validade', className: 'commercial-quotes__column-secondary', render: (row) => formatDate(row.valid_until) },
+    { key: 'total', label: 'Total', className: 'commercial-quotes__column-total', render: (row) => <strong>{formatMoney(row.total)}</strong> },
     {
-      key: 'status', label: 'Status', render: (row) => {
+      key: 'status', label: 'Status', className: 'commercial-quotes__column-status', render: (row) => {
         const status = row.origin_type === 'legacy' ? { label: 'ERP antigo', tone: 'muted' } : QUOTE_STATUS[row.status] || { label: row.status, tone: 'neutral' };
         return <span className={`commercial-quotes__status commercial-quotes__status_${status.tone}`}>{status.label}</span>;
       },
     },
-    { key: 'responsible', label: 'Responsável', render: (row) => row.responsible_name || '-' },
+    { key: 'responsible', label: 'Responsável', className: 'commercial-quotes__column-secondary', render: (row) => row.responsible_name || '-' },
     {
-      key: 'actions', label: 'Ações', render: (row) => (
+      key: 'actions', label: 'Ações', className: 'commercial-quotes__column-actions', render: (row) => (
         <div className="commercial-quotes__actions">
-          <Link className="button" to={row.origin_type === 'legacy' ? `/comercial/orcamentos/antigos/${row.id}` : `/comercial/orcamentos/${row.id}`}><Eye size={16} /> Abrir</Link>
-          {row.origin_type !== 'legacy' && canEdit && row.status === 'draft' && <Link className="button" to={`/comercial/orcamentos/${row.id}/editar`}><Pencil size={16} /> Editar</Link>}
-          {canCreate && <button className="button" type="button" disabled={duplicating === row.id} onClick={() => duplicate(row)}><Copy size={16} /> Duplicar</button>}
+          <div className="commercial-quotes__actions-full">
+            <Link className="button" to={row.origin_type === 'legacy' ? `/comercial/orcamentos/antigos/${row.id}` : `/comercial/orcamentos/${row.id}`}><Eye size={16} /> Abrir</Link>
+            {row.origin_type !== 'legacy' && canEdit && ['draft', 'sent'].includes(row.status) && <Link className="button" to={`/comercial/orcamentos/${row.id}/editar`}><Pencil size={16} /> Editar</Link>}
+            {canCreate && <button className="button" type="button" disabled={duplicating === row.id} onClick={() => duplicate(row)}><Copy size={16} /> Duplicar</button>}
+          </div>
+          <div className="commercial-quotes__actions-compact" aria-label="Ações do orçamento">
+            <Link className="button" aria-label="Abrir orçamento" title="Abrir" to={row.origin_type === 'legacy' ? `/comercial/orcamentos/antigos/${row.id}` : `/comercial/orcamentos/${row.id}`}><Eye size={16} /></Link>
+            {row.origin_type !== 'legacy' && canEdit && ['draft', 'sent'].includes(row.status) && <Link className="button" aria-label="Editar orçamento" title="Editar" to={`/comercial/orcamentos/${row.id}/editar`}><Pencil size={16} /></Link>}
+            {canCreate && <button className="button" type="button" aria-label="Duplicar orçamento" title="Duplicar" disabled={duplicating === row.id} onClick={() => duplicate(row)}><Copy size={16} /></button>}
+          </div>
         </div>
       ),
     },
@@ -92,7 +99,7 @@ export function QuotesPage() {
       <header className="page__header">
         <div>
           <h1 className="page__title">Orçamentos</h1>
-          <p className="commercial-quotes__subtitle">Documentos comerciais independentes de Produção, Estoque e Expedição.</p>
+          <p className="commercial-quotes__subtitle">Crie, emita e aprove Orçamentos; somente a aprovação gera Venda e itens produtivos aptos.</p>
         </div>
         {canCreate && <Link className="button button_primary" to="/comercial/orcamentos/novo"><FilePlus2 size={18} /> Novo orçamento</Link>}
       </header>
@@ -119,7 +126,7 @@ export function QuotesPage() {
       <div className="panel commercial-quotes__table-panel">
         {loading && <p className="commercial-quotes__feedback">Carregando orçamentos...</p>}
         {!loading && error && <div className="commercial-quotes__feedback commercial-quotes__feedback_error"><p>{error}</p><button className="button" type="button" onClick={load}>Tentar novamente</button></div>}
-        {!loading && !error && <><p className="commercial-quotes__summary">{pagination.total} orçamento(s) encontrado(s)</p><DataTable columns={columns} rows={rows} emptyText="Nenhum orçamento encontrado." /><div className="commercial-quotes__cards">{rows.map((row) => { const status = row.origin_type === 'legacy' ? { label: 'ERP antigo', tone: 'muted' } : QUOTE_STATUS[row.status] || { label: row.status, tone: 'neutral' }; const hasMoreActions = (row.origin_type !== 'legacy' && canEdit && row.status === 'draft') || canCreate; const detailPath = row.origin_type === 'legacy' ? `/comercial/orcamentos/antigos/${row.id}` : `/comercial/orcamentos/${row.id}`; return <article className="commercial-quotes__card" key={`${row.origin_type}-${row.id}`}><header><div><strong>{quoteCommercialLabel(row)}</strong>{row.origin_type === 'legacy' && <small>ERP original #{row.source_legacy_number}</small>}</div><span className={`commercial-quotes__status commercial-quotes__status_${status.tone}`}>{status.label}</span></header><p>{row.customer_name_snapshot || 'Cliente não identificado'}</p><dl><div><dt>Data</dt><dd>{formatDate(row.quote_date)}</dd></div><div><dt>Itens</dt><dd>{row.item_count}</dd></div><div><dt>Total</dt><dd><strong>{formatMoney(row.total)}</strong></dd></div></dl><div className="commercial-quotes__card-actions"><Link className="button button_primary" to={detailPath}><Eye size={16} /> Abrir</Link>{hasMoreActions && <details><summary className="button">Mais ações</summary><div>{row.origin_type !== 'legacy' && canEdit && row.status === 'draft' && <Link className="button" to={`/comercial/orcamentos/${row.id}/editar`}><Pencil size={16} /> Editar</Link>}{canCreate && <button className="button" type="button" disabled={duplicating === row.id} onClick={() => duplicate(row)}><Copy size={16} /> Duplicar para novo</button>}</div></details>}</div></article>; })}{rows.length === 0 && <p className="commercial-quotes__feedback">Nenhum orçamento encontrado.</p>}</div>{pagination.total_pages > 1 && <div className="commercial-quotes__pagination"><button className="button" type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Anterior</button><span>Página {pagination.page} de {pagination.total_pages}</span><button className="button" type="button" disabled={page >= pagination.total_pages} onClick={() => setPage((value) => value + 1)}>Próxima</button></div>}</>}
+        {!loading && !error && <><p className="commercial-quotes__summary">{pagination.total} orçamento(s) encontrado(s)</p><DataTable columns={columns} rows={rows} emptyText="Nenhum orçamento encontrado." /><div className="commercial-quotes__cards">{rows.map((row) => { const status = row.origin_type === 'legacy' ? { label: 'ERP antigo', tone: 'muted' } : QUOTE_STATUS[row.status] || { label: row.status, tone: 'neutral' }; const hasMoreActions = (row.origin_type !== 'legacy' && canEdit && ['draft', 'sent'].includes(row.status)) || canCreate; const detailPath = row.origin_type === 'legacy' ? `/comercial/orcamentos/antigos/${row.id}` : `/comercial/orcamentos/${row.id}`; return <article className="commercial-quotes__card" key={`${row.origin_type}-${row.id}`}><header><div><strong>{quoteCommercialLabel(row)}</strong>{row.origin_type === 'legacy' && <small>ERP original #{row.source_legacy_number}</small>}</div><span className={`commercial-quotes__status commercial-quotes__status_${status.tone}`}>{status.label}</span></header><p>{row.customer_name_snapshot || 'Cliente não identificado'}</p><dl><div><dt>Data</dt><dd>{formatDate(row.quote_date)}</dd></div><div><dt>Itens</dt><dd>{row.item_count}</dd></div><div><dt>Total</dt><dd><strong>{formatMoney(row.total)}</strong></dd></div></dl><div className="commercial-quotes__card-actions"><Link className="button button_primary" to={detailPath}><Eye size={16} /> Abrir</Link>{hasMoreActions && <details><summary className="button">Mais ações</summary><div>{row.origin_type !== 'legacy' && canEdit && ['draft', 'sent'].includes(row.status) && <Link className="button" to={`/comercial/orcamentos/${row.id}/editar`}><Pencil size={16} /> Editar</Link>}{canCreate && <button className="button" type="button" disabled={duplicating === row.id} onClick={() => duplicate(row)}><Copy size={16} /> Duplicar para novo</button>}</div></details>}</div></article>; })}{rows.length === 0 && <p className="commercial-quotes__feedback">Nenhum orçamento encontrado.</p>}</div>{pagination.total_pages > 1 && <div className="commercial-quotes__pagination"><button className="button" type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Anterior</button><span>Página {pagination.page} de {pagination.total_pages}</span><button className="button" type="button" disabled={page >= pagination.total_pages} onClick={() => setPage((value) => value + 1)}>Próxima</button></div>}</>}
       </div>
     </section>
   );

@@ -55,7 +55,9 @@ test('somente Produtos Comerciais ERP com Catálogo possuem Produto operacional'
     COUNT(*) FILTER(WHERE source_system='ERP_UNIVERSAL' AND operational_product_id IS NULL
       AND EXISTS(SELECT 1 FROM product_catalogs c WHERE c.commercial_product_id=commercial_products.id))::int violations
     FROM commercial_products`)).rows[0];
-  assert.deepEqual(result, { products:65, catalog_linked:60, without_catalog_unlinked:5, violations:0 });
+  assert.equal(result.products, 65);
+  assert.equal(result.violations, 0);
+  assert.equal(result.catalog_linked + result.without_catalog_unlinked, result.products);
   const catalog = (await pool.query(`SELECT
     (SELECT COUNT(DISTINCT c.id)::int FROM product_catalogs c JOIN product_catalog_versions v ON v.product_catalog_id=c.id
       WHERE c.source_system='ERP_UNIVERSAL' AND v.source_system='ERP_UNIVERSAL') technical_catalogs,

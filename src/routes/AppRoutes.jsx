@@ -40,6 +40,8 @@ import { QuoteFormPage } from '../pages/CommercialQuotesPage/QuoteFormPage.jsx';
 import { QuoteDetailPage } from '../pages/CommercialQuotesPage/QuoteDetailPage.jsx';
 import { CatalogPage } from '../pages/CommercialCatalogPage/CatalogPage.jsx';
 import { CatalogEditorPage } from '../pages/CommercialCatalogPage/CatalogEditorPage.jsx';
+import { SalesPage } from '../pages/CommercialSalesPage/SalesPage.jsx';
+import { SaleDetailPage } from '../pages/CommercialSalesPage/SaleDetailPage.jsx';
 import { canAccessPermission, getDefaultRoute } from '../utils/permissions.js';
 
 function ProtectedRoute({ children }) {
@@ -142,6 +144,8 @@ export function AppRoutes() {
         <Route path="/comercial/orcamentos/antigos/:id" element={<RoleRoute permission="commercial.quotes.view"><QuoteDetailPage legacy /></RoleRoute>} />
         <Route path="/comercial/orcamentos/:id/editar" element={<RoleRoute permission="commercial.quotes.edit"><QuoteFormPage mode="edit" /></RoleRoute>} />
         <Route path="/comercial/orcamentos/:id" element={<RoleRoute permission="commercial.quotes.view"><QuoteDetailPage /></RoleRoute>} />
+        <Route path="/comercial/vendas" element={<RoleRoute permission="commercial.sales.view"><SalesPage /></RoleRoute>} />
+        <Route path="/comercial/vendas/:id" element={<RoleRoute permission="commercial.sales.view"><SaleDetailPage /></RoleRoute>} />
         <Route path="/comercial/catalogo" element={<RoleRoute permission="commercial.catalog.view"><CatalogPage /></RoleRoute>} />
         <Route path="/comercial/catalogo/novo" element={<RoleRoute permission="commercial.catalog.create"><CatalogEditorPage /></RoleRoute>} />
         <Route path="/comercial/catalogo/:commercialProductId" element={<RoleRoute permission="commercial.catalog.view"><CatalogEditorPage /></RoleRoute>} />

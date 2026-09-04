@@ -8,6 +8,7 @@ import './CommercialCatalog.css';
 import { CatalogImage } from './CatalogImage.jsx';
 
 const money = (value) => value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const CATALOG_REQUEST_TIMEOUT_MS = 15000;
 
 export function CatalogPage() {
   const toast = useToast();
@@ -22,7 +23,10 @@ export function CatalogPage() {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get('/commercial/catalog', { params: { search, configured: configured || undefined, status, limit: 100 } });
+      const response = await api.get('/commercial/catalog', {
+        params: { search, configured: configured || undefined, status, limit: 100 },
+        timeout: CATALOG_REQUEST_TIMEOUT_MS,
+      });
       if (!Array.isArray(response.data?.items)) {
         throw new Error('Resposta inválida do servidor ao carregar o Catálogo.');
       }

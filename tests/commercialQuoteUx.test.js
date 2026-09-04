@@ -9,6 +9,8 @@ const ui = fs.readFileSync(new URL('../src/pages/CommercialQuotesPage/quoteUi.js
 const css = fs.readFileSync(new URL('../src/pages/CommercialQuotesPage/CommercialQuotes.css', import.meta.url), 'utf8');
 const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
 const indexHtml = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const salesList = fs.readFileSync(new URL('../src/pages/CommercialSalesPage/SalesPage.jsx', import.meta.url), 'utf8');
+const salesCss = fs.readFileSync(new URL('../src/pages/CommercialSalesPage/CommercialSales.css', import.meta.url), 'utf8');
 
 test('formulário aceita cliente avulso/vazio e não exige cadastro', () => {
   assert.match(form, /customer_name: customer \? customer\.name : customerQuery/);
@@ -36,6 +38,21 @@ test('mobile usa cards próprios, filtros compactos e ações PDF tocáveis', ()
   assert.match(css, /@media \(max-width: 780px\)/);
   assert.match(css, /commercial-quote-detail__actions[^}]*position: static/s);
   assert.match(css, /min-height: 44px/);
+});
+
+test('listagens comerciais respondem à largura útil do container com ações indeformáveis', () => {
+  assert.match(css, /container-name:\s*commercial-quotes/);
+  assert.match(css, /@container commercial-quotes \(max-width: 1100px\)/);
+  assert.match(css, /@container commercial-quotes \(max-width: 820px\)/);
+  assert.match(css, /commercial-quotes__column-secondary[^}]*display:\s*none/s);
+  assert.match(css, /commercial-quotes__actions-compact[^}]*display:\s*flex/s);
+  assert.match(css, /commercial-quotes__actions[^}]*white-space:\s*nowrap/s);
+  assert.match(list, /commercial-quotes__actions-compact/);
+  assert.match(list, /aria-label="Abrir orçamento"/);
+  assert.match(salesCss, /container-name:\s*commercial-sales/);
+  assert.match(salesCss, /@container commercial-sales \(max-width: 820px\)/);
+  assert.match(salesList, /commercial-sales__cards/);
+  assert.doesNotMatch(globalCss, /body\s*\{[^}]*overflow-x:\s*hidden/s);
 });
 
 test('campos mobile encolhem sem mascarar overflow e usam teclado apropriado', () => {

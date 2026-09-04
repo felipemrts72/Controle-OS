@@ -10,6 +10,7 @@ const RAW_PERMISSIONS = [
   { code: 'commercial.quotes.edit', name: 'Editar orçamentos', group_name: 'Comercial' },
   { code: 'commercial.quotes.approve', name: 'Aprovar orçamentos', group_name: 'Comercial' },
   { code: 'commercial.quotes.cancel', name: 'Cancelar orçamentos', group_name: 'Comercial' },
+  { code: 'commercial.sales.view', name: 'Ver vendas', group_name: 'Comercial' },
   { code: 'commercial.catalog.view', name: 'Ver Catálogo Comercial', group_name: 'Comercial' },
   { code: 'commercial.catalog.create', name: 'Criar Catálogo Comercial', group_name: 'Comercial' },
   { code: 'commercial.catalog.edit', name: 'Editar Catálogo Comercial', group_name: 'Comercial' },
@@ -190,6 +191,7 @@ export const LEGACY_ROLE_PERMISSIONS = {
     'shipping.confirm',
     'shipping.audit.view',
     'tv.view',
+    'commercial.sales.view',
   ],
   shipping: [
     'labels.view',

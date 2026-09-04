@@ -207,7 +207,8 @@ async function assertUniqueCommercialName(client, name, exceptId = null) {
 }
 
 async function upsertCommercialBase(client, commercialProductId, payload, user, existing = null) {
-  const supplied = ['reference_price', 'sop_discount_type', 'sop_discount_value'].some((field) => payload[field] !== undefined);
+  const supplied = ['reference_price', 'sop_discount_type', 'sop_discount_value']
+    .some((field) => payload[field] !== undefined && payload[field] !== null && payload[field] !== '');
   if (!supplied && !existing) return null;
   const allowSop = hasPermission(user, 'commercial.catalog.sop.edit');
   const normalizedPayload = existing ? {
@@ -247,9 +248,10 @@ export async function createCommercialProduct(payload, user) {
       [normalized.name, normalized.commercialCode, normalized.isActive, normalized.commercialDescription,
         normalized.operationalProductId, user.id],
     )).rows[0];
-    await upsertCommercialBase(client, created.id, { ...payload, commercial_description: normalized.commercialDescription }, user);
+    const catalogBase = await upsertCommercialBase(client, created.id, { ...payload, commercial_description: normalized.commercialDescription }, user);
+    const operationalLink = catalogBase ? await ensureCommercialProductOperationalProduct(client, created.id) : null;
     await logAudit(client, { entityType: 'commercial_product', entityId: created.id, action: 'create',
-      newValue: { name: created.name, operational_product_id: created.operational_product_id }, userId: user.id });
+      newValue: { name: created.name, operational_product_id: operationalLink?.productId || created.operational_product_id }, userId: user.id });
     return getCatalogByCommercialProduct(created.id, user, client);
   });
 }
@@ -269,9 +271,10 @@ export async function updateCommercialProduct(id, payload, user) {
         normalized.operationalProductId, user.id, id],
     );
     const existing = (await client.query('SELECT * FROM product_catalogs WHERE commercial_product_id=$1 FOR UPDATE', [id])).rows[0];
-    await upsertCommercialBase(client, id, { ...payload, commercial_description: normalized.commercialDescription }, user, existing);
+    const catalogBase = await upsertCommercialBase(client, id, { ...payload, commercial_description: normalized.commercialDescription }, user, existing);
+    const operationalLink = catalogBase ? await ensureCommercialProductOperationalProduct(client, id) : null;
     await logAudit(client, { entityType: 'commercial_product', entityId: id, action: 'update', previousValue: current,
-      newValue: { name: normalized.name, operational_product_id: normalized.operationalProductId, is_active: normalized.isActive }, userId: user.id });
+      newValue: { name: normalized.name, operational_product_id: operationalLink?.productId || normalized.operationalProductId, is_active: normalized.isActive }, userId: user.id });
     return getCatalogByCommercialProduct(id, user, client);
   });
 }

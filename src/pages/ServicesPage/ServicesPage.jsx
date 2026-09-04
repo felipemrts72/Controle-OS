@@ -6,6 +6,7 @@ import { canAccessPermission } from '../../utils/permissions.js';
 import './ServicesPage.css';
 
 function formatDate(date) {
+  if (!date) return 'Sem prazo';
   return new Date(date).toLocaleDateString('pt-BR');
 }
 

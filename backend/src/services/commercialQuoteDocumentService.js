@@ -8,18 +8,18 @@ function companyForPdf(quote) {
   return { ...(quote.company_snapshot || {}), logo: quote.company_logo_snapshot || null };
 }
 
-function commercialFilename(quote, { draft = false } = {}) {
+function commercialFilename(quote) {
   const identity = quote.commercial_number == null ? 'Sem-Numero-Comercial' : String(quote.commercial_number);
-  return sanitizePdfFilename(`Orcamento-${identity}${draft ? '-Rascunho' : ''}.pdf`);
+  return sanitizePdfFilename(`Orcamento-${identity}.pdf`);
 }
 
 export async function buildQuotePreview(quote, database = pool) {
   const { catalogs, imageAssets } = await loadFrozenQuoteCatalogs(database, quote);
   const data = buildQuoteDocumentData(quote, { catalogs });
   const pdf = await buildOrcamentoPdf(data, companyForPdf(quote), {
-    draft: quote.status === 'draft', catalogImageAssets: imageAssets,
+    catalogImageAssets: imageAssets,
   });
-  return { pdf, data, filename: commercialFilename(quote, { draft: quote.status === 'draft' }) };
+  return { pdf, data, filename: commercialFilename(quote) };
 }
 
 export async function createOfficialQuoteDocument(client, quote, userId, { forceNewVersion = false } = {}) {
@@ -34,7 +34,7 @@ export async function createOfficialQuoteDocument(client, quote, userId, { force
   const data = buildQuoteDocumentData(quote, { catalogs });
   const createdAt = new Date();
   const pdf = await buildOrcamentoPdf(data, companyForPdf(quote), {
-    draft: false, emittedAt: createdAt, catalogImageAssets: imageAssets,
+    emittedAt: createdAt, catalogImageAssets: imageAssets,
   });
   const hash = createHash('sha256').update(pdf).digest('hex');
   const version = Number(existing.rows[0]?.document_version || 0) + 1;

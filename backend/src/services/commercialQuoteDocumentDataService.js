@@ -65,6 +65,7 @@ export function buildQuoteDocumentData(quote, { catalogs = [] } = {}) {
       description: text(item.commercial_description_snapshot) || text(item.description_snapshot),
       quantity: String(item.quantity),
       unit_price: String(item.unit_price),
+      unit_discount_amount: String(item.unit_discount_amount ?? item.discount_amount),
       discount_amount: String(item.discount_amount),
       total: String(item.subtotal),
     })),

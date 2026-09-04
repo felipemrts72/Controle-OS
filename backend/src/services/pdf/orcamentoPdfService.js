@@ -6,17 +6,6 @@ import {
 } from './universal/renderQuote.js';
 import { renderCatalogs } from './universal/renderCatalog.js';
 
-function addDraftWatermarks(doc) {
-  const range = doc.bufferedPageRange();
-  for (let index = 0; index < range.count; index += 1) {
-    doc.switchToPage(range.start + index);
-    doc.save().fillColor('#64748b').opacity(0.075).font('Helvetica-Bold').fontSize(54)
-      .rotate(-32, { origin: [doc.page.width / 2, doc.page.height / 2] })
-      .text('RASCUNHO', 70, doc.page.height / 2 - 30, { width: doc.page.width - 140, align: 'center' })
-      .restore();
-  }
-}
-
 function prepareCompany(doc, company) {
   return {
     ...(company || {}),
@@ -40,7 +29,6 @@ function prepareCatalogs(doc, data, imageAssets) {
 // O pipeline documental do OliMen continua chamando a mesma função. Somente a
 // composição foi substituída pelo renderer portado do ERP Universal.
 export function buildOrcamentoPdf(data, company, {
-  draft = false,
   emittedAt = new Date(),
   catalogImageAssets = {},
   onLayout = null,
@@ -70,7 +58,6 @@ export function buildOrcamentoPdf(data, company, {
       const preparedData = { ...data, catalogs: prepareCatalogs(doc, data, catalogImageAssets) };
       renderQuote(doc, layout, preparedData, preparedCompany);
       renderCatalogs(doc, layout, preparedData, preparedCompany);
-      if (draft) addDraftWatermarks(doc);
       const signaturePages = drawCommercialSignatureFooters(doc, layout, preparedCompany);
       layout.drawFooters(preparedCompany);
       onLayout?.({ pages: layout.pages.map((page) => page.kind), signaturePages });

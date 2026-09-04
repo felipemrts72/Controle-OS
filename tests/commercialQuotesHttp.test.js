@@ -103,15 +103,18 @@ test('endpoint PDF é protegido, entrega prévia e reutiliza o documento oficial
   const preview = await request(`/api/commercial/quotes/${created.id}/pdf`, adminToken);
   assert.equal(preview.status, 200);
   assert.match(preview.headers.get('content-type'), /application\/pdf/);
-  assert.equal(preview.headers.get('x-quote-document'), 'draft-preview');
+  assert.equal(preview.headers.get('x-quote-document'), 'current-preview');
   assert.equal(
     preview.headers.get('content-disposition'),
-    `inline; filename="Orcamento-${expectedCommercialNumber}-Rascunho.pdf"`,
+    `inline; filename="Orcamento-${expectedCommercialNumber}.pdf"`,
   );
   assert.equal(Buffer.from(await preview.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
 
-  const sentResponse = await request(`/api/commercial/quotes/${created.id}/status`, adminToken, { method: 'PATCH', body: JSON.stringify({ status: 'sent' }) });
-  assert.equal(sentResponse.status, 200);
+  const emittedResponse = await request(`/api/commercial/quotes/${created.id}/emit`, adminToken, { method: 'POST' });
+  assert.equal(emittedResponse.status, 200);
+  const emitted = await emittedResponse.json();
+  assert.equal(emitted.quote.status, 'sent');
+  assert.equal(emitted.document.document_version, 1);
   const first = await request(`/api/commercial/quotes/${created.id}/pdf`, adminToken);
   const firstBuffer = Buffer.from(await first.arrayBuffer());
   const hash = first.headers.get('x-document-sha256');
@@ -127,6 +130,35 @@ test('endpoint PDF é protegido, entrega prévia e reutiliza o documento oficial
     second.headers.get('content-disposition'),
     `attachment; filename="Orcamento-${expectedCommercialNumber}.pdf"`,
   );
+
+  const updateResponse = await request(`/api/commercial/quotes/${created.id}`, adminToken, {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...payload,
+      items: [{ ...payload.items[0], unit_price: 123.46, save_product: false }],
+    }),
+  });
+  assert.equal(updateResponse.status, 200);
+  const currentPreview = await request(`/api/commercial/quotes/${created.id}/pdf`, adminToken);
+  assert.equal(currentPreview.headers.get('x-quote-document'), 'current-preview');
+  assert.equal(currentPreview.headers.get('x-document-version'), null);
+
+  const reemittedResponse = await request(`/api/commercial/quotes/${created.id}/emit`, adminToken, { method: 'POST' });
+  assert.equal(reemittedResponse.status, 200);
+  const reemitted = await reemittedResponse.json();
+  assert.equal(reemitted.document.document_version, 2);
+  const currentOfficial = await request(`/api/commercial/quotes/${created.id}/pdf`, adminToken);
+  assert.equal(currentOfficial.headers.get('x-quote-document'), 'official');
+  assert.equal(currentOfficial.headers.get('x-document-version'), '2');
+  assert.notEqual(currentOfficial.headers.get('x-document-sha256'), hash);
+});
+
+test('Vendas exige commercial.sales.view e Administrador pode listar', async () => {
+  const restricted = await request('/api/commercial/sales', restrictedToken);
+  assert.equal(restricted.status, 403);
+  const admin = await request('/api/commercial/sales?limit=1', adminToken);
+  assert.equal(admin.status, 200);
+  assert.ok(Array.isArray(await admin.json()));
 });
 
 test('PDF legado é RECONSTRUCTED, protegido e idêntico em visualização e download', async () => {

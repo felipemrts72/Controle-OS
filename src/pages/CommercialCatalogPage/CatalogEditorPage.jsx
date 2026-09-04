@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ImagePlus, Plus, Save, Send, Trash2 } from 'lucide-react';
-import { api, getStoredUser } from '../../services/api.js';
+import { api, apiErrorMessage, getStoredUser } from '../../services/api.js';
 import { canAccessPermission } from '../../utils/permissions.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './CommercialCatalog.css';
 import { CatalogImage } from './CatalogImage.jsx';
 
 const blankVersion = (title = '') => ({ commercial_title: title, subtitle: '', presentation_text: '', applications_text: '', additional_text: '', notes: '', specifications: [], included_items: [], images: [] });
+const CATALOG_REQUEST_TIMEOUT_MS = 15000;
 
 export function CatalogEditorPage() {
   const { commercialProductId } = useParams();
-  const creating = commercialProductId === 'novo';
+  const creating = !commercialProductId;
   const navigate = useNavigate();
   const toast = useToast();
   const user = getStoredUser();
@@ -26,21 +27,36 @@ export function CatalogEditorPage() {
   const [operationalProducts, setOperationalProducts] = useState([]);
   const [selectedVersionId, setSelectedVersionId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(!creating);
+  const [loadError, setLoadError] = useState('');
 
   async function load() {
     if (creating) return;
     try {
-      const response = await api.get(`/commercial/catalog/products/${commercialProductId}`);
+      setLoading(true);
+      setLoadError('');
+      const response = await api.get(`/commercial/catalog/products/${commercialProductId}`, { timeout: CATALOG_REQUEST_TIMEOUT_MS });
       const value = response.data;
       setCatalog(value);
       setBase({ name: value.commercial_name || value.product_name || '', commercial_code: value.commercial_code || '', is_active: value.is_active !== false, operational_product_id: value.operational_product_id || '', reference_price: value.reference_price ?? '', commercial_description: value.commercial_description || '', sop_discount_type: value.sop_discount_type || '', sop_discount_value: value.sop_discount_value ?? '' });
+      if (value.operational_product_id) {
+        setOperationalProducts((current) => current.some((product) => product.id === value.operational_product_id) ? current : [...current, {
+          id: value.operational_product_id,
+          name: value.operational_product_name,
+          internal_code: value.operational_product_code,
+        }]);
+      }
       const chosen = value.versions?.find((item) => item.id === selectedVersionId) || value.versions?.[0];
       setSelectedVersionId(chosen?.id || '');
       setVersion(chosen ? { ...chosen } : blankVersion(value.product_name));
-    } catch (error) { toast.error(error.response?.data?.message || 'Não foi possível carregar o Catálogo.'); }
+    } catch (error) {
+      const message = apiErrorMessage(error, 'Não foi possível carregar o Catálogo.');
+      setLoadError(message);
+      toast.error(message);
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [commercialProductId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { api.get('/commercial/catalog/operational-products').then((response) => setOperationalProducts(response.data)).catch(() => setOperationalProducts([])); }, []);
+  useEffect(() => { api.get('/commercial/catalog/operational-products').then((response) => setOperationalProducts((current) => [...response.data, ...current.filter((product) => !response.data.some((option) => option.id === product.id))])).catch(() => {}); }, []);
 
   const minimum = useMemo(() => {
     const price = Number(base.reference_price); const discount = Number(base.sop_discount_value);
@@ -91,7 +107,8 @@ export function CatalogEditorPage() {
   function updateImageCaption(index, value) { setVersion((current) => ({ ...current, images: current.images.map((image, i) => i === index ? { ...image, caption: value } : image) })); }
   async function saveImageCaption(image) { try { await api.patch(`/commercial/catalog/images/${image.id}`, { caption: image.caption, position: image.position, is_primary: image.is_primary }); toast.success('Legenda salva.'); } catch (error) { toast.error(error.response?.data?.message || 'Não foi possível salvar a legenda.'); } }
 
-  if (!catalog) return <section className="page"><div className="panel">Carregando...</div></section>;
+  if (loading && !catalog) return <section className="page"><div className="panel">Carregando...</div></section>;
+  if (!catalog) return <section className="page"><div className="panel commercial-catalog__feedback commercial-catalog__feedback_error"><p>{loadError || 'Não foi possível carregar o Catálogo.'}</p><button className="button" type="button" onClick={load}>Tentar novamente</button></div></section>;
   return <form className="page catalog-editor" onSubmit={saveAll}>
     <header className="page__header"><div><h1 className="page__title">{creating ? 'Novo produto comercial' : base.name}</h1><p>{creating ? 'Cadastro simples e independente do Estoque/Produção' : `${base.commercial_code || 'Sem código comercial'} · ${catalog.operational_product_name ? `Produto interno vinculado: ${catalog.operational_product_name}` : 'Sem Produto interno vinculado'}`}</p></div><Link className="button" to="/comercial/catalogo"><ArrowLeft size={17} /> Voltar</Link></header>
     <section className="panel catalog-editor__section"><h2>Ficha comercial</h2><div className="form-grid"><label className="field"><span className="field__label">Nome comercial *</span><input className="field__input" value={base.name} onChange={(e) => setBase((c) => ({ ...c, name: e.target.value }))} disabled={!creating && !canEdit} required /></label><label className="field"><span className="field__label">Código comercial</span><input className="field__input" value={base.commercial_code} onChange={(e) => setBase((c) => ({ ...c, commercial_code: e.target.value }))} disabled={!creating && !canEdit} /></label><label className="field"><span className="field__label">Preço de referência (R$)</span><input className="field__input" type="number" min="0" step="0.01" value={base.reference_price} onChange={(e) => setBase((c) => ({ ...c, reference_price: e.target.value }))} disabled={!creating && !canEdit} /></label><label className="field"><span className="field__label">Produto interno vinculado <small>(opcional)</small></span><select className="field__input" value={base.operational_product_id} onChange={(e) => setBase((c) => ({ ...c, operational_product_id: e.target.value }))} disabled={!creating && !canEdit}><option value="">Nenhum</option>{operationalProducts.map((product) => <option key={product.id} value={product.id}>{product.internal_code ? `${product.internal_code} — ` : ''}{product.name}</option>)}</select></label><label className="field catalog-editor__wide"><span className="field__label">Descrição comercial</span><textarea className="field__input" value={base.commercial_description} onChange={(e) => setBase((c) => ({ ...c, commercial_description: e.target.value }))} disabled={!creating && !canEdit} /></label><label className="catalog-editor__active"><input type="checkbox" checked={base.is_active} onChange={(e) => setBase((c) => ({ ...c, is_active: e.target.checked }))} disabled={!creating && !canEdit} /> Produto Comercial ativo</label></div>

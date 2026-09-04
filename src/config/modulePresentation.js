@@ -49,6 +49,7 @@ export const NAVIGATION_ENTRIES = [
     items: [
       { to: '/comercial/clientes', label: 'Clientes', icon: Users, permission: 'commercial.customers.view', match: (path) => path === '/comercial/clientes' || path.startsWith('/comercial/clientes/') },
       { to: '/comercial/orcamentos', label: 'Orçamentos', icon: ReceiptText, permission: 'commercial.quotes.view', match: (path) => path === '/comercial/orcamentos' || path.startsWith('/comercial/orcamentos/') },
+      { to: '/comercial/vendas', label: 'Vendas', icon: HandCoins, permission: 'commercial.sales.view', match: (path) => path === '/comercial/vendas' || path.startsWith('/comercial/vendas/') },
       { to: '/comercial/catalogo', label: 'Catálogo', icon: BookOpen, permission: 'commercial.catalog.view', match: (path) => path === '/comercial/catalogo' || path.startsWith('/comercial/catalogo/') },
     ],
   },
@@ -121,6 +122,7 @@ export const PERMISSION_PRESENTATION = {
   'commercial.quotes.edit': permission('Comercial', 'Orçamentos', 'Editar orçamentos'),
   'commercial.quotes.approve': permission('Comercial', 'Orçamentos', 'Aprovar orçamentos'),
   'commercial.quotes.cancel': permission('Comercial', 'Orçamentos', 'Cancelar orçamentos'),
+  'commercial.sales.view': permission('Comercial', 'Vendas', 'Ver vendas'),
   'commercial.catalog.view': permission('Comercial', 'Catálogo', 'Ver Catálogo Comercial'),
   'commercial.catalog.create': permission('Comercial', 'Catálogo', 'Criar Catálogo Comercial'),
   'commercial.catalog.edit': permission('Comercial', 'Catálogo', 'Editar Catálogo Comercial'),
