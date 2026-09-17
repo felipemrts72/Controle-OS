@@ -251,9 +251,15 @@
 }
 
 .employees-page__pending-groups,
-.employees-page__pending-options {
+.employees-page__pending-options,
+.employees-page__pending-types {
   display: grid;
   gap: 10px;
+}
+
+.employees-page__pending-types {
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  margin-bottom: 16px;
 }
 
 .employees-page__pending-group {
@@ -292,6 +298,32 @@
   accent-color: var(--color-primary);
   flex: 0 0 auto;
   margin-top: 2px;
+}
+
+.employees-page__pending-item {
+  border-left: 3px solid #b91c1c;
+  color: var(--color-text);
+  padding: 5px 9px;
+}
+
+.employees-page__pending-warning {
+  background: color-mix(in srgb, #0ea5e9 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #0ea5e9 35%, var(--color-border));
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.employees-page__pending-warning strong {
+  color: #0369a1;
+  font-size: 12px;
+}
+
+.employees-page__pending-warning span {
+  color: var(--color-text-muted);
+  font-size: 13px;
 }
 
 @media (max-width: 1000px) {

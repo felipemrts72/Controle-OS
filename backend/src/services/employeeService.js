@@ -38,12 +38,20 @@ const completeRequiredFields = [
   ['current_salary', 'Salário atual'],
   ['meal_allowance', 'Vale alimentação'],
   ['employment_status', 'Situação funcional'],
-  ['ctps_number', 'CTPS número'],
-  ['pis_pasep', 'PIS/PASEP'],
   ['voter_registration', 'Título de eleitor'],
   ['voter_zone', 'Zona eleitoral'],
   ['voter_section', 'Seção eleitoral'],
 ];
+
+export const DEPENDENTS_NOT_REGISTERED_WARNING = Object.freeze({
+  type: 'dependents_not_registered',
+  title: 'DEPENDENTES NÃO REGISTRADOS',
+  message: 'Se houver filhos, encaminhar documentos.',
+});
+
+function pendingItem(type, typeLabel, label = typeLabel) {
+  return { type, type_label: typeLabel, label };
+}
 
 export function normalizeCpf(value) {
   const digits = String(value || '').replace(/\D/g, '');
@@ -93,28 +101,36 @@ function validateQuickCreate(payload) {
   if (!payload.cpf) throw httpError(400, 'Informe o CPF.');
 }
 
-function getCompleteProfileMissing(employee, documentTypes = []) {
+function getCompleteProfileMissingItems(employee, documentTypes = []) {
   const missing = [];
   for (const [field, label] of completeRequiredFields) {
-    if (!isFilled(employee[field])) missing.push(label);
+    if (!isFilled(employee[field])) missing.push(pendingItem(`employee_field:${field}`, label));
   }
 
   const maritalStatus = normalizeDocumentType(employee.marital_status);
   if (['casado', 'uniao estavel'].includes(maritalStatus) && !isFilled(employee.spouse_name)) {
-    missing.push('Nome do cônjuge');
+    missing.push(pendingItem('employee_field:spouse_name', 'Nome do cônjuge'));
   }
 
   const hasRgData = isFilled(employee.rg) && isFilled(employee.rg_issuer) && isFilled(employee.rg_state);
   const hasIdentityDocument = documentTypes.some((type) => ['rg', 'cnh'].includes(normalizeDocumentType(type)));
-  if (!hasRgData && !hasIdentityDocument) missing.push('Documento de identidade: RG completo ou anexo RG/CNH');
+  if (!hasRgData && !hasIdentityDocument) {
+    missing.push(pendingItem('employee_document:identity', 'Documento de identidade', 'Documento de identidade: RG completo ou anexo RG/CNH'));
+  }
 
   const hasAddressDocument = documentTypes.some((type) => {
     const normalized = normalizeDocumentType(type);
     return normalized.includes('comprovante') && normalized.includes('endereco');
   });
-  if (!hasAddressDocument) missing.push('Comprovante de endereço anexado');
+  if (!hasAddressDocument) {
+    missing.push(pendingItem('employee_document:address', 'Comprovante de endereço', 'Comprovante de endereço anexado'));
+  }
 
   return missing;
+}
+
+function getCompleteProfileMissing(employee, documentTypes = []) {
+  return getCompleteProfileMissingItems(employee, documentTypes).map((item) => item.label);
 }
 
 function validateCompleteCreate(payload) {
@@ -722,23 +738,36 @@ export async function removeDocument(employeeId, documentId, user) {
   });
 }
 
-function getDependentPendingItems(dependent, hasDocument) {
-  const label = dependent.full_name || 'Sem nome';
+export function dependentFirstName(fullName) {
+  return String(fullName || '').trim().split(/\s+/).find(Boolean) || 'Dependente';
+}
+
+export function getDependentPendingItems(dependent, hasDocument) {
+  const firstName = dependentFirstName(dependent.full_name);
   const missing = [];
-  if (!isFilled(dependent.full_name)) missing.push('Nome do dependente não informado');
-  if (!isFilled(dependent.relationship)) missing.push(`Parentesco do dependente: ${label}`);
-  if (!isFilled(dependent.birth_date)) missing.push(`Data de nascimento do dependente: ${label}`);
-  if (!isFilled(dependent.identification_number)) {
-    missing.push(`Número de identificação do dependente: ${label}`);
-  } else if (dependent.identification_type === 'cpf' && !isValidCpf(dependent.identification_number)) {
-    missing.push(`CPF inválido do dependente: ${label}`);
+  if (!isFilled(dependent.full_name)) {
+    missing.push(pendingItem('dependent:full_name', 'Nome do dependente', 'Dependente - Nome pendente'));
   }
-  if (!hasDocument) missing.push(`Dependente sem documentação: ${label}`);
+  if (!isFilled(dependent.relationship)) {
+    missing.push(pendingItem('dependent:relationship', 'Parentesco de dependente', `${firstName} - Parentesco pendente`));
+  }
+  if (!isFilled(dependent.birth_date)) {
+    missing.push(pendingItem('dependent:birth_date', 'Data de nascimento de dependente', `${firstName} - Data de nascimento pendente`));
+  }
+  if (!isFilled(dependent.identification_number)) {
+    const identificationLabel = dependent.identification_type === 'matricula' ? 'Matrícula' : 'CPF';
+    missing.push(pendingItem('dependent:identification', 'Identificação de dependente', `${firstName} - ${identificationLabel} pendente`));
+  } else if (dependent.identification_type === 'cpf' && !isValidCpf(dependent.identification_number)) {
+    missing.push(pendingItem('dependent:invalid_cpf', 'CPF inválido de dependente', `${firstName} - CPF inválido`));
+  }
+  if (!hasDocument) {
+    missing.push(pendingItem('dependent:document', 'Documento de dependente', `${firstName} - Documento pendente`));
+  }
   return missing;
 }
 
-function buildEmployeePendingReportRow(employee, documentTypes, dependents, documentedDependents) {
-  const pendencies = getCompleteProfileMissing(employee, documentTypes);
+export function buildEmployeePendingReportRow(employee, documentTypes, dependents, documentedDependents) {
+  const pendencies = getCompleteProfileMissingItems(employee, documentTypes);
   for (const dependent of dependents) {
     pendencies.push(...getDependentPendingItems(dependent, documentedDependents.has(dependent.id)));
   }
@@ -748,6 +777,8 @@ function buildEmployeePendingReportRow(employee, documentTypes, dependents, docu
     job_title: employee.job_title,
     sector_name: employee.sector_name,
     pendencies,
+    pending_count: pendencies.length,
+    warnings: dependents.length === 0 ? [{ ...DEPENDENTS_NOT_REGISTERED_WARNING }] : [],
   };
 }
 

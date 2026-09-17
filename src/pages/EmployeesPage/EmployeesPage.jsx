@@ -69,12 +69,12 @@ export function EmployeesPage() {
     }
   }
 
-  async function downloadPendingReport(selections) {
+  async function downloadPendingReport(pendingTypes) {
     setDownloadingPendingReport(true);
     try {
       await downloadAuthenticatedFile('/employees/incomplete-report-pdf', 'pendencias-cadastrais-funcionarios.pdf', {
         method: 'post',
-        data: { selections },
+        data: { pending_types: pendingTypes },
       });
       setPendingReportModalOpen(false);
     } catch (error) {

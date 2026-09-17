@@ -29,18 +29,14 @@ import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 import { getCompanyPdfData } from '../services/companySettingsService.js';
 import { httpError } from '../utils/httpError.js';
 
-function selectPendingReportItems(employees, selections) {
-  if (selections === undefined) return employees;
-  if (!Array.isArray(selections)) throw httpError(400, 'Seleção de pendências inválida.');
+export function selectPendingReportItems(employees, selectedTypes) {
+  if (selectedTypes === undefined) return employees.filter((employee) => employee.pendencies.length > 0);
+  if (!Array.isArray(selectedTypes)) throw httpError(400, 'Seleção de tipos de pendência inválida.');
 
-  const selectionsByEmployee = new Map(selections.map((selection) => [
-    selection?.employee_id,
-    Array.isArray(selection?.pending_indexes) ? selection.pending_indexes : [],
-  ]));
+  const selectedTypeSet = new Set(selectedTypes.filter((type) => typeof type === 'string' && type.trim()));
   const selectedEmployees = employees.map((employee) => {
-    const indexes = [...new Set(selectionsByEmployee.get(employee.id) || [])]
-      .filter((index) => Number.isInteger(index) && index >= 0 && index < employee.pendencies.length);
-    return { ...employee, pendencies: indexes.map((index) => employee.pendencies[index]) };
+    const pendencies = employee.pendencies.filter((pending) => selectedTypeSet.has(pending.type));
+    return { ...employee, pendencies, pending_count: pendencies.length };
   }).filter((employee) => employee.pendencies.length > 0);
 
   if (!selectedEmployees.length) throw httpError(400, 'Selecione ao menos uma pendência.');
@@ -207,7 +203,7 @@ export async function incompleteReportPdf(req, res, next) {
       getIncompleteRegistrationReport(),
       getCompanyPdfData(),
     ]);
-    const selectedEmployees = selectPendingReportItems(employees, req.body?.selections);
+    const selectedEmployees = selectPendingReportItems(employees, req.body?.pending_types);
     const emittedAt = new Date();
     const pdf = await buildEmployeePendingReportPdf(selectedEmployees, { company, emittedAt });
     const filenameDate = new Intl.DateTimeFormat('en-CA', {
@@ -232,7 +228,7 @@ export async function employeeIncompleteReportPdf(req, res, next) {
       getEmployeeIncompleteRegistrationReport(req.params.id),
       getCompanyPdfData(),
     ]);
-    const selectedEmployees = selectPendingReportItems([employee], req.body?.selections);
+    const selectedEmployees = selectPendingReportItems([employee], req.body?.pending_types);
     const pdf = await buildEmployeePendingReportPdf(selectedEmployees, { company, emittedAt: new Date() });
     sendPdfResponse(res, pdf, `ficha-incompleta-${employee.full_name}.pdf`);
   } catch (error) { next(error); }

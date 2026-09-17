@@ -30,6 +30,22 @@ function addEmployeeSignature(context, employeeName) {
   doc.y = y + 38;
 }
 
+function addAdministrativeNotice(context, warning) {
+  ensurePageSpace(context, 54);
+  const { doc, margins } = context;
+  const width = doc.page.width - margins.left - margins.right;
+  const y = doc.y;
+  doc.save();
+  doc.fillColor('#eff6ff').roundedRect(margins.left, y, width, 46, 4).fill();
+  doc.strokeColor('#93c5fd').lineWidth(0.6).roundedRect(margins.left, y, width, 46, 4).stroke();
+  doc.fillColor('#075985').font('Helvetica-Bold').fontSize(8.5)
+    .text(safeText(warning.title), margins.left + 10, y + 9, { width: width - 20 });
+  doc.fillColor('#475569').font('Helvetica').fontSize(8.5)
+    .text(safeText(warning.message), margins.left + 10, y + 24, { width: width - 20 });
+  doc.restore();
+  doc.y = y + 56;
+}
+
 export async function buildEmployeePendingReportPdf(employees, options = {}) {
   const emittedAt = options.emittedAt || new Date();
   const context = createPdfDocument({
@@ -58,9 +74,13 @@ export async function buildEmployeePendingReportPdf(employees, options = {}) {
     ]);
     addSectionTitle(context, 'Pendências');
     if (employee.pendencies.length) {
-      addChecklist(context, employee.pendencies);
+      addChecklist(context, employee.pendencies.map((pending) => pending.label));
     } else {
       addParagraph(context, 'Nenhuma pendência cadastral encontrada.', { color: '#475569', fontSize: 9.5 });
+    }
+    if (employee.warnings?.length) {
+      addSectionTitle(context, 'Aviso administrativo');
+      employee.warnings.forEach((warning) => addAdministrativeNotice(context, warning));
     }
     addEmployeeSignature(context, employee.full_name);
   });

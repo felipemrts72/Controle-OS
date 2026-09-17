@@ -284,12 +284,12 @@ export function EmployeeDetailPage() {
     }
   }
 
-  async function downloadIncompleteReport(selections) {
+  async function downloadIncompleteReport(pendingTypes) {
     setDownloadingPendingReport(true);
     try {
       await downloadAuthenticatedFile(`/employees/${id}/incomplete-report-pdf`, 'ficha-incompleta-funcionario.pdf', {
         method: 'post',
-        data: { selections },
+        data: { pending_types: pendingTypes },
       });
       setPendingReportModalOpen(false);
     } catch (error) {
@@ -327,8 +327,6 @@ export function EmployeeDetailPage() {
       ['current_salary', 'Salário atual'],
       ['meal_allowance', 'Vale alimentação informado'],
       ['employment_status', 'Situação funcional'],
-      ['ctps_number', 'CTPS número'],
-      ['pis_pasep', 'PIS/PASEP'],
       ['voter_registration', 'Título de eleitor'],
       ['voter_zone', 'Zona eleitoral'],
       ['voter_section', 'Seção eleitoral'],
@@ -456,10 +454,10 @@ export function EmployeeDetailPage() {
                 ...(canMealManage ? [{ name: 'meal_allowance', label: 'Vale-alimentação', type: 'number' }] : []),
                 { name: 'pix_key', label: 'Chave Pix' },
                 { name: 'employment_status', label: 'Situação funcional', type: 'select', options: Object.entries(statusLabels).map(([value, label]) => ({ value, label })) },
-                { name: 'ctps_number', label: 'CTPS número' },
-                { name: 'ctps_series', label: 'CTPS série' },
-                { name: 'ctps_state', label: 'CTPS UF', maxLength: 2 },
-                { name: 'pis_pasep', label: 'PIS/PASEP' },
+                { name: 'ctps_number', label: 'CTPS número (opcional)' },
+                { name: 'ctps_series', label: 'CTPS série (opcional)' },
+                { name: 'ctps_state', label: 'CTPS UF (opcional)', maxLength: 2 },
+                { name: 'pis_pasep', label: 'PIS/PASEP (opcional)' },
                 { name: 'voter_registration', label: 'Título de eleitor' },
                 { name: 'voter_zone', label: 'Zona eleitoral' },
                 { name: 'voter_section', label: 'Seção eleitoral' },

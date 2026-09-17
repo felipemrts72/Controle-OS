@@ -22,7 +22,8 @@ export function formatDateBR(value, timeZone = undefined) {
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (match) return `${match[3]}/${match[2]}/${match[1]}`;
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('pt-BR', timeZone ? { timeZone } : undefined);
+  const normalizedTimeZone = typeof timeZone === 'string' && timeZone ? timeZone : undefined;
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('pt-BR', normalizedTimeZone ? { timeZone: normalizedTimeZone } : undefined);
 }
 
 export function formatDateTimeBR(value, timeZone = undefined) {
