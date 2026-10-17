@@ -235,7 +235,9 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
     const published = await publishCatalogVersion(draft.id, user);
     assert.equal(published.active_version_id, draft.id);
     assert.equal(published.versions.find((item) => item.id === draft.id).status, 'published');
-    await assert.rejects(updateCatalogVersion(draft.id, draft, user), (error) => error.status === 409 && error.code === 'CATALOG_VERSION_IMMUTABLE');
+    const editable = await updateCatalogVersion(draft.id, { ...draft, commercial_title: 'Moinho H-6 revisado' }, user);
+    assert.equal(editable.versions.length, 1);
+    assert.equal(editable.versions[0].version_number, 1);
 
     const quote = await createCommercialQuote({
       customer_id: fixture.customer_id, quote_date: '2026-08-18',
@@ -252,6 +254,8 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
     assert.equal(historical.items[0].sop_minimum_price_snapshot, '92000.00');
     assert.equal(historical.items[0].is_outside_sop, true);
 
+    await client.query("UPDATE commercial_quotes SET status='sent',sent_at=NOW() WHERE id=$1", [quote.id]);
+    await assert.rejects(updateCatalogVersion(draft.id, draft, user), (error) => error.status === 409 && error.code === 'CATALOG_VERSION_IMMUTABLE');
     const nextVersion = await createCatalogVersion(created.id, user);
     assert.equal(nextVersion.versions[0].version_number, 2);
     assert.equal(nextVersion.versions[0].status, 'draft');

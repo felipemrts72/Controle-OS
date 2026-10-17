@@ -1,0 +1,28 @@
+{
+  "backend_http": 200,
+  "frontend": "passed",
+  "widths": [
+    {
+      "viewport": 320,
+      "content": 320
+    },
+    {
+      "viewport": 390,
+      "content": 390
+    },
+    {
+      "viewport": 768,
+      "content": 768
+    },
+    {
+      "viewport": 1440,
+      "content": 1440
+    }
+  ],
+  "creation_fields": "preserved",
+  "publish_fields": "preserved",
+  "reorder_remove": "passed",
+  "unused_version_after_edit": 1,
+  "browser_errors": [],
+  "fixtures": "rollback"
+}

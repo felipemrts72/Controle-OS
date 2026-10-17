@@ -1,3 +1,4 @@
+import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { createHash } from 'node:crypto';
 import { pool } from '../database/pool.js';
 import { buildQuoteDocumentData, loadFrozenQuoteCatalogs } from './commercialQuoteDocumentDataService.js';
@@ -30,6 +31,7 @@ export async function createOfficialQuoteDocument(client, quote, userId, { force
   );
   if (existing.rows[0] && !forceNewVersion) return existing.rows[0];
 
+  await lockQuoteCatalogVersions(client, quote);
   const { catalogs, imageAssets } = await loadFrozenQuoteCatalogs(client, quote);
   const data = buildQuoteDocumentData(quote, { catalogs });
   const createdAt = new Date();

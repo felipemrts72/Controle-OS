@@ -1,0 +1,16 @@
+[
+  {
+    "file": "britador-30x20-catalogo.pdf",
+    "status": 200,
+    "type": "application/pdf",
+    "classification": null,
+    "bytes": 1311136
+  },
+  {
+    "file": "britador-30x20-orcamento-preview.pdf",
+    "status": 200,
+    "type": "application/pdf",
+    "classification": "current-preview",
+    "bytes": 2621449
+  }
+]

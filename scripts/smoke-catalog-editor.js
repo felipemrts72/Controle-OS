@@ -1,0 +1,96 @@
+// Run with PLAYWRIGHT_MODULE pointing to an installed playwright entry point.
+// Every form mutation is enclosed in a database transaction rolled back below.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import jwt from 'jsonwebtoken';
+import { createServer } from 'vite';
+import { app } from '../backend/src/app.js';
+import { pool } from '../backend/src/database/pool.js';
+import { buildAuthUser } from '../backend/src/services/permissionService.js';
+
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
+const connect = pool.connect.bind(pool); const query = pool.query.bind(pool);
+const client = await connect();
+let browser; let server; let vite;
+try {
+  const admin = (await client.query("SELECT u.*,r.slug role_slug FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='admin' AND u.is_active AND u.approval_status='approved' LIMIT 1")).rows[0];
+  const user = await buildAuthUser(admin);
+  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '5m' });
+  await client.query('BEGIN');
+  pool.query = (sql, params) => client.query(sql, params);
+  pool.connect = async () => ({ query: (sql, params) => ['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql) ? Promise.resolve({ rows: [] }) : client.query(sql, params), release() {} });
+  const product = (await client.query('SELECT id FROM products WHERE is_active LIMIT 1')).rows[0];
+  const fixture = (await client.query('INSERT INTO commercial_products(name,operational_product_id) VALUES($1,$2) RETURNING id', [`Smoke técnico ${Date.now()}`, product.id])).rows[0];
+  vite = await createServer({ server: { middlewareMode: true }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify('/api') } });
+  app.use(vite.middlewares);
+  server = app.listen(0, '127.0.0.1'); await new Promise((resolve) => server.on('listening', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  assert.equal((await fetch(`${origin}/api/health`)).status, 200);
+  browser = await chromium.launch({ channel: 'msedge', headless: true });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, deviceScaleFactor: 1 });
+  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(({ token, user }) => { localStorage.setItem('token', token); localStorage.setItem('user', JSON.stringify(user)); localStorage.setItem('controle-os-theme', 'light'); }, { token, user });
+  await page.goto(`${origin}/comercial/catalogo/${fixture.id}`);
+  await page.getByLabel('01 — Título comercial').fill('Ficha mobile');
+  await page.getByLabel('02 — Subtítulo').fill('Subtítulo independente');
+  await page.getByLabel('03 — Apresentação').fill('Texto antes da criação');
+  await page.getByRole('button', { name: 'Adicionar especificação' }).click();
+  await page.getByLabel('Característica', { exact: true }).fill('Boca');
+  await page.getByLabel('Valor', { exact: true }).fill('30 × 20 cm');
+  await page.getByRole('button', { name: 'Adicionar especificação' }).click();
+  await page.getByLabel('Característica', { exact: true }).nth(1).fill('Motor');
+  await page.getByLabel('Valor', { exact: true }).nth(1).fill('13 CV');
+  await page.getByRole('button', { name: 'Adicionar item incluso' }).click();
+  await page.getByLabel('Descrição do item').fill('Base completa');
+  await page.getByRole('button', { name: 'Adicionar item incluso' }).click();
+  await page.getByLabel('Descrição do item').nth(1).fill('Item temporário');
+  await page.getByLabel('06 — Aplicações').fill('Aplicação livre');
+  await page.getByLabel('07 — Observações').fill('Observação livre');
+  await page.getByRole('button', { name: 'Criar primeira versão', exact: true }).click();
+  await page.getByRole('button', { name: 'Salvar e publicar', exact: true }).waitFor();
+  assert.equal(await page.getByLabel('03 — Apresentação').inputValue(), 'Texto antes da criação');
+  await page.getByLabel('03 — Apresentação').fill('Texto alterado imediatamente antes de publicar');
+  await page.getByRole('button', { name: 'Salvar e publicar', exact: true }).click();
+  await page.getByText('Versão publicada e ativada.', { exact: true }).waitFor();
+  await page.reload();
+  await page.getByLabel('03 — Apresentação').waitFor();
+  assert.equal(await page.getByLabel('03 — Apresentação').inputValue(), 'Texto alterado imediatamente antes de publicar');
+  await page.getByRole('button', { name: 'Subir item', exact: true }).nth(1).click();
+  await page.getByRole('button', { name: 'Subir item', exact: true }).nth(3).click();
+  assert.equal(await page.getByLabel('Característica', { exact: true }).first().inputValue(), 'Motor');
+  assert.equal(await page.getByLabel('Descrição do item').first().inputValue(), 'Item temporário');
+  await page.getByRole('button', { name: 'Remover item', exact: true }).nth(2).click();
+  await page.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
+  await page.getByText('Alterações salvas.', { exact: true }).waitFor();
+  await page.reload();
+  await page.getByLabel('Característica', { exact: true }).first().waitFor();
+  assert.equal(await page.getByLabel('Característica', { exact: true }).first().inputValue(), 'Motor');
+  assert.equal(await page.getByLabel('Descrição do item').count(), 1);
+  assert.equal(await page.getByLabel('Descrição do item').inputValue(), 'Base completa');
+  const rows = (await client.query('SELECT version_number FROM product_catalog_versions v JOIN product_catalogs c ON c.id=v.product_catalog_id WHERE c.commercial_product_id=$1', [fixture.id])).rows;
+  assert.deepEqual(rows, [{ version_number: 1 }]);
+  const realUrl = `${origin}/comercial/catalogo/20335110-3ea7-4272-86e7-64d62ff6bce3`;
+  await page.goto(realUrl); await page.getByLabel('01 — Título comercial').waitFor();
+  assert.equal(await page.getByLabel('01 — Título comercial').inputValue(), 'Britador de Mandíbula 30×20');
+  assert.equal(await page.locator('.catalog-editor__image-list img').count(), 0);
+  await fs.mkdir('output/pdf', { recursive: true });
+  const widths = [];
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
+    assert.ok(dimensions.content <= dimensions.viewport, JSON.stringify(dimensions));
+    widths.push(dimensions);
+    if (width === 390 || width === 1440) await page.locator('.catalog-editor__section').nth(1).screenshot({ path: `output/pdf/britador-editor-${width}.png` });
+  }
+  assert.deepEqual(errors, []);
+  const result = { backend_http: 200, frontend: 'passed', widths, creation_fields: 'preserved', publish_fields: 'preserved', reorder_remove: 'passed', unused_version_after_edit: 1, browser_errors: errors, fixtures: 'rollback' };
+  await fs.writeFile('output/pdf/britador-smoke.json', JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result, null, 2));
+} finally {
+  if (browser) await browser.close();
+  if (server) await new Promise((resolve) => server.close(resolve));
+  if (vite) await vite.close();
+  pool.connect = connect; pool.query = query;
+  await client.query('ROLLBACK'); client.release(); await pool.end();
+}

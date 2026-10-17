@@ -1,0 +1,20 @@
+[
+  {
+    "file": "britador-30x20-catalogo.pdf",
+    "pages": 1,
+    "bytes": 1311136,
+    "expected_texts": 12,
+    "equipment_images": 0,
+    "company_logos": 1,
+    "specification_pdf_y": 610.161
+  },
+  {
+    "file": "britador-30x20-orcamento-preview.pdf",
+    "pages": 2,
+    "bytes": 2621449,
+    "expected_texts": 12,
+    "equipment_images": 0,
+    "company_logos": 1,
+    "specification_pdf_y": 610.161
+  }
+]

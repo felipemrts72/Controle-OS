@@ -1,5 +1,8 @@
 .commercial-catalog { min-width: 0; overflow-x: clip; }
-.commercial-catalog__filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 210px)) auto; gap: 12px; align-items: end; }
+.commercial-catalog__filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.commercial-catalog__filters .field { flex: 1 1 150px; min-width: 0; }
+.commercial-catalog__filters .commercial-catalog__sort { flex-basis: 240px; }
+.commercial-catalog__pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; }
 .commercial-catalog__feedback { display: grid; justify-items: start; gap: 10px; margin-top: 20px; }
 .commercial-catalog__feedback p { margin: 0; }
 .commercial-catalog__feedback_error { color: var(--color-danger, #a32929); }
@@ -15,7 +18,15 @@
 .commercial-catalog dl div { display: flex; justify-content: space-between; gap: 12px; }
 .commercial-catalog dt { color: var(--color-text-muted); }
 .commercial-catalog dd { margin: 0; max-width: 58%; font-weight: 600; overflow-wrap: anywhere; text-align: right; }
-.catalog-editor { padding-bottom: 50px; }
+.catalog-editor { padding-bottom: 50px; min-width: 0; }
+.catalog-editor .field, .catalog-editor .field__input { min-width: 0; max-width: 100%; }
+.catalog-editor__technical-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; }
+.catalog-editor__technical-row_included { grid-template-columns: minmax(0, 1fr); }
+.catalog-editor__row-actions { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
+.catalog-editor__row-actions .button { min-width: 44px; min-height: 44px; padding: 8px 10px; }
+.catalog-editor__add { justify-self: start; min-height: 44px; }
+.catalog-editor__main-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.catalog-editor .catalog-editor__short-text { min-height: 70px; resize: vertical; }
 .catalog-editor__section { display: grid; gap: 18px; }
 .catalog-editor__section h2 { margin: 0; }
 .catalog-editor__wide { grid-column: 1 / -1; }
@@ -35,16 +46,21 @@
 .catalog-editor__image-list img { width: 110px; height: 80px; border-radius: 6px; object-fit: cover; }
 .catalog-editor__image-list > div > div { display: flex; gap: 6px; }
 .catalog-editor__image-content { display: grid !important; gap: 6px; }
-.catalog-editor__save { position: sticky; bottom: 18px; justify-self: end; box-shadow: 0 5px 20px #0003; }
+.catalog-editor__save { justify-self: end; min-height: 44px; }
 
 :root[data-theme="dark"] .commercial-catalog__badge { background: #3b2024; color: #fca5a5; }
 :root[data-theme="dark"] .commercial-catalog__badge.is-configured { background: #153326; color: #86efac; }
 :root[data-theme="dark"] .catalog-editor__sop small { color: #fde68a; }
 
 @media (max-width: 760px) {
+  .catalog-editor > .page__header { flex-direction: column; align-items: stretch; overflow-wrap: anywhere; }
+  .catalog-editor .form-grid, .catalog-editor__technical-row { grid-template-columns: minmax(0, 1fr); }
+  .catalog-editor .panel { padding: 14px; }
+  .catalog-editor__section { gap: 12px; }
+  .catalog-editor__version-head .field__input { width: 100%; }
   .commercial-catalog > .page__header { align-items: stretch; flex-direction: column; }
   .commercial-catalog > .page__header .button { width: 100%; }
-  .commercial-catalog__filters { grid-template-columns: 1fr; }
+  .commercial-catalog__filters { display: grid; grid-template-columns: 1fr; }
   .catalog-editor__version-head, .catalog-editor__version-head > div { align-items: stretch; flex-direction: column; }
   .catalog-editor__row { grid-template-columns: 1fr; }
   .catalog-editor__wide { grid-column: auto; }
@@ -58,3 +74,6 @@
   .commercial-catalog__grid { grid-template-columns: minmax(0, 1fr); }
   .commercial-catalog .panel, .commercial-catalog__card { padding: 11px; }
 }
+
+.catalog-editor__operational { display: flex; gap: 8px; min-width: 0; }
+.catalog-editor__operational select { min-width: 0; flex: 1; }

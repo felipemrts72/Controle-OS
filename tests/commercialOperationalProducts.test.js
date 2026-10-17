@@ -98,6 +98,7 @@ test('criação futura de Catálogo garante Produto interno no backend', async (
     const effectsBefore = await counts(client);
     const catalog = await createCatalog({
       commercial_product_id: commercial.id,
+      manufacturing_sector_id: (await client.query('SELECT id FROM sectors WHERE is_active LIMIT 1')).rows[0].id,
       version: { commercial_title: commercial.name, specifications: [], included_items: [] },
     }, { id: userId, permissions: ['commercial.catalog.create'] });
     assert.ok(catalog.operational_product_id);

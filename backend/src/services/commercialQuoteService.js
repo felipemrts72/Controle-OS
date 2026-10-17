@@ -1,3 +1,4 @@
+import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { pool, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { hasPermission } from './permissionService.js';
@@ -759,6 +760,7 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
         throw httpError(409, 'Defina condições de pagamento que fechem o total antes de enviar.', { code: 'QUOTE_PAYMENT_INCOMPLETE' });
       }
     }
+    await lockQuoteCatalogVersions(client, { items: (await client.query('SELECT product_catalog_version_id FROM commercial_quote_items WHERE commercial_quote_id=$1', [id])).rows });
     const outsideSop = (await client.query('SELECT COUNT(*)::int total FROM commercial_quote_items WHERE commercial_quote_id=$1 AND is_outside_sop=TRUE', [id])).rows[0].total;
     const timestampColumn = { sent: 'sent_at', approved: 'approved_at', rejected: 'rejected_at', cancelled: 'cancelled_at' }[newStatus];
     const userColumn = { sent: 'sent_by', approved: 'approved_by', rejected: 'rejected_by', cancelled: 'cancelled_by' }[newStatus];

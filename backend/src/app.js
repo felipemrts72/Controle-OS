@@ -23,10 +23,12 @@ import { commercialQuoteRoutes } from './routes/commercialQuoteRoutes.js';
 import { commercialSaleRoutes } from './routes/commercialSaleRoutes.js';
 import { productCatalogRoutes } from './routes/productCatalogRoutes.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
+import { catalogRequestTrace } from './middlewares/catalogRequestTrace.js';
 
 export const app = express();
 
 app.use(cors({ exposedHeaders: ['Content-Disposition', 'Content-Length'] }));
+app.use(catalogRequestTrace('backend'));
 app.use(express.json());
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
