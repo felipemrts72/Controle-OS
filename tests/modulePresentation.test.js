@@ -14,7 +14,7 @@ import { PERMISSIONS } from '../backend/src/services/permissionService.js';
 const userWith = (...permissions) => ({ role_slug: 'synthetic', permissions });
 
 test('apresentação central inclui Clientes, Orçamentos, Vendas e Catálogo no Comercial', () => {
-  assert.equal(Object.keys(PERMISSION_PRESENTATION).length, 118);
+  assert.equal(Object.keys(PERMISSION_PRESENTATION).length, 126);
   assert.deepEqual(NAVIGATION_ENTRIES.map((entry) => entry.label), [
     'Dashboard', 'Produção', 'Estoque', 'Comercial', 'Compras', 'Expedição', 'Administrativo', 'Configurações',
   ]);
@@ -34,7 +34,7 @@ test('nomes visuais preservam os códigos técnicos', () => {
 });
 
 test('catálogo técnico e apresentação compartilham nomes, descrições e módulos', () => {
-  assert.equal(PERMISSIONS.length, 118);
+  assert.equal(PERMISSIONS.length, 126);
   PERMISSIONS.forEach((item) => {
     assert.equal(item.name, PERMISSION_PRESENTATION[item.code].name, item.code);
     assert.equal(item.group_name, PERMISSION_PRESENTATION[item.code].module, item.code);
