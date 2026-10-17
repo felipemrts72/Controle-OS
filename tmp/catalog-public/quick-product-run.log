@@ -1,0 +1,20 @@
+{
+  status: 200,
+  selector: true,
+  button: true,
+  namePrefilled: true,
+  realSector: true,
+  pendingReview: true,
+  selected: true,
+  persistedAfterReload: true,
+  commercialNumberVisible: true,
+  zeroOperationalRows: {
+    product_components: 0,
+    product_manufacturing_steps: 0,
+    purchase_request_items: 0,
+    sold_items: 0,
+    product_images: 0,
+    product_commercial_profiles: 0,
+    commercial_quote_items: 0
+  }
+}

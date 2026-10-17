@@ -9,6 +9,7 @@ import {
   commercialQuoteInternals,
   createCommercialQuote,
   duplicateCommercialQuote,
+  emitCommercialQuote,
   getCommercialQuote,
   updateCommercialQuote,
 } from '../backend/src/services/commercialQuoteService.js';
@@ -29,12 +30,19 @@ test('cálculo monetário usa quantidade, descontos em valor e frete sem ponto f
   ], 5, 12.5);
   assert.deepEqual(result.totals, {
     items_gross_total: '300.25',
-    items_discount_total: '10.25',
-    subtotal: '290.00',
+    items_discount_total: '10.63',
+    subtotal: '289.62',
     discount_amount: '5.00',
     freight_amount: '12.50',
-    total: '297.50',
+    total: '297.12',
   });
+  assert.equal(calculateQuoteTotals([{ quantity: 1, unit_price: 100, discount_amount: 10 }]).totals.total, '90.00');
+  assert.equal(calculateQuoteTotals([{ quantity: 2, unit_price: 100, discount_amount: 10 }]).totals.total, '180.00');
+  const realCase = calculateQuoteTotals([{ quantity: 130, unit_price: '19.50', discount_amount: 10 }]);
+  assert.equal(realCase.items[0].unit_discount_amount, '10.00');
+  assert.equal(realCase.items[0].discount_amount, '1300.00');
+  assert.equal(realCase.totals.total, '1235.00');
+  assert.equal(calculateQuoteTotals([{ quantity: 1, unit_price: '7075.00', discount_amount: 0 }], '275.01', '0.03').totals.total, '6800.02');
   assert.throws(
     () => calculateQuoteTotals([{ quantity: 1, unit_price: 10, discount_amount: 11 }]),
     (error) => error.status === 400 && error.field === 'items.0.discount_amount',
@@ -51,6 +59,33 @@ test('parcelas preservam todos os centavos e percentual é modo explícito', () 
   assert.equal(methods[0].amount, '40.00');
   assert.deepEqual(methods[1].installments.map((item) => item.amount), ['20.00', '20.00', '20.00']);
   assert.deepEqual(methods[1].installments.map((item) => item.due_date), ['2026-09-30', '2026-10-30', '2026-11-30']);
+  for (const amount of ['6800', '6800,00', '6800.00']) {
+    assert.equal(commercialQuoteInternals.buildPaymentMethods([
+      { method_type: 'pix', calculation_type: 'amount', amount },
+    ], '6800.00')[0].amount, '6800.00');
+  }
+  assert.equal(commercialQuoteInternals.buildPaymentMethods([
+    { method_type: 'pix', calculation_type: 'amount', amount: '6800,02' },
+  ], '6800.02')[0].amount, '6800.02');
+  assert.equal(commercialQuoteInternals.buildPaymentMethods([
+    { method_type: 'pix', calculation_type: 'amount', amount: '0,01' },
+  ], '0.01')[0].amount, '0.01');
+  const splitAmount = commercialQuoteInternals.buildPaymentMethods([
+    { method_type: 'pix', calculation_type: 'amount', amount: '6799,98' },
+    { method_type: 'cash', calculation_type: 'amount', amount: '0,02' },
+  ], '6800.00');
+  assert.deepEqual(splitAmount.map((method) => method.amount), ['6799.98', '0.02']);
+  assert.equal(commercialQuoteInternals.buildPaymentMethods([
+    { method_type: 'bank_transfer', calculation_type: 'amount', amount: '9999999999,99' },
+  ], '9999999999.99')[0].amount, '9999999999.99');
+  assert.throws(
+    () => commercialQuoteInternals.buildPaymentMethods([{ method_type: 'pix', calculation_type: 'amount', amount: '6800,00' }], '6800.02'),
+    (error) => error.code === 'PAYMENT_TOTAL_MISMATCH' && error.details.difference === '0.02' && error.details.difference_type === 'remaining',
+  );
+  assert.throws(
+    () => commercialQuoteInternals.buildPaymentMethods([{ method_type: 'pix', calculation_type: 'amount', amount: '6800,03' }], '6800.02'),
+    (error) => error.code === 'PAYMENT_TOTAL_MISMATCH' && error.details.difference === '0.01' && error.details.difference_type === 'excess',
+  );
 });
 
 test('RBAC separa leitura, criação, edição, aprovação e cancelamento', () => {
@@ -60,10 +95,12 @@ test('RBAC separa leitura, criação, edição, aprovação e cancelamento', () 
     .forEach((permission) => assert.equal(run(requirePermission(permission), viewer)?.status, 403));
 });
 
-test('migrations são aditivas, numerações são atômicas e aprovação não acopla domínios operacionais', () => {
+test('migrations são aditivas, numerações são atômicas e aprovação delega a Venda transacional', () => {
   const migration = fs.readFileSync(new URL('../database/migrations/20260817_zz_commercial_quotes.sql', import.meta.url), 'utf8');
   const commercialNumberMigration = fs.readFileSync(new URL('../database/migrations/20260824_commercial_quote_commercial_number.sql', import.meta.url), 'utf8');
+  const commercialNumberBackfill = fs.readFileSync(new URL('../database/migrations/20260904_zz_commercial_quote_number_backfill.sql', import.meta.url), 'utf8');
   const service = fs.readFileSync(new URL('../backend/src/services/commercialQuoteService.js', import.meta.url), 'utf8');
+  const saleService = fs.readFileSync(new URL('../backend/src/services/commercialSaleService.js', import.meta.url), 'utf8');
   assert.match(service, /ON CONFLICT \(counter_year\) DO UPDATE/);
   assert.match(commercialNumberMigration, /VALUES \('global', 249\)/);
   assert.match(commercialNumberMigration, /UNIQUE \(commercial_number\)/);
@@ -73,7 +110,15 @@ test('migrations são aditivas, numerações são atômicas e aprovação não a
   assert.doesNotMatch(service, /\bMAX\s*\(/);
   assert.doesNotMatch(migration, /DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX)/i);
   assert.doesNotMatch(commercialNumberMigration, /DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX)/i);
-  assert.doesNotMatch(service, /orderService|internal_orders|sold_items|shipment_volumes|internal_tasks|stock|purchase|label/i);
+  assert.match(commercialNumberBackfill, /WHERE commercial_number IS NULL[\s\S]*ORDER BY created_at, id/);
+  assert.match(commercialNumberBackfill, /ALTER COLUMN commercial_number SET NOT NULL/);
+  assert.match(commercialNumberBackfill, /next_commercial_quote_number\('global'\)/);
+  assert.doesNotMatch(commercialNumberBackfill, /(UPDATE|INSERT INTO)\s+commercial_legacy_quotes/i);
+  assert.doesNotMatch(commercialNumberBackfill, /DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX)/i);
+  assert.match(service, /createSaleForApprovedQuote/);
+  assert.match(saleService, /internal_orders/);
+  assert.match(saleService, /internal_tasks/);
+  assert.doesNotMatch(saleService, /INSERT INTO shipment_volumes|stock_movement|purchase|shipping/i);
   assert.match(migration, /WHERE r\.slug = 'admin'/);
   assert.doesNotMatch(migration, /DELETE FROM role_permissions/i);
 });
@@ -83,7 +128,7 @@ test('fluxo completo preserva snapshots, item manual, estados, duplicação e is
     SELECT
       (SELECT id FROM users WHERE is_active = TRUE AND approval_status = 'approved' ORDER BY CASE WHEN username = 'felipe' THEN 0 ELSE 1 END, id LIMIT 1) AS user_id,
       (SELECT id FROM customers WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1) AS customer_id,
-      (SELECT id FROM products WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1) AS product_id
+      (SELECT id FROM products WHERE is_active = TRUE AND review_status = 'pending_review' ORDER BY updated_at DESC LIMIT 1) AS product_id
   `);
   const { user_id: userId, customer_id: customerId, product_id: productId } = fixture.rows[0];
   assert.ok(userId && customerId && productId, 'o teste requer usuário, cliente e Produto ativos');
@@ -91,6 +136,7 @@ test('fluxo completo preserva snapshots, item manual, estados, duplicação e is
 
   const realConnect = pool.connect.bind(pool);
   const client = await realConnect();
+  const saleSequenceBefore = (await client.query('SELECT last_value,is_called FROM commercial_sale_number_seq')).rows[0];
   await client.query('BEGIN');
   const wrapper = {
     async query(text, params) {
@@ -140,17 +186,19 @@ test('fluxo completo preserva snapshots, item manual, estados, duplicação e is
       ],
       payment_methods: [
         { method_type: 'pix', description: 'Entrada PIX', calculation_type: 'percentage', percentage: 40, installment_count: 1 },
-        { method_type: 'bank_slip', description: 'Saldo em boleto', calculation_type: 'amount', amount: 150, installment_count: 3, first_due_date: '2026-09-17' },
+        { method_type: 'bank_slip', description: 'Saldo em boleto', calculation_type: 'amount', amount: 144, installment_count: 3, first_due_date: '2026-09-17' },
       ],
     }, user);
     assert.match(created.quote_number, /^ORC-2026-\d{6}$/);
     assert.equal(created.commercial_number, String(commercialCounterBefore + 3));
     assert.notEqual(String(created.commercial_number), created.quote_number);
-    assert.equal(created.total, '250.00');
+    assert.equal(created.total, '240.00');
     assert.equal(created.customer_snapshot.name, customer.name);
     assert.equal(created.items[0].product_name_snapshot, product.name);
     assert.equal(created.items[0].product_code_snapshot, product.internal_code);
     assert.equal(created.items[0].measurement_unit_snapshot, product.measurement_unit_code);
+    assert.equal(created.items[0].unit_discount_amount, '10.00');
+    assert.equal(created.items[0].effective_unit_price, '90.00');
     assert.equal(created.items[1].item_type, 'product');
     assert.equal(created.items[1].product_id, null);
     assert.ok(created.items[1].commercial_product_id);
@@ -164,25 +212,34 @@ test('fluxo completo preserva snapshots, item manual, estados, duplicação e is
 
     const updated = await updateCommercialQuote(created.id, {
       customer_id: customerId, quote_date: '2026-08-17', valid_until: '2026-09-17', discount_amount: 0, freight_amount: 0,
-      items: [{ product_id: productId, description: 'Descrição atualizada no rascunho', quantity: 1, unit_price: 80, discount_amount: 0 }],
+      items: [{ product_id: productId, description: 'Descrição atualizada no orçamento aberto', quantity: 1, unit_price: 80, discount_amount: 0 }],
       payment_methods: [{ method_type: 'pix', calculation_type: 'amount', amount: 80, installment_count: 1 }],
     }, user);
     assert.equal(updated.total, '80.00');
 
-    const sent = await changeCommercialQuoteStatus(created.id, 'sent', user);
-    assert.equal(sent.status, 'sent');
+    const emitted = await emitCommercialQuote(created.id, user);
+    assert.equal(emitted.quote.status, 'sent');
+    assert.equal(emitted.document.document_version, 1);
     const official = (await client.query('SELECT * FROM commercial_quote_documents WHERE commercial_quote_id = $1', [created.id])).rows;
     assert.equal(official.length, 1);
     assert.equal(official[0].pdf_data.subarray(0, 5).toString(), '%PDF-');
     assert.match(official[0].sha256, /^[0-9a-f]{64}$/);
     assert.equal(official[0].sha256, createHash('sha256').update(official[0].pdf_data).digest('hex'));
-    await assert.rejects(
-      updateCommercialQuote(created.id, { customer_id: customerId, items: [] }, user),
-      (error) => error.status === 409 && error.code === 'QUOTE_NOT_EDITABLE',
-    );
+    const editedAfterEmission = await updateCommercialQuote(created.id, {
+      customer_id: customerId, quote_date: '2026-08-17', valid_until: '2026-09-17', discount_amount: 0, freight_amount: 0,
+      items: [{ product_id: productId, description: 'Editável depois da emissão', quantity: 1, unit_price: 81, discount_amount: 1 }],
+      payment_methods: [{ method_type: 'pix', calculation_type: 'amount', amount: 80, installment_count: 1 }],
+    }, user);
+    assert.equal(editedAfterEmission.status, 'sent');
+    assert.equal(editedAfterEmission.total, '80.00');
+    const reemitted = await emitCommercialQuote(created.id, user);
+    assert.equal(reemitted.document.document_version, 2);
+    assert.equal((await client.query('SELECT COUNT(*)::int total FROM commercial_quote_documents WHERE commercial_quote_id = $1', [created.id])).rows[0].total, 2);
     const approved = await changeCommercialQuoteStatus(created.id, 'approved', user);
     assert.equal(approved.status, 'approved');
-    assert.equal((await client.query('SELECT COUNT(*)::int total FROM commercial_quote_documents WHERE commercial_quote_id = $1', [created.id])).rows[0].total, 1);
+    assert.ok(approved.sale?.id);
+    assert.equal(approved.sale.production_item_count, 0);
+    assert.equal((await client.query('SELECT COUNT(*)::int total FROM commercial_quote_documents WHERE commercial_quote_id = $1', [created.id])).rows[0].total, 2);
     assert.equal(approved.history.some((event) => event.action === 'approved'), true);
     await assert.rejects(
       updateCommercialQuote(created.id, { customer_id: customerId, items: [] }, user),
@@ -245,6 +302,7 @@ test('fluxo completo preserva snapshots, item manual, estados, duplicação e is
   } finally {
     pool.connect = realConnect;
     await client.query('ROLLBACK');
+    await client.query("SELECT setval('commercial_sale_number_seq',$1,$2)", [saleSequenceBefore.last_value, saleSequenceBefore.is_called]);
     client.release();
   }
 });

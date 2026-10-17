@@ -42,6 +42,20 @@ test('migration preserva estruturas operacionais e mantém perfil comercial lega
   assert.match(sql, /ON DELETE RESTRICT/);
 });
 
+test('listagem do Catálogo encerra loading, limita espera e permite tentar novamente', () => {
+  const page = fs.readFileSync(new URL('../src/pages/CommercialCatalogPage/CatalogPage.jsx', import.meta.url), 'utf8');
+  const editor = fs.readFileSync(new URL('../src/pages/CommercialCatalogPage/CatalogEditorPage.jsx', import.meta.url), 'utf8');
+  assert.match(page, /CATALOG_REQUEST_TIMEOUT_MS\s*=\s*15000/);
+  assert.match(page, /timeout:\s*CATALOG_REQUEST_TIMEOUT_MS/);
+  assert.match(page, /finally\s*\{\s*setLoading\(false\);\s*\}/);
+  assert.match(page, /Tentar novamente/);
+  assert.match(editor, /timeout:\s*CATALOG_REQUEST_TIMEOUT_MS/);
+  assert.match(editor, /const creating = !commercialProductId/);
+  assert.match(editor, /finally\s*\{\s*setLoading\(false\);\s*\}/);
+  assert.match(editor, /Tentar novamente/);
+  assert.match(editor, /value\.operational_product_id/);
+});
+
 test('RBAC separa Catálogo, SOP e custo e não concede Comercial por atalhos', () => {
   const run = (permission, granted) => {
     let result;
@@ -67,7 +81,7 @@ test('Produto Comercial é independente, aceita vínculo opcional e centraliza C
   pool.query = (sql, params) => client.query(sql, params);
   const suffix = `${process.pid}-${Date.now()}`;
   try {
-    const created = await createCommercialProduct({ name: `Moinho Comercial ${suffix}`, commercial_code: `MC-${suffix}` }, user);
+    const created = await createCommercialProduct({ name: `Moinho Comercial ${suffix}`, commercial_code: `MC-${suffix}`, reference_price: '' }, user);
     assert.ok(created.commercial_product_id);
     assert.equal(created.operational_product_id, null);
     assert.equal(created.reference_price, null);
@@ -88,7 +102,7 @@ test('Produto Comercial é independente, aceita vínculo opcional e centraliza C
       commercial_description: 'Descrição bonita e técnica', operational_product_id: null,
       reference_price: '50000.00', sop_discount_type: 'percentage', sop_discount_value: '5', is_active: true,
     }, user);
-    assert.equal(unlinked.operational_product_id, null);
+    assert.ok(unlinked.operational_product_id);
     assert.equal(unlinked.sop_minimum_price, '47500.00');
 
     const technical = await createCatalog({
@@ -98,6 +112,7 @@ test('Produto Comercial é independente, aceita vínculo opcional e centraliza C
     }, user);
     assert.equal(technical.catalog_configured, true);
     assert.equal(technical.versions.length, 1);
+    assert.equal(technical.operational_product_id, unlinked.operational_product_id);
 
     const quote = await createCommercialQuote({ items: [{ commercial_product_id: created.commercial_product_id, quantity: 1, unit_price: '49000.00' }] }, user);
     assert.equal(quote.items[0].commercial_product_id, created.commercial_product_id);
@@ -184,6 +199,8 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
 
   const actualConnect = pool.connect.bind(pool);
   const client = await actualConnect();
+  let createdCommercialProductId = null;
+  let createdCatalogId = null;
   await client.query('BEGIN');
   pool.connect = async () => ({
     query: async (sql, params) => ['BEGIN', 'COMMIT', 'ROLLBACK'].includes(String(sql).trim().toUpperCase()) ? { rows: [], rowCount: 0 } : client.query(sql, params),
@@ -207,6 +224,8 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
         included_items: [{ description: 'Painel elétrico', quantity: 1, unit: 'UN' }],
       },
     }, user);
+    createdCommercialProductId = created.commercial_product_id;
+    createdCatalogId = created.id;
     assert.equal(created.sop_minimum_price, '92000.00');
     assert.equal(created.versions[0].status, 'draft');
     assert.equal(created.versions[0].specifications[0].name, 'Capacidade');
@@ -216,7 +235,9 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
     const published = await publishCatalogVersion(draft.id, user);
     assert.equal(published.active_version_id, draft.id);
     assert.equal(published.versions.find((item) => item.id === draft.id).status, 'published');
-    await assert.rejects(updateCatalogVersion(draft.id, draft, user), (error) => error.status === 409 && error.code === 'CATALOG_VERSION_IMMUTABLE');
+    const editable = await updateCatalogVersion(draft.id, { ...draft, commercial_title: 'Moinho H-6 revisado' }, user);
+    assert.equal(editable.versions.length, 1);
+    assert.equal(editable.versions[0].version_number, 1);
 
     const quote = await createCommercialQuote({
       customer_id: fixture.customer_id, quote_date: '2026-08-18',
@@ -233,6 +254,8 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
     assert.equal(historical.items[0].sop_minimum_price_snapshot, '92000.00');
     assert.equal(historical.items[0].is_outside_sop, true);
 
+    await client.query("UPDATE commercial_quotes SET status='sent',sent_at=NOW() WHERE id=$1", [quote.id]);
+    await assert.rejects(updateCatalogVersion(draft.id, draft, user), (error) => error.status === 409 && error.code === 'CATALOG_VERSION_IMMUTABLE');
     const nextVersion = await createCatalogVersion(created.id, user);
     assert.equal(nextVersion.versions[0].version_number, 2);
     assert.equal(nextVersion.versions[0].status, 'draft');
@@ -241,6 +264,8 @@ test('Catálogo versionado alimenta snapshot e alteração futura da SOP não mu
   } finally {
     pool.connect = actualConnect;
     await client.query('ROLLBACK');
+    if (createdCatalogId) await client.query('DELETE FROM product_catalogs WHERE id=$1', [createdCatalogId]);
+    if (createdCommercialProductId) await client.query('DELETE FROM commercial_products WHERE id=$1', [createdCommercialProductId]);
     client.release();
   }
 });

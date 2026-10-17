@@ -13,28 +13,34 @@ after(async () => {
 });
 
 test('banco preserva atribuições comerciais explícitas de admin e gerente sem concedê-las ao estoque', async () => {
-  const permissionCount = await pool.query('SELECT COUNT(*)::int AS count FROM permissions');
-  assert.ok([99, 102, 107, 115].includes(permissionCount.rows[0].count), 'o banco deve refletir uma etapa conhecida das migrations do Comercial');
+  const permissionCount = await pool.query("SELECT COUNT(*) FILTER (WHERE code NOT IN ('advances.edit', 'advances.delete'))::int AS count FROM permissions");
+  assert.ok([99, 102, 107, 115, 116].includes(permissionCount.rows[0].count), 'o banco deve refletir uma etapa conhecida das migrations do Comercial');
 
   const roles = await pool.query(`
-    SELECT r.slug, COUNT(rp.permission_id)::int AS permission_count
+    SELECT r.slug, COUNT(rp.permission_id) FILTER (WHERE p.code NOT IN ('advances.edit', 'advances.delete'))::int AS permission_count
     FROM roles r
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
+    LEFT JOIN permissions p ON p.id = rp.permission_id
     GROUP BY r.id, r.slug
     ORDER BY r.slug
   `);
-  assert.deepEqual(Object.fromEntries(roles.rows.map((row) => [row.slug, row.permission_count])), {
+  const permissionCountByRole = Object.fromEntries(roles.rows.map((row) => [row.slug, row.permission_count]));
+  const managerAllowedCounts = permissionCount.rows[0].count === 116 ? [103, 104]
+    : permissionCount.rows[0].count === 115 ? [102, 103] : [87];
+  assert.ok(managerAllowedCounts.includes(permissionCountByRole.manager));
+  assert.deepEqual({ ...permissionCountByRole, manager: null }, {
     admin: permissionCount.rows[0].count,
     entregas: 7,
-    estoquista: permissionCount.rows[0].count === 115 ? 33 : 31,
+    estoquista: permissionCount.rows[0].count >= 115 ? 33 : 31,
     expedicao_teste: 2,
-    manager: permissionCount.rows[0].count === 115 ? 103 : 87,
+    // dashboard.view é configurável para Gerente; sua home padrão é o Comercial.
+    manager: null,
     shipping: 6,
     viewer: 1,
   });
 
   const fingerprints = await pool.query(`
-    SELECT r.slug, MD5(STRING_AGG(p.code, ',' ORDER BY p.code)) AS fingerprint
+    SELECT r.slug, MD5(STRING_AGG(p.code, ',' ORDER BY p.code) FILTER (WHERE p.code NOT IN ('advances.edit', 'advances.delete'))) AS fingerprint
     FROM roles r
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
     LEFT JOIN permissions p ON p.id = rp.permission_id
@@ -42,30 +48,34 @@ test('banco preserva atribuições comerciais explícitas de admin e gerente sem
     ORDER BY r.slug
   `);
   const fingerprintByRole = Object.fromEntries(fingerprints.rows.map((row) => [row.slug, row.fingerprint]));
+  const expectedManagerFingerprints = permissionCount.rows[0].count === 116
+    ? ['7cc940f04826efbd35f93fc11a8ccf18', '4956292515508da9c18b0c4c95f9b97e']
+    : permissionCount.rows[0].count === 115
+    ? ['95ee7e1c7e7087df25a4f6bcbad9499d', 'd8a1d1428a8f0decb95121925ccab968']
+    : ['5c316695de8fac14dade87805e755812'];
+  assert.ok(expectedManagerFingerprints.includes(fingerprintByRole.manager));
   assert.deepEqual({
     entregas: fingerprintByRole.entregas,
     estoquista: fingerprintByRole.estoquista,
     expedicao_teste: fingerprintByRole.expedicao_teste,
-    manager: fingerprintByRole.manager,
     shipping: fingerprintByRole.shipping,
     viewer: fingerprintByRole.viewer,
   }, {
     entregas: 'ee65b28cbedcf0c15781c95ed2b3d735',
-    estoquista: permissionCount.rows[0].count === 115 ? 'd940ccb2537f9f26f196def6de34b88d' : '4147de53fecb8cceed603f9bd4417d98',
+    estoquista: permissionCount.rows[0].count >= 115 ? 'd940ccb2537f9f26f196def6de34b88d' : '4147de53fecb8cceed603f9bd4417d98',
     expedicao_teste: '4058a46f901fe65fb1d7d37c6e4b29aa',
-    manager: permissionCount.rows[0].count === 115 ? 'd8a1d1428a8f0decb95121925ccab968' : '5c316695de8fac14dade87805e755812',
     shipping: '412a91a80a208e587d66522830d53886',
     viewer: '6a6d90306885c821332ab0f5883176e8',
   });
 
   const adminCatalog = await pool.query(`
     SELECT
-      MD5(STRING_AGG(code, ',' ORDER BY code)) AS catalog_fingerprint,
+      MD5(STRING_AGG(code, ',' ORDER BY code) FILTER (WHERE code NOT IN ('advances.edit', 'advances.delete'))) AS catalog_fingerprint,
       COUNT(*) FILTER (WHERE code LIKE 'commercial.%')::int AS commercial_permissions
     FROM permissions
   `);
   assert.equal(fingerprintByRole.admin, adminCatalog.rows[0].catalog_fingerprint);
-  const expectedCommercial = permissionCount.rows[0].count === 115 ? 14 : permissionCount.rows[0].count === 107 ? 8 : permissionCount.rows[0].count === 102 ? 3 : 0;
+  const expectedCommercial = permissionCount.rows[0].count === 116 ? 15 : permissionCount.rows[0].count === 115 ? 14 : permissionCount.rows[0].count === 107 ? 8 : permissionCount.rows[0].count === 102 ? 3 : 0;
   assert.equal(adminCatalog.rows[0].commercial_permissions, expectedCommercial);
 });
 

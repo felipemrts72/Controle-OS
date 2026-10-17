@@ -1,0 +1,20 @@
+[
+  {
+    "url": "http://localhost:3333/api/health",
+    "status": 200
+  },
+  {
+    "url": "http://localhost:4173",
+    "status": 200,
+    "sameDist": true
+  },
+  {
+    "url": "https://os.torneadorauniversal.com.br/api/health",
+    "status": 200
+  },
+  {
+    "url": "https://os.torneadorauniversal.com.br",
+    "status": 200,
+    "sameDist": true
+  }
+]

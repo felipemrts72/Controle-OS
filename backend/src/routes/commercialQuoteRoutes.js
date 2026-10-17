@@ -16,6 +16,7 @@ commercialQuoteRoutes.get('/:id/pdf', requirePermission('commercial.quotes.view'
 commercialQuoteRoutes.get('/:id', requirePermission('commercial.quotes.view'), controller.show);
 commercialQuoteRoutes.put('/:id', requirePermission('commercial.quotes.edit'), controller.update);
 commercialQuoteRoutes.post('/:id/duplicate', requirePermission('commercial.quotes.create'), controller.duplicate);
+commercialQuoteRoutes.post('/:id/emit', requirePermission('commercial.quotes.edit'), controller.emit);
 commercialQuoteRoutes.patch(
   '/:id/status',
   requireAnyPermission('commercial.quotes.edit', 'commercial.quotes.approve', 'commercial.quotes.cancel'),

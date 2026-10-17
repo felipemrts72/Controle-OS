@@ -1,0 +1,48 @@
+
+> controle-interno-os-expedicao@1.0.0 migrate:status
+> node scripts/migrate.js status
+
+Status das migrations:
+[aplicada] 20260615_manufacturing_routes_product_types_spare_parts.sql
+[aplicada] 20260625_delivery_fields_internal_orders.sql
+[aplicada] 20260702_customers_autocomplete.sql
+[aplicada] 20260703_customers_delivery_fields.sql
+[aplicada] 20260703_dynamic_roles_permissions.sql
+[aplicada] 20260705_employees_module.sql
+[aplicada] 20260706_advances_lists_module.sql
+[aplicada] 20260713_employee_pix_key.sql
+[aplicada] 20260718_advance_installments_reports.sql
+[aplicada] 20260718_advances_limit_lookup_individual.sql
+[aplicada] 20260720_advance_lists_soft_delete.sql
+[aplicada] 20260727_company_settings_employee_sector.sql
+[aplicada] 20260728_employee_awards.sql
+[aplicada] 20260728_sector_name_normalization.sql
+[aplicada] 20260729_employee_dependent_identification.sql
+[aplicada] 20260730_correct_existing_dependent_identification_types.sql
+[aplicada] 20260731_purchases_suppliers_module.sql
+[aplicada] 20260731_z_purchase_import_catalog_direct_quotes.sql
+[aplicada] 20260804_correct_sector_and_role_encoding.sql
+[aplicada] 20260805_purchase_units_product_review.sql
+[aplicada] 20260805_z_product_preliminary_photo.sql
+[aplicada] 20260817_commercial_customers.sql
+[aplicada] 20260817_z_permission_catalog_alignment.sql
+[aplicada] 20260817_zz_commercial_quotes.sql
+[aplicada] 20260818_commercial_catalog.sql
+[aplicada] 20260818_z_product_cost_role_grants.sql
+[aplicada] 20260822_commercial_quote_documents.sql
+[aplicada] 20260824_commercial_quote_commercial_number.sql
+[aplicada] 20260827_commercial_products.sql
+[aplicada] 20260827_legacy_commercial_history.sql
+[aplicada] 20260827_z_commercial_long_names.sql
+[aplicada] 20260827_zz_legacy_document_append_only.sql
+[aplicada] 20260827_zzz_fix_legacy_number_order.sql
+[aplicada] 20260827_zzzz_sync_legacy_mapping_ledger.sql
+[aplicada] 20260828_legacy_quote_reconstructed_pdf.sql
+[aplicada] 20260831_advance_list_limit_review.sql
+[aplicada] 20260902_commercial_catalog_operational_products.sql
+[aplicada] 20260903_commercial_quote_unit_discount.sql
+[aplicada] 20260904_commercial_sales_production.sql
+[aplicada] 20260904_z_commercial_sales_rbac_description.sql
+[aplicada] 20260904_zz_commercial_quote_number_backfill.sql
+[aplicada] 20260921_commercial_product_numbers.sql
+Resumo: 42 aplicada(s), 0 pendente(s), 0 alterada(s).

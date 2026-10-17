@@ -185,10 +185,10 @@ export function EmployeeCreatePage() {
                 {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className="field"><span className="field__label">CTPS número <RequiredMark /></span><input className="field__input" name="ctps_number" value={form.ctps_number} onChange={setField} required /></label>
-            <label className="field"><span className="field__label">CTPS série</span><input className="field__input" name="ctps_series" value={form.ctps_series} onChange={setField} /></label>
-            <label className="field"><span className="field__label">CTPS UF</span><input className="field__input" name="ctps_state" value={form.ctps_state} onChange={setField} maxLength={2} /></label>
-            <label className="field"><span className="field__label">PIS/PASEP <RequiredMark /></span><input className="field__input" name="pis_pasep" value={form.pis_pasep} onChange={setField} required /></label>
+            <label className="field"><span className="field__label">CTPS número (opcional)</span><input className="field__input" name="ctps_number" value={form.ctps_number} onChange={setField} /></label>
+            <label className="field"><span className="field__label">CTPS série (opcional)</span><input className="field__input" name="ctps_series" value={form.ctps_series} onChange={setField} /></label>
+            <label className="field"><span className="field__label">CTPS UF (opcional)</span><input className="field__input" name="ctps_state" value={form.ctps_state} onChange={setField} maxLength={2} /></label>
+            <label className="field"><span className="field__label">PIS/PASEP (opcional)</span><input className="field__input" name="pis_pasep" value={form.pis_pasep} onChange={setField} /></label>
             <label className="field"><span className="field__label">Título de eleitor <RequiredMark /></span><input className="field__input" name="voter_registration" value={form.voter_registration} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Zona eleitoral <RequiredMark /></span><input className="field__input" name="voter_zone" value={form.voter_zone} onChange={setField} required /></label>
             <label className="field"><span className="field__label">Seção eleitoral <RequiredMark /></span><input className="field__input" name="voter_section" value={form.voter_section} onChange={setField} required /></label>

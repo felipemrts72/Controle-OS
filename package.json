@@ -14,6 +14,8 @@
     "migrate": "node scripts/migrate.js up",
     "migrate:status": "node scripts/migrate.js status",
     "migrate:repair": "node scripts/migrate.js repair",
+    "commercial:products:audit": "node scripts/regularize-commercial-operational-products.js",
+    "commercial:products:apply": "node scripts/regularize-commercial-operational-products.js --apply",
     "rbac:audit": "node scripts/audit-permissions.js"
   },
   "dependencies": {

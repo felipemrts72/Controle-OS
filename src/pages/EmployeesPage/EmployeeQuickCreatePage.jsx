@@ -110,7 +110,7 @@ export function EmployeeQuickCreatePage() {
           </section>
 
           <section className="employees-page__section">
-            <h2>Carteira de Trabalho</h2>
+            <h2>Carteira de Trabalho (opcional)</h2>
             <div className="form-grid">
               <label className="field">
                 <span className="field__label">Número da CTPS</span>

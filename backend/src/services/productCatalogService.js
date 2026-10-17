@@ -3,9 +3,11 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pool, transaction } from '../database/pool.js';
+import { getCatalogVersionUsage } from './catalogVersionUsageService.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
 import { hasPermission } from './permissionService.js';
+import { ensureCommercialProductOperationalProduct, createQuickOperationalProduct } from './commercialProductOperationalService.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const uploadRoot = path.resolve(process.env.CATALOG_IMAGE_UPLOAD_DIR || path.join(projectRoot, 'uploads', 'commercial-catalog'));
@@ -62,6 +64,9 @@ function normalizeBase(payload, allowSop) {
 }
 
 function normalizeVersion(payload, fallbackTitle) {
+  for (const field of ['specifications', 'included_items']) {
+    if (payload[field] !== undefined && !Array.isArray(payload[field])) throw httpError(400, `Formato inválido em ${field}.`, { field });
+  }
   const specifications = Array.isArray(payload.specifications) ? payload.specifications.map((item, index) => ({
     name: text(item.name, 180, `specifications.${index}.name`, true), value: text(item.value, null, `specifications.${index}.value`, true),
     unit: text(item.unit, 40, `specifications.${index}.unit`), position: index,
@@ -100,7 +105,8 @@ async function loadVersionChildren(database, versions) {
   const images = await database.query('SELECT * FROM product_catalog_images WHERE product_catalog_version_id=ANY($1::uuid[]) ORDER BY position,id', [ids]);
   const specifications = await database.query('SELECT * FROM product_catalog_specifications WHERE product_catalog_version_id=ANY($1::uuid[]) ORDER BY position,id', [ids]);
   const included = await database.query('SELECT * FROM product_catalog_included_items WHERE product_catalog_version_id=ANY($1::uuid[]) ORDER BY position,id', [ids]);
-  return versions.map((version) => ({ ...version,
+  const usage = await getCatalogVersionUsage(database, ids);
+  return versions.map((version) => ({ ...version, ...usage.get(version.id),
     images: images.rows.filter((item) => item.product_catalog_version_id === version.id).map((item) => ({ ...item, image_url: `/api/commercial/catalog/images/${item.id}/content` })),
     specifications: specifications.rows.filter((item) => item.product_catalog_version_id === version.id),
     included_items: included.rows.filter((item) => item.product_catalog_version_id === version.id),
@@ -118,8 +124,10 @@ export async function listCatalogs(params = {}, user) {
   const search = text(params.search, 160, 'search') || '';
   const configured = String(params.configured || '');
   const status = String(params.status || 'active');
+  const order = new Map([['code_asc', 'cp.commercial_number ASC,cp.id'], ['code_desc', 'cp.commercial_number DESC,cp.id'], ['name', 'cp.is_active DESC,cp.name,cp.id']]).get(params.sort || 'code_asc');
+  if (!order) throw httpError(400, 'Ordenação inválida.');
   const values = [`%${search}%`];
-  const filters = ["($1='' OR cp.name ILIKE $1 OR COALESCE(cp.commercial_code,'') ILIKE $1)"];
+  const filters = ["($1='' OR cp.name ILIKE $1 OR COALESCE(cp.commercial_code,'') ILIKE $1 OR cp.commercial_number::text ILIKE $1)"];
   if (status === 'active') filters.push('cp.is_active=TRUE');
   if (status === 'inactive') filters.push('cp.is_active=FALSE');
   if (configured === 'yes') filters.push('EXISTS(SELECT 1 FROM product_catalog_versions cv WHERE cv.product_catalog_id=c.id)');
@@ -129,7 +137,7 @@ export async function listCatalogs(params = {}, user) {
   values.push(limit, (page - 1) * limit);
   const result = await pool.query(
     `SELECT cp.id AS commercial_product_id,cp.name AS product_name,cp.name AS commercial_name,
-      cp.commercial_code AS internal_code,cp.commercial_code,cp.commercial_description,
+      cp.commercial_code AS internal_code,cp.commercial_code,cp.commercial_number,cp.commercial_description,
       cp.is_active,cp.source_system,cp.source_id,cp.operational_product_id,p.name AS operational_product_name,p.internal_code AS operational_product_code,
       EXISTS(SELECT 1 FROM product_images pi WHERE pi.product_id=p.id) AS has_operational_photo,
       c.id,c.reference_price,c.commercial_description,c.sop_discount_type,c.sop_discount_value,c.active_version_id,c.updated_at,
@@ -141,7 +149,7 @@ export async function listCatalogs(params = {}, user) {
      LEFT JOIN product_catalogs c ON c.commercial_product_id=cp.id
      LEFT JOIN product_catalog_versions v ON v.id=c.active_version_id
      LEFT JOIN LATERAL (SELECT id FROM product_catalog_images WHERE product_catalog_version_id=v.id ORDER BY is_primary DESC,position,id LIMIT 1) image ON TRUE
-     WHERE ${where} ORDER BY cp.is_active DESC,cp.name LIMIT $2 OFFSET $3`, values,
+     WHERE ${where} ORDER BY ${order} LIMIT $2 OFFSET $3`, values,
   );
   return { items: result.rows.map((row) => concealSop({ ...row, sop_minimum_price: calculateSop(row.reference_price, row.sop_discount_type, row.sop_discount_value)?.minimum_price || null }, user)),
     pagination: { page, limit, total: count.rows[0].total, total_pages: Math.max(1, Math.ceil(count.rows[0].total / limit)) } };
@@ -151,7 +159,7 @@ export async function getCatalogByCommercialProduct(commercialProductId, user, d
   assertUuid(commercialProductId, 'commercial_product_id');
   const result = await database.query(
     `SELECT c.*,cp.id AS commercial_product_id,cp.name AS product_name,cp.name AS commercial_name,
-      cp.commercial_code,cp.commercial_description AS product_commercial_description,cp.is_active,
+      cp.commercial_code,cp.commercial_number,cp.commercial_description AS product_commercial_description,cp.is_active,
       cp.operational_product_id,cp.source_system,cp.source_id,
       p.name AS operational_product_name,p.internal_code AS operational_product_code
      FROM commercial_products cp
@@ -206,7 +214,8 @@ async function assertUniqueCommercialName(client, name, exceptId = null) {
 }
 
 async function upsertCommercialBase(client, commercialProductId, payload, user, existing = null) {
-  const supplied = ['reference_price', 'sop_discount_type', 'sop_discount_value'].some((field) => payload[field] !== undefined);
+  const supplied = ['reference_price', 'sop_discount_type', 'sop_discount_value']
+    .some((field) => payload[field] !== undefined && payload[field] !== null && payload[field] !== '');
   if (!supplied && !existing) return null;
   const allowSop = hasPermission(user, 'commercial.catalog.sop.edit');
   const normalizedPayload = existing ? {
@@ -259,6 +268,7 @@ export async function updateCommercialProduct(id, payload, user) {
     const current = (await client.query('SELECT * FROM commercial_products WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!current) throw httpError(404, 'Produto Comercial não encontrado.');
     const normalized = normalizeCommercialProduct({ ...current, ...payload });
+    normalized.operationalProductId ||= current.operational_product_id;
     await assertUniqueCommercialName(client, normalized.name, id);
     await assertOperationalProduct(client, normalized.operationalProductId);
     await client.query(
@@ -303,6 +313,8 @@ export async function createCatalog(payload, user) {
   if (!payload.commercial_product_id && !payload.product_id) throw httpError(400, 'Informe o Produto Comercial.', { field: 'commercial_product_id' });
   if (payload.commercial_product_id) assertUuid(payload.commercial_product_id, 'commercial_product_id');
   if (payload.product_id) assertUuid(payload.product_id, 'product_id');
+  if (payload.operational_product_id) assertUuid(payload.operational_product_id, 'operational_product_id');
+  if (payload.manufacturing_sector_id) assertUuid(payload.manufacturing_sector_id, 'manufacturing_sector_id');
   return transaction(async (client) => {
     let commercialProduct;
     let product = null;
@@ -310,7 +322,10 @@ export async function createCatalog(payload, user) {
       commercialProduct = (await client.query('SELECT * FROM commercial_products WHERE id=$1 FOR UPDATE', [payload.commercial_product_id])).rows[0];
       if (!commercialProduct) throw httpError(404, 'Produto Comercial não encontrado.');
       if (!commercialProduct.is_active) throw httpError(409, 'Não é possível criar Catálogo Técnico para Produto Comercial inativo.');
-      if (commercialProduct.operational_product_id) product = (await client.query('SELECT * FROM products WHERE id=$1', [commercialProduct.operational_product_id])).rows[0];
+      product = (await ensureCommercialProductOperationalProduct(client, commercialProduct.id, {
+        catalogCreation: true, operationalProductId: payload.operational_product_id || payload.product_id,
+        sectorId: payload.manufacturing_sector_id, allowDuplicate: payload.allow_duplicate_operational_product,
+      })).product;
     } else {
       product = (await client.query('SELECT * FROM products WHERE id=$1 FOR UPDATE', [payload.product_id])).rows[0];
       if (!product) throw httpError(404, 'Produto não encontrado.');
@@ -320,7 +335,7 @@ export async function createCatalog(payload, user) {
       commercialProduct = (await client.query(
         `INSERT INTO commercial_products(name,commercial_code,operational_product_id,commercial_description,created_by,updated_by)
          VALUES($1,$2,$3,$4,$5,$5) RETURNING *`,
-        [product.name, product.internal_code, product.id, text(payload.commercial_description, null, 'commercial_description'), user.id],
+        [product.name, null, product.id, text(payload.commercial_description, null, 'commercial_description'), user.id],
       )).rows[0];
     }
     const base = normalizeBase(payload, hasPermission(user, 'commercial.catalog.sop.edit'));
@@ -372,17 +387,21 @@ export async function updateCatalog(catalogId, payload, user) {
   });
 }
 
-async function assertDraft(client, versionId) {
+async function assertEditable(client, versionId) {
+  const identity = (await client.query('SELECT product_catalog_id FROM product_catalog_versions WHERE id=$1', [versionId])).rows[0];
+  if (!identity) throw httpError(404, 'Versão não encontrada.');
+  // All catalog mutations use catalog -> version lock order.
+  await client.query('SELECT id FROM product_catalogs WHERE id=$1 FOR UPDATE', [identity.product_catalog_id]);
   const version = (await client.query('SELECT * FROM product_catalog_versions WHERE id=$1 FOR UPDATE', [versionId])).rows[0];
   if (!version) throw httpError(404, 'Versão não encontrada.');
-  if (version.status !== 'draft') throw httpError(409, 'Versões publicadas ou históricas são imutáveis.', { code: 'CATALOG_VERSION_IMMUTABLE' });
+  if ((await getCatalogVersionUsage(client, [versionId])).get(versionId)?.is_used) throw httpError(409, 'Esta versão já foi utilizada e não pode ser alterada. Crie uma nova versão para realizar mudanças.', { code: 'CATALOG_VERSION_IMMUTABLE' });
   return version;
 }
 
 export async function updateCatalogVersion(versionId, payload, user) {
   assertUuid(versionId);
   return transaction(async (client) => {
-    const current = await assertDraft(client, versionId);
+    const current = await assertEditable(client, versionId);
     const catalog = (await client.query(`SELECT c.*,COALESCE(cp.name,p.name) product_name
       FROM product_catalogs c LEFT JOIN commercial_products cp ON cp.id=c.commercial_product_id
       LEFT JOIN products p ON p.id=c.product_id WHERE c.id=$1`, [current.product_catalog_id])).rows[0];
@@ -399,15 +418,20 @@ export async function updateCatalogVersion(versionId, payload, user) {
   });
 }
 
-export async function createCatalogVersion(catalogId, user) {
+export async function createCatalogVersion(catalogId, user, sourceVersionId = null) {
   assertUuid(catalogId);
   return transaction(async (client) => {
     const catalog = (await client.query(`SELECT c.*,COALESCE(cp.name,p.name) product_name
       FROM product_catalogs c LEFT JOIN commercial_products cp ON cp.id=c.commercial_product_id
       LEFT JOIN products p ON p.id=c.product_id WHERE c.id=$1 FOR UPDATE OF c`, [catalogId])).rows[0];
     if (!catalog) throw httpError(404, 'Catálogo não encontrado.');
-    const base = (await client.query('SELECT * FROM product_catalog_versions WHERE product_catalog_id=$1 ORDER BY version_number DESC LIMIT 1', [catalogId])).rows[0];
-    const next = Number(base?.version_number || 0) + 1;
+    const versions = (await client.query('SELECT * FROM product_catalog_versions WHERE product_catalog_id=$1 ORDER BY version_number DESC FOR UPDATE', [catalogId])).rows;
+    const usage = await getCatalogVersionUsage(client, versions.map((item) => item.id));
+    const unused = versions.find((item) => !usage.get(item.id)?.is_used);
+    if (unused) throw httpError(409, 'Já existe uma versão não utilizada. Salve as alterações nessa versão.', { code: 'CATALOG_UNUSED_VERSION_EXISTS', details: { version_id: unused.id } });
+    const base = sourceVersionId ? versions.find((item) => item.id === sourceVersionId) : versions[0];
+    if (sourceVersionId && !base) throw httpError(404, 'Versão de origem não encontrada neste catálogo.');
+    const next = Number(versions[0]?.version_number || 0) + 1;
     const created = (await client.query(
       `INSERT INTO product_catalog_versions(product_catalog_id,version_number,commercial_title,subtitle,presentation_text,applications_text,additional_text,notes,created_by,updated_by)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *`,
@@ -425,18 +449,60 @@ export async function createCatalogVersion(catalogId, user) {
   });
 }
 
-export async function publishCatalogVersion(versionId, user) {
+export async function publishCatalogVersion(versionId, user, payload = null) {
   assertUuid(versionId);
+  if (payload && !hasPermission(user, 'commercial.catalog.edit')) throw httpError(403, 'Você não possui permissão para editar a ficha técnica.');
   return transaction(async (client) => {
-    const version = await assertDraft(client, versionId);
+    const version = await assertEditable(client, versionId);
+    if (version.status !== 'draft') throw httpError(409, 'Esta versão já foi publicada. Salve as alterações sem publicar novamente.');
+    if (payload) {
+      const normalized = normalizeVersion(payload, version.commercial_title);
+      await client.query('UPDATE product_catalog_versions SET commercial_title=$1,subtitle=$2,presentation_text=$3,applications_text=$4,additional_text=$5,notes=$6 WHERE id=$7', [normalized.commercial_title, normalized.subtitle, normalized.presentation_text, normalized.applications_text, normalized.additional_text, normalized.notes, versionId]);
+      await replaceChildren(client, versionId, normalized);
+    }
     const catalog = (await client.query('SELECT * FROM product_catalogs WHERE id=$1 FOR UPDATE', [version.product_catalog_id])).rows[0];
-    await client.query("UPDATE product_catalog_versions SET status='archived',updated_at=NOW() WHERE id=$1 AND status='published'", [catalog.active_version_id]);
+    if (catalog.active_version_id) await client.query('SELECT id FROM product_catalog_versions WHERE id=$1 FOR UPDATE', [catalog.active_version_id]);
+    // Historical versions keep their exact persisted content and metadata.
+    if (catalog.active_version_id && !(await getCatalogVersionUsage(client, [catalog.active_version_id])).get(catalog.active_version_id)?.is_used) {
+      await client.query("UPDATE product_catalog_versions SET status='archived',updated_at=NOW() WHERE id=$1 AND status='published'", [catalog.active_version_id]);
+    }
     await client.query("UPDATE product_catalog_versions SET status='published',published_at=NOW(),published_by=$1,updated_by=$1,updated_at=NOW() WHERE id=$2", [user.id, versionId]);
     await client.query('UPDATE product_catalogs SET active_version_id=$1,updated_by=$2,updated_at=NOW() WHERE id=$3', [versionId, user.id, catalog.id]);
     await logAudit(client, { entityType: 'product_catalog_version', entityId: versionId, action: 'publish', newValue: { version_number: version.version_number }, userId: user.id });
     return catalog.commercial_product_id
       ? getCatalogByCommercialProduct(catalog.commercial_product_id, user, client)
       : getCatalogByProduct(catalog.product_id, user, client);
+  });
+}
+
+export async function deleteCatalogVersion(versionId, user) {
+  assertUuid(versionId);
+  return transaction(async (client) => {
+    const version = await assertEditable(client, versionId);
+    const usage = (await getCatalogVersionUsage(client, [versionId])).get(versionId);
+    if (usage.has_quote_references) throw httpError(409, 'Esta versão está vinculada a um orçamento em rascunho. Remova o vínculo no orçamento antes de excluir.', { code: 'CATALOG_VERSION_REFERENCED' });
+    await client.query('UPDATE product_catalogs SET active_version_id=NULL,updated_at=NOW(),updated_by=$2 WHERE active_version_id=$1', [versionId, user.id]);
+    for (const table of ['product_catalog_specifications', 'product_catalog_included_items', 'product_catalog_images']) {
+      await client.query(`DELETE FROM ${table} WHERE product_catalog_version_id=$1`, [versionId]);
+    }
+    await client.query('DELETE FROM product_catalog_versions WHERE id=$1', [versionId]);
+    await logAudit(client, { entityType: 'product_catalog_version', entityId: versionId, action: 'delete_unused', previousValue: version, userId: user.id });
+    // Shared image files are retained: a historical PDF/snapshot can still need them.
+    return { id: versionId, deleted: true };
+  }).catch((error) => { if (error.code === '23503') throw httpError(409, 'Esta versão possui referências e não pode ser excluída.'); throw error; });
+}
+
+export async function listManufacturingSectors() {
+  return (await pool.query('SELECT id,name,is_active FROM sectors WHERE is_active=TRUE ORDER BY name,id')).rows;
+}
+
+export async function quickOperationalProduct(payload, user) {
+  assertUuid(payload.sector_id, 'sector_id');
+  if (payload.commercial_product_id) assertUuid(payload.commercial_product_id, 'commercial_product_id');
+  return transaction(async (client) => {
+    const product = await createQuickOperationalProduct(client, payload, user);
+    await logAudit(client, { entityType: 'product', entityId: product.id, action: 'create', newValue: { name: product.name, review_status: product.review_status, commercial_product_id: payload.commercial_product_id || null }, userId: user.id });
+    return { id: product.id, name: product.name, internal_code: product.internal_code, sector_id: product.sector_id, review_status: product.review_status };
   });
 }
 
@@ -467,7 +533,7 @@ export async function uploadCatalogImage(versionId, metadata, buffer, user) {
   await fs.writeFile(resolveStored(storedName), buffer, { flag: 'wx', mode: 0o600 });
   try {
     return await transaction(async (client) => {
-      await assertDraft(client, versionId);
+      await assertEditable(client, versionId);
       const order = (await client.query('SELECT COALESCE(MAX(position),-1)+1 AS position,COUNT(*)::int total FROM product_catalog_images WHERE product_catalog_version_id=$1', [versionId])).rows[0];
       const image = (await client.query(
         `INSERT INTO product_catalog_images(product_catalog_version_id,original_name,stored_name,mime_type,size_bytes,caption,position,is_primary,uploaded_by)
@@ -483,9 +549,10 @@ export async function uploadCatalogImage(versionId, metadata, buffer, user) {
 export async function updateCatalogImage(imageId, payload, user) {
   assertUuid(imageId);
   return transaction(async (client) => {
-    const image = (await client.query('SELECT * FROM product_catalog_images WHERE id=$1 FOR UPDATE', [imageId])).rows[0];
+    const image = (await client.query('SELECT * FROM product_catalog_images WHERE id=$1', [imageId])).rows[0];
     if (!image) throw httpError(404, 'Imagem não encontrada.');
-    await assertDraft(client, image.product_catalog_version_id);
+    await assertEditable(client, image.product_catalog_version_id);
+    if (!(await client.query('SELECT id FROM product_catalog_images WHERE id=$1', [imageId])).rows[0]) throw httpError(404, 'Imagem não encontrada.');
     if (payload.is_primary === true) await client.query('UPDATE product_catalog_images SET is_primary=FALSE WHERE product_catalog_version_id=$1', [image.product_catalog_version_id]);
     const updated = (await client.query(
       `UPDATE product_catalog_images SET caption=$1,position=$2,is_primary=$3,updated_at=NOW() WHERE id=$4 RETURNING *`,
@@ -500,9 +567,10 @@ export async function deleteCatalogImage(imageId, user) {
   assertUuid(imageId);
   let storedName;
   await transaction(async (client) => {
-    const image = (await client.query('SELECT * FROM product_catalog_images WHERE id=$1 FOR UPDATE', [imageId])).rows[0];
+    const image = (await client.query('SELECT * FROM product_catalog_images WHERE id=$1', [imageId])).rows[0];
     if (!image) throw httpError(404, 'Imagem não encontrada.');
-    await assertDraft(client, image.product_catalog_version_id);
+    await assertEditable(client, image.product_catalog_version_id);
+    if (!(await client.query('SELECT id FROM product_catalog_images WHERE id=$1', [imageId])).rows[0]) throw httpError(404, 'Imagem não encontrada.');
     storedName = image.stored_name;
     await client.query('DELETE FROM product_catalog_images WHERE id=$1', [imageId]);
     await logAudit(client, { entityType: 'product_catalog_version', entityId: image.product_catalog_version_id, action: 'image_remove', previousValue: { image_id: imageId }, userId: user.id });

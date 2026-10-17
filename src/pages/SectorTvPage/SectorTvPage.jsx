@@ -6,6 +6,7 @@ import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import './SectorTvPage.css';
 
 function formatDate(date) {
+  if (!date) return 'Sem prazo';
   return new Date(date).toLocaleDateString('pt-BR');
 }
 
@@ -187,7 +188,7 @@ export function SectorTvPage() {
               </button>
               <strong className="sector-tv-page__task-title">{formatTaskTitle(task)}</strong>
               <div className="sector-tv-page__meta">
-                <span>Venda: {task.sale_number}</span>
+                <span>Venda: {task.commercial_sale_number ? `#${task.commercial_sale_number}` : task.sale_number}</span>
                 <span>{task.customer_name}</span>
                 <span>Entrega: {formatDate(task.promised_date)}</span>
               </div>

@@ -13,13 +13,13 @@ import { PERMISSIONS } from '../backend/src/services/permissionService.js';
 
 const userWith = (...permissions) => ({ role_slug: 'synthetic', permissions });
 
-test('apresentação central inclui Clientes, Orçamentos e Catálogo no Comercial', () => {
-  assert.equal(Object.keys(PERMISSION_PRESENTATION).length, 115);
+test('apresentação central inclui Clientes, Orçamentos, Vendas e Catálogo no Comercial', () => {
+  assert.equal(Object.keys(PERMISSION_PRESENTATION).length, 118);
   assert.deepEqual(NAVIGATION_ENTRIES.map((entry) => entry.label), [
     'Dashboard', 'Produção', 'Estoque', 'Comercial', 'Compras', 'Expedição', 'Administrativo', 'Configurações',
   ]);
   assert.equal(NAVIGATION_ENTRIES.some((entry) => entry.label === 'Financeiro'), false);
-  assert.deepEqual(NAVIGATION_ENTRIES.find((entry) => entry.id === 'commercial').items.map((item) => item.label), ['Clientes', 'Orçamentos', 'Catálogo']);
+  assert.deepEqual(NAVIGATION_ENTRIES.find((entry) => entry.id === 'commercial').items.map((item) => item.label), ['Clientes', 'Orçamentos', 'Vendas', 'Catálogo']);
   assert.deepEqual(NAVIGATION_ENTRIES.find((entry) => entry.id === 'stock').items.map((item) => item.label), ['Produtos']);
   assert.equal(NAVIGATION_ENTRIES[0].type, 'link');
 });
@@ -34,7 +34,7 @@ test('nomes visuais preservam os códigos técnicos', () => {
 });
 
 test('catálogo técnico e apresentação compartilham nomes, descrições e módulos', () => {
-  assert.equal(PERMISSIONS.length, 115);
+  assert.equal(PERMISSIONS.length, 118);
   PERMISSIONS.forEach((item) => {
     assert.equal(item.name, PERMISSION_PRESENTATION[item.code].name, item.code);
     assert.equal(item.group_name, PERMISSION_PRESENTATION[item.code].module, item.code);
@@ -77,6 +77,7 @@ test('rota padrão usa dashboard ou a primeira rota realmente acessível', () =>
   assert.equal(getDefaultRoute(userWith('commercial.customers.view')), '/comercial/clientes');
   assert.equal(getDefaultRoute(userWith('commercial.quotes.view')), '/comercial/orcamentos');
   assert.equal(getDefaultRoute(userWith('commercial.catalog.view')), '/comercial/catalogo');
+  assert.equal(getDefaultRoute(userWith('commercial.sales.view')), '/comercial/vendas');
   assert.equal(getDefaultRoute(userWith('purchases.approve')), '/compras/aprovacoes');
   assert.equal(getDefaultRoute(userWith('purchases.receive')), '/compras/recebimentos');
   assert.equal(getDefaultRoute(userWith('shipping.audit.view')), '/auditoria-expedicoes');
@@ -85,6 +86,10 @@ test('rota padrão usa dashboard ou a primeira rota realmente acessível', () =>
   assert.equal(getDefaultRoute(userWith('labels.view')), '/fila-etiquetas');
   assert.equal(getDefaultRoute(userWith('advances.reports.view')), '/vales/relatorios');
   assert.equal(getDefaultRoute(userWith()), '/acesso-negado');
+  assert.equal(getDefaultRoute({ role_slug: 'manager', permissions: ['dashboard.view', 'commercial.quotes.view'] }), '/comercial/orcamentos');
+  assert.equal(getDefaultRoute({ role: 'manager', permissions: ['dashboard.view', 'commercial.quotes.view'] }), '/comercial/orcamentos');
+  assert.equal(getDefaultRoute({ role_slug: 'manager', permissions: ['dashboard.view'] }), '/dashboard');
+  assert.equal(getDefaultRoute({ role_slug: 'admin', permissions: ['dashboard.view', 'commercial.quotes.view'] }), '/dashboard');
 });
 
 test('rotas dinâmicas ativam os subitens corretos', () => {
@@ -111,7 +116,7 @@ test('rotas legadas, fullscreen, localStorage e regras mobile permanecem declara
   [
     '/dashboard', '/os', '/os/nova', '/os/:id', '/os/:id/editar', '/painel-tv', '/tv/:setorSlug',
     '/compras/recebimentos', '/funcionarios/:id', '/vales/:id', '/comercial/clientes', '/comercial/clientes/:id',
-    '/comercial/orcamentos', '/comercial/orcamentos/:id',
+    '/comercial/orcamentos', '/comercial/orcamentos/:id', '/comercial/vendas', '/comercial/vendas/:id',
     '/comercial/catalogo', '/comercial/catalogo/novo', '/comercial/catalogo/:commercialProductId',
   ].forEach((path) => assert.match(routes, new RegExp(path.replace(/[/:]/g, (value) => `\\${value}`))));
   assert.ok(routes.indexOf('path="/tv"') < routes.indexOf('path="/dashboard"'));

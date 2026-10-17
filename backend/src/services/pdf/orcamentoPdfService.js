@@ -6,17 +6,6 @@ import {
 } from './universal/renderQuote.js';
 import { renderCatalogs } from './universal/renderCatalog.js';
 
-function addDraftWatermarks(doc) {
-  const range = doc.bufferedPageRange();
-  for (let index = 0; index < range.count; index += 1) {
-    doc.switchToPage(range.start + index);
-    doc.save().fillColor('#64748b').opacity(0.075).font('Helvetica-Bold').fontSize(54)
-      .rotate(-32, { origin: [doc.page.width / 2, doc.page.height / 2] })
-      .text('RASCUNHO', 70, doc.page.height / 2 - 30, { width: doc.page.width - 140, align: 'center' })
-      .restore();
-  }
-}
-
 function prepareCompany(doc, company) {
   return {
     ...(company || {}),
@@ -39,12 +28,11 @@ function prepareCatalogs(doc, data, imageAssets) {
 
 // O pipeline documental do OliMen continua chamando a mesma função. Somente a
 // composição foi substituída pelo renderer portado do ERP Universal.
-export function buildOrcamentoPdf(data, company, {
-  draft = false,
+function buildCommercialPdf(data, company, {
   emittedAt = new Date(),
   catalogImageAssets = {},
   onLayout = null,
-} = {}) {
+} = {}, catalogOnly = false) {
   return new Promise((resolve, reject) => {
     const companyName = company?.nome_fantasia || company?.razao_social || '';
     const doc = new PDFDocument({
@@ -52,7 +40,7 @@ export function buildOrcamentoPdf(data, company, {
       bufferPages: true,
       compress: true,
       info: {
-        Title: `ORÇAMENTO #${displayNumber(data.quote.commercial_number)}`,
+        Title: catalogOnly ? 'Catálogo Técnico' : `ORÇAMENTO #${displayNumber(data.quote.commercial_number)}`,
         Author: companyName,
         Subject: 'Orçamento comercial e catálogo técnico',
         Creator: 'OliMen - renderer ERP Universal / PDFKit',
@@ -68,10 +56,9 @@ export function buildOrcamentoPdf(data, company, {
       const layout = new UniversalPdfLayout(doc);
       const preparedCompany = prepareCompany(doc, company);
       const preparedData = { ...data, catalogs: prepareCatalogs(doc, data, catalogImageAssets) };
-      renderQuote(doc, layout, preparedData, preparedCompany);
+      if (!catalogOnly) renderQuote(doc, layout, preparedData, preparedCompany);
       renderCatalogs(doc, layout, preparedData, preparedCompany);
-      if (draft) addDraftWatermarks(doc);
-      const signaturePages = drawCommercialSignatureFooters(doc, layout, preparedCompany);
+      const signaturePages = catalogOnly ? [] : drawCommercialSignatureFooters(doc, layout, preparedCompany);
       layout.drawFooters(preparedCompany);
       onLayout?.({ pages: layout.pages.map((page) => page.kind), signaturePages });
       doc.end();
@@ -79,4 +66,12 @@ export function buildOrcamentoPdf(data, company, {
       reject(error);
     }
   });
+}
+
+export function buildOrcamentoPdf(data, company, options = {}) {
+  return buildCommercialPdf(data, company, options);
+}
+
+export function buildTechnicalCatalogPdf(catalogs, company, options = {}) {
+  return buildCommercialPdf({ catalogs }, company, options, true);
 }

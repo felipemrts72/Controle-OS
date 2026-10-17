@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Copy, Download, Eye, Pencil, Printer, RotateCcw, Send, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Copy, Download, Eye, Pencil, Printer, Send, XCircle } from 'lucide-react';
 import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
@@ -10,7 +10,7 @@ import { formatDate, formatMoney, PAYMENT_TYPES, quoteCommercialLabel, QUOTE_STA
 import { downloadAuthenticatedFile, printAuthenticatedPdf, viewAuthenticatedPdf } from '../../utils/downloadAuthenticatedFile.js';
 import './CommercialQuotes.css';
 
-const historyLabels = { created: 'Orçamento criado', edited: 'Rascunho editado', sent: 'Marcado como enviado', reopened: 'Reaberto como rascunho', approved: 'Aprovado comercialmente', rejected: 'Recusado', cancelled: 'Cancelado', duplicated: 'Duplicado de outro orçamento' };
+const historyLabels = { created: 'Orçamento criado', edited: 'Orçamento editado', emitted: 'PDF emitido', sent: 'PDF emitido', reopened: 'Reaberto', approved: 'Aprovado comercialmente', rejected: 'Recusado', cancelled: 'Cancelado', duplicated: 'Duplicado de outro orçamento' };
 
 export function QuoteDetailPage({ legacy = false }) {
   const { id } = useParams();
@@ -50,10 +50,22 @@ export function QuoteDetailPage({ legacy = false }) {
     try {
       setSaving(true);
       const response = await api.post(legacy ? `/commercial/quotes/legacy/${id}/duplicate` : `/commercial/quotes/${id}/duplicate`);
-      toast.success(`${quoteCommercialLabel(response.data)} criado como rascunho.`);
+      toast.success(`${quoteCommercialLabel(response.data)} criado.`);
       navigate(`/comercial/orcamentos/${response.data.id}`);
     } catch (requestError) { toast.error(requestError.response?.data?.message || 'Não foi possível duplicar o orçamento.'); }
     finally { setSaving(false); }
+  }
+
+  async function emitPdf() {
+    try {
+      setPdfAction('emit');
+      const response = await api.post(`/commercial/quotes/${id}/emit`);
+      setQuote(response.data.quote);
+      toast.success(`PDF v${response.data.document.document_version} emitido e preservado no histórico.`);
+      await viewAuthenticatedPdf(`/commercial/quotes/${id}/pdf`);
+    } catch (requestError) {
+      toast.error(requestError.response?.data?.message || requestError.message || 'Não foi possível emitir o PDF.');
+    } finally { setPdfAction(''); }
   }
 
   async function handlePdf(kind) {
@@ -78,7 +90,7 @@ export function QuoteDetailPage({ legacy = false }) {
     { key: 'item', label: 'Item', render: (row) => <div className="commercial-quotes__identity"><strong>{row.product_name_snapshot}</strong><span>{[row.product_code_snapshot, row.measurement_unit_snapshot, row.item_type === 'manual' ? 'Item manual' : 'Produto cadastrado'].filter(Boolean).join(' · ')}</span>{row.description_snapshot && <span>{row.description_snapshot}</span>}{row.sop_minimum_price_snapshot != null && <span className={row.is_outside_sop ? 'commercial-quotes__outside-sop' : 'commercial-quotes__inside-sop'}>{row.is_outside_sop ? 'Fora da SOP registrada' : 'Dentro da SOP registrada'} · referência {formatMoney(row.reference_price_snapshot)} · mínimo {formatMoney(row.sop_minimum_price_snapshot)}</span>}</div> },
     { key: 'quantity', label: 'Qtd.', render: (row) => Number(row.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) },
     { key: 'unit_price', label: 'Unitário', render: (row) => formatMoney(row.unit_price) },
-    { key: 'discount', label: 'Desconto', render: (row) => formatMoney(row.discount_amount) },
+    { key: 'discount', label: 'Desconto / un.', render: (row) => formatMoney(row.unit_discount_amount ?? (Number(row.quantity) > 0 ? Number(row.discount_amount) / Number(row.quantity) : 0)) },
     { key: 'subtotal', label: 'Subtotal', render: (row) => <strong>{formatMoney(row.subtotal)}</strong> },
   ];
 
@@ -86,27 +98,27 @@ export function QuoteDetailPage({ legacy = false }) {
     <section className="page commercial-quote-detail">
       <header className="page__header">
         <div><div className="commercial-quote-detail__title-line"><h1 className="page__title">{quoteCommercialLabel(quote)}</h1><span className={`commercial-quotes__status commercial-quotes__status_${status.tone}`}>{status.label}</span></div>{legacy ? <p className="commercial-quotes__subtitle">Origem: ERP Universal · Número original no ERP: #{quote.source_legacy_number}</p> : <p className="commercial-quotes__subtitle">Responsável: {quote.responsible_name || '-'} · Identificador técnico: {quote.quote_number}</p>}</div>
-        <div className="page__actions commercial-quote-detail__header-actions"><Link className="button" to="/comercial/orcamentos"><ArrowLeft size={18} /> Voltar</Link>{!legacy && canEdit && quote.status === 'draft' && <Link className="button" to={`/comercial/orcamentos/${id}/editar`}><Pencil size={17} /> Editar</Link>}{canCreate && <button className="button" type="button" disabled={saving} onClick={duplicate}><Copy size={17} /> {legacy ? 'Duplicar para novo orçamento' : 'Duplicar'}</button>}</div>
+        <div className="page__actions commercial-quote-detail__header-actions"><Link className="button" to="/comercial/orcamentos"><ArrowLeft size={18} /> Voltar</Link>{!legacy && canEdit && ['draft', 'sent'].includes(quote.status) && <Link className="button" to={`/comercial/orcamentos/${id}/editar`}><Pencil size={17} /> Editar</Link>}{canCreate && <button className="button" type="button" disabled={saving} onClick={duplicate}><Copy size={17} /> {legacy ? 'Duplicar para novo orçamento' : 'Duplicar'}</button>}</div>
       </header>
 
       <div className="commercial-quote-detail__actions">
-        <button aria-label={legacy ? 'Visualizar PDF histórico reconstruído' : quote.status === 'draft' ? 'Visualizar PDF' : 'Visualizar PDF oficial'} className="button button_primary commercial-quote-detail__pdf-primary" type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('view')}><Eye size={17} /> Visualizar PDF</button>
+        {!legacy && canEdit && ['draft', 'sent'].includes(quote.status) && <button className="button button_primary commercial-quote-detail__pdf-primary" type="button" disabled={Boolean(pdfAction)} onClick={emitPdf}><Send size={17} /> {pdfAction === 'emit' ? 'Emitindo...' : quote.documents?.length ? 'Emitir nova versão' : 'Emitir orçamento'}</button>}
+        <button aria-label={legacy ? 'Visualizar PDF histórico reconstruído' : 'Visualizar PDF atual'} className={`button ${legacy ? 'button_primary ' : ''}commercial-quote-detail__pdf-secondary`} type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('view')}><Eye size={17} /> Visualizar PDF</button>
         <button className="button commercial-quote-detail__pdf-secondary" type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('download')}><Download size={17} /> Baixar PDF</button>
         <button className="button commercial-quote-detail__pdf-secondary" type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('print')}><Printer size={17} /> Imprimir</button>
-        {!legacy && canEdit && quote.status === 'draft' && <button className="button button_primary commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'sent', title: 'Marcar como enviado', message: 'O orçamento ficará congelado. Para corrigir, será necessário reabri-lo como rascunho.', success: 'Orçamento marcado como enviado.' })}><Send size={17} /> Marcar como enviado</button>}
-        {!legacy && canEdit && quote.status === 'sent' && <button className="button commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'draft', title: 'Reabrir rascunho', message: 'O orçamento voltará a ser editável e deixará o estado de enviado.', success: 'Orçamento reaberto como rascunho.' })}><RotateCcw size={17} /> Reabrir rascunho</button>}
-        {!legacy && canApprove && quote.status === 'sent' && <button className="button button_primary commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'approved', title: 'Aprovar orçamento', message: 'A aprovação será somente comercial e não criará Produção, Venda, Estoque, Compra, Entrega, Expedição, tarefas ou etiquetas.', success: 'Orçamento aprovado comercialmente.' })}><CheckCircle2 size={17} /> Aprovar</button>}
+        {!legacy && canApprove && quote.status === 'sent' && <button className="button button_primary commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'approved', title: 'Aprovar orçamento', message: 'A aprovação criará uma Venda. Somente Produtos internos fabricados, revisados e configurados serão enviados à Produção.', success: 'Orçamento aprovado e Venda criada.' })}><CheckCircle2 size={17} /> Aprovar orçamento</button>}
         {!legacy && canEdit && quote.status === 'sent' && <button className="button button_danger commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'rejected', title: 'Recusar orçamento', message: 'O orçamento será preservado como recusado e não poderá ser editado.', success: 'Orçamento recusado.' })}><XCircle size={17} /> Recusar</button>}
         {!legacy && canCancel && ['draft', 'sent'].includes(quote.status) && <button className="button button_danger commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'cancelled', title: 'Cancelar orçamento', message: 'O orçamento será preservado no histórico como cancelado.', success: 'Orçamento cancelado.' })}><XCircle size={17} /> Cancelar</button>}
       </div>
       {legacy && <div className="panel commercial-quote-detail__legacy-notice"><strong>Histórico somente leitura</strong><span>Este registro não pode ser editado ou aprovado. O PDF disponível é reconstruído dos snapshots importados e não é um original do ERP.</span></div>}
+      {!legacy && quote.sale && <div className="panel commercial-quote-detail__sale"><div><strong>Venda #{quote.sale.sale_number}</strong><span>{quote.sale.production_item_count} de {quote.sale.item_count} item(ns) enviado(s) à Produção{quote.sale.pending_item_count > 0 ? ` · ${quote.sale.pending_item_count} pendente(s)` : ''}</span></div><Link className="button button_primary" to={`/comercial/vendas/${quote.sale.id}`}>Abrir Venda</Link></div>}
 
       <div className="commercial-quote-detail__grid">
         <section className="panel commercial-quote-detail__section"><h2>Cliente no momento do orçamento</h2><dl><div><dt>Nome/razão social</dt><dd>{quote.customer_snapshot?.name || quote.customer_name_snapshot || 'Cliente não identificado'}</dd></div><div><dt>Nome fantasia</dt><dd>{quote.customer_snapshot?.trade_name || '-'}</dd></div><div><dt>CPF/CNPJ</dt><dd>{quote.customer_snapshot?.tax_id || '-'}</dd></div><div><dt>Contato</dt><dd>{quote.customer_snapshot?.phone || quote.customer_snapshot?.whatsapp || quote.customer_snapshot?.email || '-'}</dd></div><div><dt>Endereço</dt><dd>{[customerAddress.street, customerAddress.number, customerAddress.complement, customerAddress.neighborhood, customerAddress.city, customerAddress.state, customerAddress.zip_code].filter(Boolean).join(', ') || '-'}</dd></div></dl>{quote.customer_id && <Link className="button" to={`/comercial/clientes/${quote.customer_id}`}>Abrir cadastro atual do cliente</Link>}</section>
         <section className="panel commercial-quote-detail__section"><h2>Condições</h2><dl><div><dt>Data</dt><dd>{formatDate(quote.quote_date)}</dd></div><div><dt>Validade</dt><dd>{formatDate(quote.valid_until)}</dd></div><div><dt>Criado por</dt><dd>{quote.created_by_name || '-'}</dd></div><div><dt>Última atualização</dt><dd>{quote.updated_at ? new Date(quote.updated_at).toLocaleString('pt-BR') : '-'}</dd></div></dl></section>
       </div>
 
-      <section className="panel commercial-quote-detail__section"><h2>Itens</h2><div className="commercial-quote-detail__items-table"><DataTable columns={itemsColumns} rows={quote.items} emptyText="Nenhum item." /></div><div className="commercial-quote-detail__items-mobile">{quote.items.map((item) => <article key={item.id}><div><strong>{item.product_name_snapshot}</strong><span>{[item.product_code_snapshot, item.item_type === 'manual' ? 'Manual' : null].filter(Boolean).join(' · ')}</span></div>{item.description_snapshot && <p>{item.description_snapshot}</p>}<dl><div><dt>Qtd.</dt><dd>{Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</dd></div><div><dt>Unitário</dt><dd>{formatMoney(item.unit_price)}</dd></div><div><dt>Desconto</dt><dd>{formatMoney(item.discount_amount)}</dd></div><div><dt>Total</dt><dd><strong>{formatMoney(item.subtotal)}</strong></dd></div></dl>{item.sop_minimum_price_snapshot != null && <small className={item.is_outside_sop ? 'commercial-quotes__outside-sop' : 'commercial-quotes__inside-sop'}>{item.is_outside_sop ? 'Fora da SOP' : 'Dentro da SOP'} · ref. {formatMoney(item.reference_price_snapshot)} · mín. {formatMoney(item.sop_minimum_price_snapshot)}</small>}</article>)}</div></section>
+      <section className="panel commercial-quote-detail__section"><h2>Itens</h2><div className="commercial-quote-detail__items-table"><DataTable columns={itemsColumns} rows={quote.items} emptyText="Nenhum item." /></div><div className="commercial-quote-detail__items-mobile">{quote.items.map((item) => <article key={item.id}><div><strong>{item.product_name_snapshot}</strong><span>{[item.product_code_snapshot, item.item_type === 'manual' ? 'Manual' : null].filter(Boolean).join(' · ')}</span></div>{item.description_snapshot && <p>{item.description_snapshot}</p>}<dl><div><dt>Qtd.</dt><dd>{Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</dd></div><div><dt>Unitário</dt><dd>{formatMoney(item.unit_price)}</dd></div><div><dt>Desconto / un.</dt><dd>{formatMoney(item.unit_discount_amount ?? (Number(item.quantity) > 0 ? Number(item.discount_amount) / Number(item.quantity) : 0))}</dd></div><div><dt>Total</dt><dd><strong>{formatMoney(item.subtotal)}</strong></dd></div></dl>{item.sop_minimum_price_snapshot != null && <small className={item.is_outside_sop ? 'commercial-quotes__outside-sop' : 'commercial-quotes__inside-sop'}>{item.is_outside_sop ? 'Fora da SOP' : 'Dentro da SOP'} · ref. {formatMoney(item.reference_price_snapshot)} · mín. {formatMoney(item.sop_minimum_price_snapshot)}</small>}</article>)}</div></section>
 
       <div className="commercial-quote-detail__grid">
         <section className="panel commercial-quote-detail__section"><h2>Pagamento</h2>{quote.payment_methods.length === 0 ? <p>Nenhuma condição informada.</p> : quote.payment_methods.map((method) => <article className="commercial-quote-detail__payment" key={method.id}><strong>{method.description}</strong><span>{PAYMENT_TYPES.find(([value]) => value === method.method_type)?.[1] || method.method_type} · {formatMoney(method.amount)} · {method.installment_count}x</span>{method.calculation_type === 'percentage' && <span>{Number(method.percentage).toLocaleString('pt-BR')}% do total</span>}<ul>{method.installments.map((installment) => <li key={installment.id}>{installment.installment_number}ª — {formatDate(installment.due_date)} — {formatMoney(installment.amount)}</li>)}</ul></article>)}</section>

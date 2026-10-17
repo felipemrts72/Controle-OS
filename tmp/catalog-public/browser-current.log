@@ -1,0 +1,166 @@
+UI OliMen Gestão
+DASHBOARD
+PRODUÇÃO
+ESTOQUE
+COMERCIAL
+Clientes
+Orçamentos
+Vendas
+Catálogo
+COMPRAS
+EXPEDIÇÃO
+ADMINISTRATIVO
+CONFIGURAÇÕES
+Administrador
+Administrador
+Jackpot 75 (H-3.5)
+
+Sem código comercial · Produto interno vinculado: Jackpot 75 (H-3.5)
+
+Voltar
+Ficha comercial
+Nome comercial *
+Código comercial
+Preço de referência (R$)
+Produto interno vinculado (opcional)
+Nenhum
+Acoplamento H-10 Super Motor Diesel
+Acoplamento H-10 Super Motor Eletrico
+Acoplamento H-2 (motor elétrico)
+Acoplamento P/ H2
+Base H-10 Super + Eletrico 300CV
+Base H-10 Super + Scannia 113
+Base H-2 Acoplado Motor Elétrico 30CV
+Baterias/Martelos
+Baterias/Martelos
+Baterias/Martelos
+Bica 1.20 X 3.30 M
+1 — Bica 1.20 X 3.30 M sistema canadense
+2 — Bica de 0.60 X 3.30 M sistema canadense
+3 — Bica de 0.80 X 3.30 M sistema canadense
+4 — Britador 20 - 15 com motor 7.5CV
+5 — Britador 30 X 20 com motor estacionário 13 com partida e bateria
+6 — Britador 60 - 40 com motor elétrico de 50 CV
+165 — Britador 62 - 40 com motor elétrico de 50 CV
+7 — CAIXA DE ALIMENTAÇAO COM QUEBRADOR DE PEDRA 4MX5MX1M DE ABA
+Cambio p/ Scania 113
+8 — Centrífuga 5 TON
+Centrifuga TU - 20
+Centrifuga TU - 5
+9 — Chapa da frente do motor Mercedes
+Coluna para carvão
+135 — Coluna para carvão
+Cortar Caixa H-2
+Corte - Laterais H-10 Super
+Eixo H-3.5 c/ Rolamentos
+Eixo H-3.5 c/ Rolamentos e Mancais
+Eixo H10 Super C/ Rolamentos
+EIXO PARA BRITADOR 30X20
+10 — EIXO UNIVERSAL H-0.5 COM ROLAMENTOS
+Eixo Universal H-2 c/ rolamentos
+11 — Eixo Universal H-3.5 com rolamentos
+12 — Espaçador de grelhas para aumentar vazão H-8 Super
+FACAO PARA BRITADOR
+13 — Fechadura da tampa Universal H-3.5
+Grelha H-3.5 1.1/2" (20 UND)
+14 — Grelha P/ Universal H-5 Super 0.75mm
+166 — Jackpot 75 (H-3.5)
+Descrição comercial
+ Produto Comercial ativo
+SOP Comercial informação interna
+Tipo de limite
+Sem limite definido
+Valor máximo em reais
+Percentual máximo
+Desconto máximo
+Preço mínimo dentro da SOP
+R$ 3.800,00
+Catálogo Técnico
+Versão 3 · Publicada / ativa
+Versão 2 · Histórica
+Versão 1 · Histórica
+PDF da versão salva
+Excluir versão
+
+Não utilizada — você pode salvar alterações nesta mesma versão.
+
+01 — Título comercial
+02 — Subtítulo
+03 — Apresentação
+04 — Especificações
+Característica
+Valor
+↑
+↓
+Remover
+Adicionar especificação
+05 — Itens inclusos
+Descrição do item
+↑
+↓
+Remover
+Adicionar item incluso
+06 — Aplicações
+07 — Observações
+Imagens comerciais
+Adicionar imagem
+CEAA86AA-0A39-47A0-9C82-04C45D3BF093.png · principal
+↑
+↓
+Salvar legenda
+Principal
+Salvar alterações
+Ficha comercial salva.
+×
+Reload Jackpot 75 (H-3.5) - teste controlado
+[
+  {
+    "method": "POST",
+    "url": "https://os.torneadorauniversal.com.br/cdn-cgi/rum?",
+    "bytes": 938,
+    "contentType": "application/json",
+    "payload": "{\"startTime\":1790008003866,\"pageloadId\":\"2bff8a91-39a2-450b-95b0-292c1b7ccc26\",\"eventType\":1,\"nt\":\"navigate\",\"location\":\"https://os.torneadorauniversal.com.br/comercial/catalogo/0592a871-cb8d-4e45-88c2-f3625dac2a5f\",\"versions\":{\"fl\":\"2024.11.0\",\"js\":\"2026.9.1\",\"timings\":2},\"bi\":{\"be\":\"WebKit\",\"bev\":\"605.1.15\",\"bv\":\"18.5\",\"ov\":\"18_5\"},\"memory\":{\"totalJSHeapSize\":7986477,\"usedJSHeapSize\":5716197,\"jsHeapSizeLimit\":4395630592},\"firstPaint\":12460,\"firstContentfulPaint\":12808,\"timingsV2\":{\"nextHopProtocol\":\"h2\",\"domainLookupStart\":18,\"domainLookupEnd\":12137,\"connectStart\":12137,\"connectEnd\":12222,\"secureConnectionStart\":12174,\"requestStart\":12223,\"responseStart\":12317,\"responseEnd\":12318,\"domInteractive\":12326,\"domComplete\":24652,\"loadEventStart\":24652,\"loadEventEnd\":24652,\"finalResponseHeadersStart\":12317,\"firstInterimResponseStart\":0,\"transferSize\":867,\"decodedBodySize\":799},\"siteToken\":\"ae166dcbba344050804a4aa8c6634fd6\",\"st\":2}"
+  },
+  {
+    "url": "https://os.torneadorauniversal.com.br/cdn-cgi/rum?",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "method": "PUT",
+    "url": "https://os.torneadorauniversal.com.br/api/commercial/catalog/products/0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+    "bytes": 250,
+    "contentType": "application/json",
+    "payload": "{\"name\":\"Jackpot 75 (H-3.5)\",\"commercial_code\":null,\"is_active\":true,\"operational_product_id\":\"2c48239a-fe65-4938-b722-8977348a113b\",\"reference_price\":\"4000.00\",\"commercial_description\":\"\",\"sop_discount_type\":\"amount\",\"sop_discount_value\":\"200.0000\"}"
+  },
+  {
+    "method": "PUT",
+    "url": "https://os.torneadorauniversal.com.br/api/commercial/catalog/versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+    "bytes": 1594,
+    "contentType": "application/json",
+    "payload": "{\"id\":\"c320b7f2-e422-4782-a681-d27a985f5cb3\",\"product_catalog_id\":\"ae07bf53-8485-4b54-87c6-ca857516926f\",\"version_number\":3,\"status\":\"published\",\"commercial_title\":\"Jackpot 75 (H-3.5) - teste controlado\",\"subtitle\":\"Teste de subtítulo\",\"presentation_text\":\"Teste de apresentação\",\"applications_text\":\"Aplicações de teste controlado\",\"additional_text\":\"Observações de teste controlado\",\"notes\":null,\"created_by\":\"8787410b-57a3-4da4-9775-461bcc3dcbd2\",\"updated_by\":\"cea169e5-7426-4f8a-bdf7-11d32d890418\",\"published_by\":\"8787410b-57a3-4da4-9775-461bcc3dcbd2\",\"published_at\":\"2026-09-18T02:18:17.449Z\",\"created_at\":\"2026-09-18T02:17:49.872Z\",\"updated_at\":\"2026-09-21T16:24:00.044Z\",\"source_system\":null,\"source_id\":null,\"source_payload_hash\":null,\"imported_at\":null,\"import_run_id\":null,\"is_used\":false,\"has_quote_references\":false,\"images\":[{\"id\":\"f10ddd04-b3f9-46ab-ac5a-77ae605d997f\",\"product_catalog_version_id\":\"c320b7f2-e422-4782-a681-d27a985f5cb3\",\"original_name\":\"CEAA86AA-0A39-47A0-9C82-04C45D3BF093.png\",\"stored_name\":\"catalog-e56d6c8f-11a5-4299-bd0e-31310c1913e8.png\",\"mime_type\":\"image/png\",\"size_bytes\":\"3036244\",\"caption\":null,\"position\":0,\"is_primary\":true,\"uploaded_by\":\"8787410b-57a3-4da4-9775-461bcc3dcbd2\",\"created_at\":\"2026-09-18T02:17:49.872Z\",\"updated_at\":\"2026-09-18T02:17:49.872Z\",\"source_system\":null,\"source_id\":null,\"source_path\":null,\"sha256\":null,\"import_run_id\":null,\"image_url\":\"/api/commercial/catalog/images/f10ddd04-b3f9-46ab-ac5a-77ae605d997f/content\"}],\"specifications\":[{\"name\":\"Largura\",\"value\":\"75\"}],\"included_items\":[{\"description\":\"Jackpot 75 cm\"}]}"
+  },
+  {
+    "url": "https://os.torneadorauniversal.com.br/api/commercial/catalog/products/0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+    "status": 200,
+    "body": "{\"id\":\"ae07bf53-8485-4b54-87c6-ca857516926f\",\"product_id\":\"2c48239a-fe65-4938-b722-8977348a113b\",\"reference_price\":\"4000.00\",\"commercial_description\":null,\"sop_discount_type\":\"amount\",\"sop_discount_va"
+  },
+  {
+    "url": "https://os.torneadorauniversal.com.br/api/commercial/catalog/versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+    "status": 200,
+    "body": "{\"id\":\"ae07bf53-8485-4b54-87c6-ca857516926f\",\"product_id\":\"2c48239a-fe65-4938-b722-8977348a113b\",\"reference_price\":\"4000.00\",\"commercial_description\":null,\"sop_discount_type\":\"amount\",\"sop_discount_va"
+  },
+  {
+    "method": "POST",
+    "url": "https://os.torneadorauniversal.com.br/cdn-cgi/rum?",
+    "bytes": 903,
+    "contentType": "application/json",
+    "payload": "{\"startTime\":1790008030359,\"pageloadId\":\"fca5ffd8-2b1e-401d-a570-b5ad47c57cd3\",\"eventType\":1,\"nt\":\"reload\",\"location\":\"https://os.torneadorauniversal.com.br/comercial/catalogo/0592a871-cb8d-4e45-88c2-f3625dac2a5f\",\"versions\":{\"fl\":\"2024.11.0\",\"js\":\"2026.9.1\",\"timings\":2},\"bi\":{\"be\":\"WebKit\",\"bev\":\"605.1.15\",\"bv\":\"18.5\",\"ov\":\"18_5\"},\"memory\":{\"totalJSHeapSize\":11814796,\"usedJSHeapSize\":8841276,\"jsHeapSizeLimit\":4395630592},\"firstPaint\":0,\"firstContentfulPaint\":0,\"timingsV2\":{\"nextHopProtocol\":\"h2\",\"domainLookupStart\":2,\"domainLookupEnd\":2,\"connectStart\":2,\"connectEnd\":2,\"secureConnectionStart\":2,\"requestStart\":3,\"responseStart\":86,\"responseEnd\":87,\"domInteractive\":99,\"domComplete\":105,\"loadEventStart\":105,\"loadEventEnd\":105,\"finalResponseHeadersStart\":86,\"firstInterimResponseStart\":0,\"transferSize\":300,\"decodedBodySize\":799},\"dt\":\"cache\",\"siteToken\":\"ae166dcbba344050804a4aa8c6634fd6\",\"st\":2}"
+  },
+  {
+    "url": "https://os.torneadorauniversal.com.br/cdn-cgi/rum?",
+    "status": 204,
+    "body": ""
+  }
+]
+Restore 200

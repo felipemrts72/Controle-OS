@@ -215,7 +215,7 @@ export function InternalOrderDetailPage() {
       </div>
 
       <div className="panel internal-order-detail-page__summary">
-        <span>Data de entrega: {new Date(order.promised_date).toLocaleDateString('pt-BR')}</span>
+        <span>Data de entrega: {order.promised_date ? new Date(order.promised_date).toLocaleDateString('pt-BR') : 'Sem prazo'}</span>
         <span>Status: <StatusBadge value={order.status} /></span>
       </div>
 

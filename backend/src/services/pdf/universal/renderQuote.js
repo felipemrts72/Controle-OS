@@ -139,7 +139,7 @@ function itemDescription(item) {
 }
 
 function discountLabel(item) {
-  return Number(item.discount_amount || 0) > 0 ? formatMoney(item.discount_amount) : '0%';
+  return Number(item.unit_discount_amount || 0) > 0 ? `${formatMoney(item.unit_discount_amount)}/un.` : 'R$ 0,00/un.';
 }
 
 function drawTableRow(doc, layout, item, description, { continuation = false } = {}) {

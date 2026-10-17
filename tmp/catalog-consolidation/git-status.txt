@@ -1,0 +1,55 @@
+## feature/comercial-module
+A  analysis/catalogo-tecnico-britador-30x20.md
+ M backend/src/app.js
+MM backend/src/controllers/productCatalogController.js
+MM backend/src/routes/productCatalogRoutes.js
+A  backend/src/services/catalogVersionUsageService.js
+ M backend/src/services/commercialProductOperationalService.js
+M  backend/src/services/commercialQuoteDocumentService.js
+M  backend/src/services/commercialQuoteService.js
+M  backend/src/services/legacyCommercialQuoteDocumentService.js
+M  backend/src/services/pdf/orcamentoPdfService.js
+M  backend/src/services/pdf/universal/renderCatalog.js
+MM backend/src/services/productCatalogService.js
+A  backend/src/services/technicalCatalogPdfService.js
+A  output/pdf/britador-30x20-catalogo.pdf
+A  output/pdf/britador-30x20-catalogo.txt
+A  output/pdf/britador-30x20-orcamento-preview.pdf
+A  output/pdf/britador-30x20-orcamento-preview.txt
+A  output/pdf/britador-auditoria-antes.json
+A  output/pdf/britador-auditoria-depois.json
+A  output/pdf/britador-editor-1440.png
+A  output/pdf/britador-editor-390.png
+A  output/pdf/britador-pdf-http.json
+A  output/pdf/britador-referencias-antes.json
+A  output/pdf/britador-reproducao-antes.pdf
+A  output/pdf/britador-smoke.json
+A  output/pdf/britador-validacao-pdf.json
+A  output/pdf/validacao-build.log
+A  output/pdf/validacao-npm-test.log
+A  output/pdf/validacao-rbac.log
+A  output/pdf/validacao-testes-especificos.log
+ M scripts/migrate.js
+A  scripts/regularize-britador-30x20-catalog.js
+AM scripts/smoke-catalog-editor.js
+A  scripts/validate-britador-catalog-pdf.py
+ M server.js
+MM src/pages/CommercialCatalogPage/CatalogEditorPage.jsx
+ M src/pages/CommercialCatalogPage/CatalogPage.jsx
+MM src/pages/CommercialCatalogPage/CommercialCatalog.css
+A  tests/catalogVersionLifecycle.test.js
+M  tests/commercialCatalog.test.js
+ M tests/commercialOperationalProducts.test.js
+?? analysis/catalogo-consolidacao-2026-09-23.md
+?? analysis/catalogo-tecnico-validacao-2026-09-21.md
+?? backend/src/middlewares/catalogRequestTrace.js
+?? database/migrations/20260921_commercial_product_numbers.sql
+?? scripts/verify-catalog-consolidation.mjs
+?? scripts/verify-catalog-public.mjs
+?? scripts/verify-catalog-quick-product.mjs
+?? src/pages/CommercialCatalogPage/QuickOperationalProductModal.jsx
+?? tests/catalogConsolidation.test.js
+?? tests/catalogQuickProduct.test.js
+?? tests/commercialProductNumbers.test.js
+?? tmp/catalog-consolidation/
+?? tmp/catalog-public/

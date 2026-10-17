@@ -11,6 +11,8 @@ import {
   generalReportPdf,
   home,
   individualStore,
+  individualUpdate,
+  individualDestroy,
   individualReport,
   individualReportPdf,
   installmentConvert,
@@ -34,9 +36,11 @@ export const advanceRoutes = Router();
 advanceRoutes.use(authenticate);
 
 advanceRoutes.get('/', requirePermission('advances.view'), home);
-advanceRoutes.get('/employees', requireAnyPermission('advances.create', 'advances.review', 'advances.create_individual', 'advances.installments.convert', 'advances.reports.individual', 'advances.manage'), employees);
+advanceRoutes.get('/employees', requireAnyPermission('advances.create', 'advances.review', 'advances.create_individual', 'advances.edit', 'advances.installments.convert', 'advances.reports.individual', 'advances.manage'), employees);
 advanceRoutes.get('/limit-lookup', requireAnyPermission('advances.limit_lookup', 'advances.manage'), limitLookup);
 advanceRoutes.post('/individual', requireAnyPermission('advances.create_individual', 'advances.manage'), individualStore);
+advanceRoutes.put('/lists/:id/individual/:itemId', requirePermissionOrAdmin('advances.edit', 'Você não possui permissão para editar vales.'), individualUpdate);
+advanceRoutes.delete('/lists/:id/individual/:itemId', requirePermissionOrAdmin('advances.delete', 'Você não possui permissão para excluir vales.'), individualDestroy);
 advanceRoutes.get('/installments/eligible', requireAnyPermission('advances.installments.convert', 'advances.manage'), eligibleInstallments);
 advanceRoutes.post('/individual/:itemId/installments', requirePermissionOrAdmin('advances.installments.convert', 'Você não possui permissão para parcelar vales.'), installmentConvert);
 advanceRoutes.get('/reports/general', requireAnyPermission('advances.reports.general', 'advances.manage'), generalReport);

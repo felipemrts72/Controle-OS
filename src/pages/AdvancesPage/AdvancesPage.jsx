@@ -84,6 +84,8 @@ export function AdvancesPage() {
   const canConvertInstallments = canAccessPermission(user, 'advances.installments.convert');
   const canReportsView = canAccessPermission(user, 'advances.reports.view') || canAccessPermission(user, 'advances.manage');
   const canDeleteList = canAccessPermission(user, 'advances.lists.delete');
+  const canEditIndividual = isAdmin || canAccessPermission(user, 'advances.edit');
+  const canDeleteIndividual = isAdmin || canAccessPermission(user, 'advances.delete');
 
   const [home, setHome] = useState({ open_cycle: null, lists: [] });
   const [cycles, setCycles] = useState([]);
@@ -98,6 +100,10 @@ export function AdvancesPage() {
   const [individualResult, setIndividualResult] = useState(null);
   const [convertModal, setConvertModal] = useState(emptyConvert);
   const [deleteListModal, setDeleteListModal] = useState(null);
+  const [individualCorrection, setIndividualCorrection] = useState(null);
+  const [individualDeletion, setIndividualDeletion] = useState(null);
+  const [correctionSearch, setCorrectionSearch] = useState('');
+  const [correctionEmployees, setCorrectionEmployees] = useState([]);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [closeModal, setCloseModal] = useState(false);
   const [review, setReview] = useState(null);
@@ -130,6 +136,66 @@ export function AdvancesPage() {
     }
     const response = await api.get('/advances/employees');
     setEmployees(response.data);
+  }
+
+  function showIndividualCorrection(item, listId, mode) {
+    const data = { list_id: listId, item_id: item.id, row_version: item.row_version,
+      employee_id: item.employee_id, employee_name: item.employee_name, amount: item.amount,
+      receipt_at: String(item.receipt_at || '').slice(0, 16).replace(' ', 'T'), source_bank: item.source_bank || '', loading: false };
+    if (mode === 'delete') setIndividualDeletion(data);
+    else setIndividualCorrection(data);
+  }
+
+  async function openIndividualCorrection(advanceList, mode) {
+    try {
+      const response = await api.get(`/advances/lists/${advanceList.id}`);
+      const item = response.data.items.find((entry) => entry.entry_type === 'individual');
+      if (!item) throw new Error('Vale individual não encontrado.');
+      showIndividualCorrection(item, advanceList.id, mode);
+    } catch (error) { toast.error(apiErrorMessage(error, 'Não foi possível carregar o Vale.')); }
+  }
+
+  async function searchCorrectionEmployees(event) {
+    event.preventDefault();
+    try {
+      const response = await api.get('/advances/employees', { params: { search: correctionSearch } });
+      setCorrectionEmployees(response.data);
+    } catch (error) { toast.error(apiErrorMessage(error, 'Não foi possível buscar funcionários.')); }
+  }
+
+  async function saveIndividualCorrection(event) {
+    event.preventDefault();
+    const current = individualCorrection;
+    setIndividualCorrection({ ...current, loading: true });
+    try {
+      await api.put(`/advances/lists/${current.list_id}/individual/${current.item_id}`, current);
+      setIndividualCorrection(null);
+      await refreshAll();
+      toast.success('Vale atualizado com sucesso.');
+    } catch (error) {
+      setIndividualCorrection({ ...current, loading: false });
+      toast.error(apiErrorMessage(error, 'Não foi possível atualizar o Vale.'));
+    }
+  }
+
+  async function deleteIndividualCorrection() {
+    const current = individualDeletion;
+    setIndividualDeletion({ ...current, loading: true });
+    try {
+      await api.delete(`/advances/lists/${current.list_id}/individual/${current.item_id}`, { data: { row_version: current.row_version } });
+      setIndividualDeletion(null);
+      if (id === current.list_id && list?.items.length === 1) {
+        setList(null);
+        navigate('/vales');
+        await loadHome();
+      } else {
+        await refreshAll();
+      }
+      toast.success('Vale excluído com sucesso.');
+    } catch (error) {
+      setIndividualDeletion({ ...current, loading: false });
+      toast.error(apiErrorMessage(error, 'Não foi possível excluir o Vale.'));
+    }
   }
 
   useEffect(() => {
@@ -446,6 +512,7 @@ export function AdvancesPage() {
   const deleteNeedsTypedConfirmation = Boolean(deleteListModal?.status === 'approved');
   const canConfirmDeleteList = !deleteNeedsTypedConfirmation || deleteConfirmation.trim().toUpperCase() === 'EXCLUIR';
   const canShowDeleteList = (advanceList) => {
+    if (advanceList.card_type !== 'list') return false;
     if (isAdmin) return true;
     return canDeleteList && advanceList.status === 'draft' && advanceList.cycle_status !== 'closed';
   };
@@ -534,6 +601,8 @@ export function AdvancesPage() {
                 <div className="advances-page__card-actions">
                   <Link className="button" to={`/vales/${advanceList.id}`}><span>Abrir lista</span></Link>
                   <button className="button" type="button" onClick={() => openSummary(advanceList.id)}><FileText size={16} /><span>Visualizar resumo</span></button>
+                  {advanceList.card_type === 'individual' && advanceList.cycle_status === 'open' && advanceList.status === 'approved' && !advanceList.has_linked_installments && canEditIndividual && <button className="button" type="button" onClick={() => openIndividualCorrection(advanceList, 'edit')}><Pencil size={16} /><span>Editar</span></button>}
+                  {advanceList.card_type === 'individual' && advanceList.cycle_status === 'open' && advanceList.status === 'approved' && !advanceList.has_linked_installments && canDeleteIndividual && <button className="button button_danger" type="button" onClick={() => openIndividualCorrection(advanceList, 'delete')}><Trash2 size={16} /><span>Excluir</span></button>}
                   {canShowDeleteList(advanceList) && (
                     <button className="button button_danger" type="button" onClick={() => { setDeleteConfirmation(''); setDeleteListModal(advanceList); }}><Trash2 size={16} /><span>Excluir lista</span></button>
                   )}
@@ -593,9 +662,16 @@ export function AdvancesPage() {
                   </>
                 ) : (
                   <>
-                    <div><strong>{item.employee_name}</strong><span>{item.limit_review_rejected_at ? 'REJEITADA · Autorização negada. Edite ou remova esta linha.' : item.override_used ? 'Limite ultrapassado por autorização' : item.threshold_warning_confirmed ? 'Confirmação acima de 40%' : 'Confirmado'}</span></div>
+                    <div><strong>{item.employee_name}</strong><span>{item.entry_type === 'individual' ? 'Vale individual' : item.limit_review_rejected_at ? 'REJEITADA · Autorização negada. Edite ou remova esta linha.' : item.override_used ? 'Limite ultrapassado por autorização' : item.threshold_warning_confirmed ? 'Confirmação acima de 40%' : 'Confirmado'}</span></div>
                     <strong>{formatMoney(item.amount)}</strong>
-                    {canEditCurrentList && (
+                    {item.entry_type === 'individual' ? (
+                      <div className="advances-page__line-actions">
+                        {list.cycle_status === 'open' && list.status === 'approved' && !item.has_linked_installments ? <>
+                          {canEditIndividual && <button className="button" type="button" onClick={() => showIndividualCorrection(item, list.id, 'edit')}><Pencil size={16} /><span>Editar</span></button>}
+                          {canDeleteIndividual && <button className="button button_danger" type="button" onClick={() => showIndividualCorrection(item, list.id, 'delete')}><Trash2 size={16} /><span>Excluir</span></button>}
+                        </> : <span>{list.cycle_status !== 'open' ? 'Ciclo fechado: alteração indisponível' : item.has_linked_installments ? 'Vale com parcelas vinculadas: alteração indisponível' : 'Status da lista impede alteração'}</span>}
+                      </div>
+                    ) : canEditCurrentList && (
                       <div className="advances-page__line-actions">
                         <button className="button advances-page__icon-button" title="Editar" type="button" onClick={() => setEditing({ id: item.id, employee_id: item.employee_id, amount: item.amount })}><Pencil size={18} /></button>
                         {canReview && <button className="button button_danger advances-page__icon-button" title="Remover" type="button" onClick={() => removeItem(item.id)}><Trash2 size={18} /></button>}
@@ -623,6 +699,39 @@ export function AdvancesPage() {
             {canApprove && list.status === 'pending_approval' && <button className="button button_primary" type="button" onClick={() => approveList()} disabled={busy || Boolean(editing || line.employee_id || line.amount)} title={editing || line.employee_id || line.amount ? 'Confirme a linha em edição antes de aprovar' : 'Validar e aprovar a lista'}><Check size={18} /><span>Aprovar lista</span></button>}
           </div>
         </>
+      )}
+
+      {individualCorrection && (
+        <div className="advances-page__modal" role="dialog" aria-modal="true" aria-label="Editar Vale">
+          <form className="advances-page__modal-content advances-page__correction-modal" onSubmit={saveIndividualCorrection}>
+            <div className="advances-page__modal-header"><h2>Editar Vale</h2><button className="button" type="button" onClick={() => setIndividualCorrection(null)} aria-label="Fechar">×</button></div>
+            <div className="advances-page__selected-employee"><div><span className="field__label">Funcionário</span><strong>{individualCorrection.employee_name}</strong></div></div>
+            <div className="advances-page__search-form">
+              <label className="field"><span className="field__label">Trocar funcionário</span><input className="field__input" value={correctionSearch} onChange={(event) => setCorrectionSearch(event.target.value)} placeholder="Buscar funcionário" /></label>
+              <button className="button" type="button" onClick={searchCorrectionEmployees}>Buscar</button>
+            </div>
+            {correctionEmployees.length > 0 && <div className="advances-page__results-list">{correctionEmployees.map((employee) => <button className="advances-page__employee-result" type="button" key={employee.id} onClick={() => { setIndividualCorrection((current) => ({ ...current, employee_id: employee.id, employee_name: employee.full_name })); setCorrectionEmployees([]); setCorrectionSearch(''); }}>{employee.full_name}</button>)}</div>}
+            <div className="advances-page__modal-grid">
+              <label className="field"><span className="field__label">Valor</span><input className="field__input" type="text" inputMode="decimal" value={individualCorrection.amount} onChange={(event) => setIndividualCorrection((current) => ({ ...current, amount: event.target.value }))} required /></label>
+              <label className="field"><span className="field__label">Data e hora do comprovante</span><input className="field__input" type="datetime-local" value={individualCorrection.receipt_at} onChange={(event) => setIndividualCorrection((current) => ({ ...current, receipt_at: event.target.value }))} required /></label>
+              <label className="field"><span className="field__label">Banco de origem</span><select className="field__input" value={individualCorrection.source_bank} onChange={(event) => setIndividualCorrection((current) => ({ ...current, source_bank: event.target.value }))}><option value="">Não informado</option>{banks.map((bank) => <option key={bank} value={bank}>{bank}</option>)}</select></label>
+            </div>
+            <div className="advances-page__modal-actions"><button className="button" type="button" onClick={() => setIndividualCorrection(null)}>Voltar</button><button className="button button_primary" type="submit" disabled={individualCorrection.loading}>{individualCorrection.loading ? 'Salvando...' : 'Salvar alterações'}</button></div>
+          </form>
+        </div>
+      )}
+
+      {individualDeletion && (
+        <div className="advances-page__modal" role="dialog" aria-modal="true" aria-label="Excluir Vale">
+          <div className="advances-page__modal-content advances-page__correction-modal">
+            <h2>Excluir Vale?</h2>
+            <p>Funcionário: <strong>{individualDeletion.employee_name}</strong></p>
+            <p>Valor: <strong>{formatMoney(individualDeletion.amount)}</strong></p>
+            <p>Data: <strong>{formatDate(individualDeletion.receipt_at)}</strong></p>
+            <p>Esta ação cancelará o lançamento e manterá seu histórico de auditoria.</p>
+            <div className="advances-page__modal-actions"><button className="button" type="button" onClick={() => setIndividualDeletion(null)}>Voltar</button><button className="button button_danger" type="button" onClick={deleteIndividualCorrection} disabled={individualDeletion.loading}>{individualDeletion.loading ? 'Excluindo...' : 'Excluir Vale'}</button></div>
+          </div>
+        </div>
       )}
 
       {limitLookup.open && (

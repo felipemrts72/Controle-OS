@@ -148,17 +148,16 @@ export function renderCatalogs(doc, layout, data, company) {
     drawCatalogHeader(doc, layout, company, catalog);
     const pageHeader = catalogPageHeader(doc, layout, company, catalog);
     drawCatalogHero(doc, layout, catalog);
-    const main = drawMainImage(doc, layout, catalog, pageHeader);
     if (catalog.presentation_text) {
       drawFlowingText(doc, layout, catalog.presentation_text, { fontSize: 10, color: '#344258', lineGap: 3, kind: 'catalogo', pageHeader });
       doc.y += 8;
     }
+    const main = drawMainImage(doc, layout, catalog, pageHeader);
     drawSpecifications(doc, layout, catalog, pageHeader);
     drawIncludedItems(doc, layout, catalog, pageHeader);
     if (catalog.applications_text) {
-      const sectionStart = doc.y;
       drawSectionTitle(doc, layout, 'Aplicações', { keepWith: 30, kind: 'catalogo', pageHeader });
-      const bodyY = Math.max(doc.y, sectionStart + 46);
+      const bodyY = doc.y;
       doc.y = bodyY;
       drawFlowingText(doc, layout, catalog.applications_text, {
         fontSize: 9, color: '#344258', kind: 'catalogo', pageHeader, startY: bodyY,

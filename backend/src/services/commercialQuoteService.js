@@ -1,3 +1,4 @@
+import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { pool, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { hasPermission } from './permissionService.js';
@@ -7,6 +8,7 @@ import { calculateSop } from './productCatalogService.js';
 import { getCompanyPdfData } from './companySettingsService.js';
 import { createOfficialQuoteDocument } from './commercialQuoteDocumentService.js';
 import { UNIDENTIFIED_CUSTOMER } from './commercialQuoteDocumentDataService.js';
+import { createSaleForApprovedQuote } from './commercialSaleService.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -84,18 +86,20 @@ export function calculateQuoteTotals(items, discountValue = 0, freightValue = 0)
   const calculatedItems = items.map((item, index) => {
     const quantity = decimalToUnits(item.quantity, 3, `items.${index}.quantity`, { positive: true });
     const unitPrice = decimalToUnits(item.unit_price, 2, `items.${index}.unit_price`);
-    const grossSubtotal = multiplyRounded(quantity, unitPrice);
-    const discountAmount = decimalToUnits(item.discount_amount, 2, `items.${index}.discount_amount`);
-    if (discountAmount > grossSubtotal) {
-      throw httpError(400, 'O desconto do item não pode superar seu valor bruto.', {
+    const unitDiscountAmount = decimalToUnits(item.discount_amount, 2, `items.${index}.discount_amount`);
+    if (unitDiscountAmount > unitPrice) {
+      throw httpError(400, 'O desconto unitário do item não pode superar o preço unitário.', {
         field: `items.${index}.discount_amount`,
       });
     }
+    const grossSubtotal = multiplyRounded(quantity, unitPrice);
+    const discountAmount = multiplyRounded(quantity, unitDiscountAmount);
     return {
       ...item,
       quantity: unitsToDecimal(quantity, 3),
       unit_price: unitsToDecimal(unitPrice, 2),
       gross_subtotal: unitsToDecimal(grossSubtotal, 2),
+      unit_discount_amount: unitsToDecimal(unitDiscountAmount, 2),
       discount_amount: unitsToDecimal(discountAmount, 2),
       subtotal: unitsToDecimal(grossSubtotal - discountAmount, 2),
       _grossCents: grossSubtotal,
@@ -187,7 +191,12 @@ async function getActiveCustomer(client, customerId) {
 }
 
 async function buildItems(client, items, userId = null) {
-  const calculated = calculateQuoteTotals(items, 0, 0).items;
+  const calculated = calculateQuoteTotals(items, 0, 0).items.map((item) => ({
+    ...item,
+    // buildItems congela metadados e a SOP; o cálculo definitivo ocorre
+    // depois. Preserve aqui o desconto informado por unidade.
+    discount_amount: item.unit_discount_amount,
+  }));
   const commercialProductIds = [...new Set(calculated.filter((item) => item.commercial_product_id).map((item) => String(item.commercial_product_id)))];
   commercialProductIds.forEach((id) => assertUuid(id, 'commercial_product_id'));
   const productIds = [...new Set(calculated.filter((item) => item.product_id && !item.commercial_product_id).map((item) => String(item.product_id)))];
@@ -221,15 +230,15 @@ async function buildItems(client, items, userId = null) {
   const resultItems = [];
   for (let index = 0; index < calculated.length; index += 1) {
     const item = calculated[index];
+    const quantityUnits = decimalToUnits(item.quantity, 3, `items.${index}.quantity`, { positive: true });
+    const subtotalCents = decimalToUnits(item.subtotal, 2, `items.${index}.subtotal`);
+    const effectiveCents = (subtotalCents * 1000n + quantityUnits / 2n) / quantityUnits;
+    const effectiveUnitPrice = unitsToDecimal(effectiveCents, 2);
     if (item.commercial_product_id) {
       const product = commercialProductMap.get(String(item.commercial_product_id));
       if (!product) throw httpError(400, 'Produto Comercial não encontrado.', { field: `items.${index}.commercial_product_id`, code: 'COMMERCIAL_PRODUCT_NOT_FOUND' });
       if (product.is_active === false) throw httpError(400, 'O Produto Comercial selecionado está inativo.', { field: `items.${index}.commercial_product_id`, code: 'COMMERCIAL_PRODUCT_INACTIVE' });
       const sop = calculateSop(product.reference_price, product.sop_discount_type, product.sop_discount_value);
-      const quantityUnits = decimalToUnits(item.quantity, 3, `items.${index}.quantity`, { positive: true });
-      const subtotalCents = decimalToUnits(item.subtotal, 2, `items.${index}.subtotal`);
-      const effectiveCents = (subtotalCents * 1000n + quantityUnits / 2n) / quantityUnits;
-      const effectiveUnitPrice = unitsToDecimal(effectiveCents, 2);
       resultItems.push({
         ...item,
         item_type: 'product', product_id: null, commercial_product_id: product.id,
@@ -257,10 +266,6 @@ async function buildItems(client, items, userId = null) {
       if (!product) throw httpError(400, 'Produto não encontrado.', { field: `items.${index}.product_id`, code: 'PRODUCT_NOT_FOUND' });
       if (product.is_active === false) throw httpError(400, 'O Produto selecionado está inativo.', { field: `items.${index}.product_id`, code: 'PRODUCT_INACTIVE' });
       const sop = calculateSop(product.reference_price, product.sop_discount_type, product.sop_discount_value);
-      const quantityUnits = decimalToUnits(item.quantity, 3, `items.${index}.quantity`, { positive: true });
-      const subtotalCents = decimalToUnits(item.subtotal, 2, `items.${index}.subtotal`);
-      const effectiveCents = (subtotalCents * 1000n + quantityUnits / 2n) / quantityUnits;
-      const effectiveUnitPrice = unitsToDecimal(effectiveCents, 2);
       const isOutsideSop = sop ? effectiveCents < decimalToUnits(sop.minimum_price, 2, 'sop_minimum_price') : false;
       resultItems.push({
         ...item,
@@ -315,7 +320,7 @@ async function buildItems(client, items, userId = null) {
         save_product_requested: true, product_catalog_id: catalog.id, product_catalog_version_id: null,
         reference_price_snapshot: item.unit_price, sop_discount_type_snapshot: null,
         sop_discount_value_snapshot: null, sop_minimum_price_snapshot: null,
-        effective_unit_price: item.unit_price, is_outside_sop: false,
+        effective_unit_price: effectiveUnitPrice, is_outside_sop: false,
       });
       continue;
     }
@@ -334,7 +339,7 @@ async function buildItems(client, items, userId = null) {
       save_product_requested: item.save_product !== false,
       product_catalog_id: null, product_catalog_version_id: null, reference_price_snapshot: null,
       sop_discount_type_snapshot: null, sop_discount_value_snapshot: null, sop_minimum_price_snapshot: null,
-      effective_unit_price: item.unit_price, is_outside_sop: false,
+      effective_unit_price: effectiveUnitPrice, is_outside_sop: false,
     });
   }
   return resultItems;
@@ -402,7 +407,12 @@ function buildPaymentMethods(methods, totalValue) {
     if (allocated !== totalCents) {
       throw httpError(400, 'A soma das formas de pagamento deve ser igual ao total do orçamento.', {
         field: 'payment_methods', code: 'PAYMENT_TOTAL_MISMATCH',
-        details: { quote_total: unitsToDecimal(totalCents, 2), allocated_total: unitsToDecimal(allocated, 2) },
+        details: {
+          quote_total: unitsToDecimal(totalCents, 2),
+          allocated_total: unitsToDecimal(allocated, 2),
+          difference: unitsToDecimal(allocated > totalCents ? allocated - totalCents : totalCents - allocated, 2),
+          difference_type: allocated > totalCents ? 'excess' : 'remaining',
+        },
       });
     }
   }
@@ -439,15 +449,15 @@ async function insertItems(client, quoteId, items) {
         commercial_quote_id, line_order, item_type, product_id, commercial_product_id, product_code_snapshot,
         product_name_snapshot, measurement_unit_snapshot, description_snapshot,
         commercial_product_code_snapshot,commercial_product_name_snapshot,commercial_description_snapshot,
-        quantity, unit_price, gross_subtotal, discount_amount, subtotal,
+        quantity, unit_price, gross_subtotal, unit_discount_amount, discount_amount, subtotal,
         product_catalog_id,product_catalog_version_id,reference_price_snapshot,
         sop_discount_type_snapshot,sop_discount_value_snapshot,sop_minimum_price_snapshot,
         effective_unit_price,is_outside_sop,save_product_requested
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
       [quoteId, index + 1, item.item_type, item.product_id, item.commercial_product_id, item.product_code_snapshot,
         item.product_name_snapshot, item.measurement_unit_snapshot, item.description_snapshot,
         item.commercial_product_code_snapshot,item.commercial_product_name_snapshot,item.commercial_description_snapshot,
-        item.quantity, item.unit_price, item.gross_subtotal, item.discount_amount, item.subtotal,
+        item.quantity, item.unit_price, item.gross_subtotal, item.unit_discount_amount, item.discount_amount, item.subtotal,
         item.product_catalog_id,item.product_catalog_version_id,item.reference_price_snapshot,
         item.sop_discount_type_snapshot,item.sop_discount_value_snapshot,item.sop_minimum_price_snapshot,
         item.effective_unit_price,item.is_outside_sop,item.save_product_requested !== false],
@@ -612,6 +622,17 @@ export async function getCommercialQuote(id, database = pool) {
      FROM commercial_quote_documents WHERE commercial_quote_id = $1
      ORDER BY document_version DESC`, [id],
   );
+  const saleResult = await database.query(
+    `SELECT cs.id,cs.sale_number,cs.status,cs.created_at,io.id AS production_order_id,
+      COUNT(csi.id)::int AS item_count,
+      COUNT(*) FILTER (WHERE csi.production_status='created')::int AS production_item_count,
+      COUNT(*) FILTER (WHERE csi.production_status<>'created')::int AS pending_item_count
+     FROM commercial_sales cs
+     LEFT JOIN commercial_sale_items csi ON csi.commercial_sale_id=cs.id
+     LEFT JOIN internal_orders io ON io.commercial_sale_id=cs.id
+     WHERE cs.commercial_quote_id=$1
+     GROUP BY cs.id,io.id`, [id],
+  );
   const methodIds = paymentsResult.rows.map((row) => row.id);
   let installments = [];
   if (methodIds.length) {
@@ -629,6 +650,7 @@ export async function getCommercialQuote(id, database = pool) {
     })),
     documents: documentsResult.rows,
     history: historyResult.rows,
+    sale: saleResult.rows[0] || null,
   };
 }
 
@@ -639,7 +661,7 @@ export async function updateCommercialQuote(id, body, user) {
     const currentResult = await client.query('SELECT * FROM commercial_quotes WHERE id = $1 FOR UPDATE', [id]);
     const current = currentResult.rows[0];
     if (!current) throw httpError(404, 'Orçamento não encontrado.');
-    if (current.status !== 'draft') throw httpError(409, 'Somente orçamentos em rascunho podem ser editados.', { code: 'QUOTE_NOT_EDITABLE' });
+    if (!['draft', 'sent'].includes(current.status)) throw httpError(409, 'Somente orçamentos abertos podem ser editados.', { code: 'QUOTE_NOT_EDITABLE' });
     const header = buildHeaderPayload(body);
     const customer = await resolveCustomer(client, body);
     const rawItems = await buildItems(client, body.items, user.id);
@@ -652,7 +674,7 @@ export async function updateCommercialQuote(id, body, user) {
         quote_date=$6, valid_until=$7, notes=$8, internal_notes=$9,
         items_gross_total=$10, items_discount_total=$11, subtotal=$12,
         discount_amount=$13, freight_amount=$14, total=$15,
-        updated_by=$16, updated_at=NOW()
+        updated_by=$16, updated_at=clock_timestamp()
        WHERE id=$17 RETURNING *`,
       [customer.id, customer.name, customer.snapshot, company.snapshot, company.logo, header.quote_date, header.valid_until,
         header.notes, header.internal_notes, calculation.totals.items_gross_total,
@@ -664,7 +686,7 @@ export async function updateCommercialQuote(id, body, user) {
     await client.query('DELETE FROM commercial_quote_payment_methods WHERE commercial_quote_id = $1', [id]);
     await insertItems(client, id, calculation.items);
     await insertPaymentMethods(client, id, paymentMethods);
-    await insertHistory(client, id, 'edited', user.id, 'draft', 'draft', {
+    await insertHistory(client, id, 'edited', user.id, current.status, current.status, {
       previous_total: current.total, new_total: result.rows[0].total, outside_sop_items: calculation.items.filter((item) => item.is_outside_sop).length,
     });
     await logAudit(client, {
@@ -673,6 +695,38 @@ export async function updateCommercialQuote(id, body, user) {
       newValue: { customer_id: customer.id, total: result.rows[0].total, updated_at: result.rows[0].updated_at }, userId: user.id,
     });
     return getCommercialQuote(id, client);
+  });
+}
+
+export async function emitCommercialQuote(id, user) {
+  assertUuid(id);
+  if (!hasPermission(user, 'commercial.quotes.edit')) throw httpError(403, 'Acesso não autorizado.');
+  return transaction(async (client) => {
+    const current = (await client.query('SELECT * FROM commercial_quotes WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    if (!current) throw httpError(404, 'Orçamento não encontrado.');
+    if (!['draft', 'sent'].includes(current.status)) {
+      throw httpError(409, 'Somente orçamentos abertos podem ser emitidos.', { code: 'QUOTE_NOT_EMITTABLE' });
+    }
+    const paymentTotal = (await client.query(
+      'SELECT COALESCE(SUM(amount), 0)::numeric AS total FROM commercial_quote_payment_methods WHERE commercial_quote_id = $1', [id],
+    )).rows[0].total;
+    if (decimalToUnits(paymentTotal, 2, 'payment_total') !== decimalToUnits(current.total, 2, 'total')) {
+      throw httpError(409, 'Defina condições de pagamento que fechem o total antes de emitir.', { code: 'QUOTE_PAYMENT_INCOMPLETE' });
+    }
+    if (current.status === 'draft') {
+      await client.query(`UPDATE commercial_quotes SET status='sent',sent_at=NOW(),sent_by=$1,updated_by=$1
+        WHERE id=$2`, [user.id, id]);
+    }
+    let quote = await getCommercialQuote(id, client);
+    const document = await createOfficialQuoteDocument(client, quote, user.id, { forceNewVersion: true });
+    await insertHistory(client, id, 'emitted', user.id, current.status, 'sent', { document_version: document.document_version });
+    await logAudit(client, {
+      entityType: 'commercial_quote', entityId: id, action: 'emit',
+      previousValue: { status: current.status },
+      newValue: { status: 'sent', document_version: document.document_version, sha256: document.sha256 }, userId: user.id,
+    });
+    quote = await getCommercialQuote(id, client);
+    return { quote, document: { id: document.id, document_version: document.document_version, filename: document.filename, sha256: document.sha256 } };
   });
 }
 
@@ -691,7 +745,10 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
     const result = await client.query('SELECT * FROM commercial_quotes WHERE id = $1 FOR UPDATE', [id]);
     const current = result.rows[0];
     if (!current) throw httpError(404, 'Orçamento não encontrado.');
-    if (current.status === newStatus) return getCommercialQuote(id, client);
+    if (current.status === newStatus) {
+      if (newStatus === 'approved') await createSaleForApprovedQuote(client, current, user.id);
+      return getCommercialQuote(id, client);
+    }
     if (!STATUS_TRANSITIONS[current.status]?.has(newStatus)) {
       throw httpError(409, `Não é permitido alterar o status de ${current.status} para ${newStatus}.`, { code: 'QUOTE_STATUS_TRANSITION_INVALID' });
     }
@@ -703,6 +760,7 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
         throw httpError(409, 'Defina condições de pagamento que fechem o total antes de enviar.', { code: 'QUOTE_PAYMENT_INCOMPLETE' });
       }
     }
+    await lockQuoteCatalogVersions(client, { items: (await client.query('SELECT product_catalog_version_id FROM commercial_quote_items WHERE commercial_quote_id=$1', [id])).rows });
     const outsideSop = (await client.query('SELECT COUNT(*)::int total FROM commercial_quote_items WHERE commercial_quote_id=$1 AND is_outside_sop=TRUE', [id])).rows[0].total;
     const timestampColumn = { sent: 'sent_at', approved: 'approved_at', rejected: 'rejected_at', cancelled: 'cancelled_at' }[newStatus];
     const userColumn = { sent: 'sent_by', approved: 'approved_by', rejected: 'rejected_by', cancelled: 'cancelled_by' }[newStatus];
@@ -715,7 +773,14 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
       : newStatus === 'rejected' ? 'rejected'
         : newStatus === 'cancelled' ? 'cancelled'
           : newStatus === 'sent' ? 'sent' : 'reopened';
-    await insertHistory(client, id, action, user.id, current.status, newStatus, { outside_sop_items: outsideSop, special_authorization_required_in_future: outsideSop > 0 });
+    let sale = null;
+    if (newStatus === 'approved') sale = await createSaleForApprovedQuote(client, updated.rows[0], user.id);
+    await insertHistory(client, id, action, user.id, current.status, newStatus, {
+      outside_sop_items: outsideSop,
+      special_authorization_required_in_future: outsideSop > 0,
+      commercial_sale_id: sale?.id || null,
+      sale_number: sale?.sale_number || null,
+    });
     await logAudit(client, {
       entityType: 'commercial_quote', entityId: id, action: `status_${newStatus}`,
       previousValue: { status: current.status }, newValue: { status: newStatus }, userId: user.id,
@@ -723,8 +788,6 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
     const quote = await getCommercialQuote(updated.rows[0].id, client);
     if (newStatus === 'sent') {
       await createOfficialQuoteDocument(client, quote, user.id, { forceNewVersion: true });
-    } else if (['approved', 'rejected', 'cancelled'].includes(newStatus)) {
-      await createOfficialQuoteDocument(client, quote, user.id);
     }
     return quote;
   });
@@ -767,14 +830,14 @@ export async function duplicateCommercialQuote(id, user) {
         commercial_quote_id, line_order, item_type, product_id, commercial_product_id, product_code_snapshot,
         product_name_snapshot, measurement_unit_snapshot, description_snapshot,
         commercial_product_code_snapshot,commercial_product_name_snapshot,commercial_description_snapshot,
-        quantity, unit_price, gross_subtotal, discount_amount, subtotal,
+        quantity, unit_price, gross_subtotal, unit_discount_amount, discount_amount, subtotal,
         product_catalog_id,product_catalog_version_id,reference_price_snapshot,sop_discount_type_snapshot,
         sop_discount_value_snapshot,sop_minimum_price_snapshot,effective_unit_price,is_outside_sop,
         save_product_requested
        ) SELECT $1, line_order, item_type, product_id, commercial_product_id, product_code_snapshot,
         product_name_snapshot, measurement_unit_snapshot, description_snapshot,
         commercial_product_code_snapshot,commercial_product_name_snapshot,commercial_description_snapshot,
-        quantity, unit_price, gross_subtotal, discount_amount, subtotal,
+        quantity, unit_price, gross_subtotal, unit_discount_amount, discount_amount, subtotal,
         product_catalog_id,product_catalog_version_id,reference_price_snapshot,sop_discount_type_snapshot,
         sop_discount_value_snapshot,sop_minimum_price_snapshot,effective_unit_price,is_outside_sop,
         save_product_requested

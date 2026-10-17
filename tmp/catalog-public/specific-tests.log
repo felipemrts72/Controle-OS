@@ -1,0 +1,42 @@
+(node:20476) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ cadastro rápido usa setor real, vincula e mantém zero efeitos operacionais (90.0689ms)
+{"event":"catalog_request","layer":"backend","id":"82209579-f1b4-47e8-ab8c-735334e282b8","method":"POST","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2/publish","bytes":"737"}
+{"event":"catalog_response","layer":"backend","id":"82209579-f1b4-47e8-ab8c-735334e282b8","method":"POST","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2/publish","bytes":"737","status":200,"ms":156}
+{"event":"catalog_request","layer":"backend","id":"3ed595d3-0125-4497-b0cc-b59d7a7474fd","method":"PUT","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":"751"}
+{"event":"catalog_response","layer":"backend","id":"3ed595d3-0125-4497-b0cc-b59d7a7474fd","method":"PUT","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":"751","status":200,"ms":11}
+{"event":"catalog_request","layer":"backend","id":"4b7c8761-54b7-4264-b3b4-c6c86d55e2ba","method":"POST","path":"/api/commercial/catalog/fdc1d2c8-099e-42c6-8b52-9e09768bd86f/versions","bytes":"2"}
+{"event":"catalog_response","layer":"backend","id":"4b7c8761-54b7-4264-b3b4-c6c86d55e2ba","method":"POST","path":"/api/commercial/catalog/fdc1d2c8-099e-42c6-8b52-9e09768bd86f/versions","bytes":"2","status":409,"ms":5}
+{"event":"catalog_request","layer":"backend","id":"19cf8329-5d67-4368-b6a5-2417eb6254b0","method":"GET","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2/pdf","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"19cf8329-5d67-4368-b6a5-2417eb6254b0","method":"GET","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2/pdf","bytes":null,"status":200,"ms":70}
+{"event":"catalog_request","layer":"backend","id":"aa21e380-a050-4ebf-8b43-a35e21536834","method":"GET","path":"/api/commercial/catalog/products/b0c351b5-8c1e-4b83-8d5c-7ed641b55af7","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"aa21e380-a050-4ebf-8b43-a35e21536834","method":"GET","path":"/api/commercial/catalog/products/b0c351b5-8c1e-4b83-8d5c-7ed641b55af7","bytes":null,"status":200,"ms":5}
+{"event":"catalog_request","layer":"backend","id":"4285d5d9-3b64-463b-835c-80f85d70f9ca","method":"DELETE","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"4285d5d9-3b64-463b-835c-80f85d70f9ca","method":"DELETE","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":null,"status":409,"ms":6}
+{"event":"catalog_request","layer":"backend","id":"1629499f-ad1e-4aec-9384-775de8954ff1","method":"PUT","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":"705"}
+{"event":"catalog_response","layer":"backend","id":"1629499f-ad1e-4aec-9384-775de8954ff1","method":"PUT","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":"705","status":409,"ms":5}
+{"event":"catalog_request","layer":"backend","id":"0c76ea20-b136-4308-898a-0203d60409cf","method":"DELETE","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"0c76ea20-b136-4308-898a-0203d60409cf","method":"DELETE","path":"/api/commercial/catalog/versions/f482e9ac-ba03-410d-b4f4-f96aafb9e8d2","bytes":null,"status":409,"ms":3}
+{"event":"catalog_request","layer":"backend","id":"ce0f986c-00b9-4516-a28e-dd6ca3103520","method":"DELETE","path":"/api/commercial/catalog/versions/7e15abdb-4478-463b-9647-290fa4789c7b","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"ce0f986c-00b9-4516-a28e-dd6ca3103520","method":"DELETE","path":"/api/commercial/catalog/versions/7e15abdb-4478-463b-9647-290fa4789c7b","bytes":null,"status":200,"ms":7}
+✔ ciclo HTTP e persistência: publicar salva campos; sem uso edita V1; histórico bloqueia; nova V2 preserva V1 (1127.6762ms)
+✔ concorrência real: emissão bloqueia edição até commit e nova consulta retorna 409 (602.666ms)
+✔ SOP suporta valor ou percentual sem ambiguidade (0.8186ms)
+✔ migration preserva estruturas operacionais e mantém perfil comercial legado (0.4509ms)
+✔ listagem do Catálogo encerra loading, limita espera e permite tentar novamente (0.9204ms)
+✔ RBAC separa Catálogo, SOP e custo e não concede Comercial por atalhos (0.2549ms)
+✔ Produto Comercial é independente, aceita vínculo opcional e centraliza Catálogo, snapshots e item manual (310.0714ms)
+✔ cadastro operacional exige custo de quem pode editá-lo e não o expõe sem products.cost.view (554.8274ms)
+✔ Catálogo versionado alimenta snapshot e alteração futura da SOP não muda Orçamento (190.8531ms)
+✔ Admin possui catálogo e custo; Estoquista não recebeu Comercial automaticamente (5.3712ms)
+✔ regularização preserva, reutiliza, cria uma vez e não produz efeitos operacionais (188.4005ms)
+✔ criação futura de Catálogo garante Produto interno no backend (34.2443ms)
+✔ duas transações concorrentes não criam dois Produtos para o mesmo Catálogo (574.6393ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14393.4531

@@ -29,7 +29,10 @@ async function loadMigrations() {
 
   return Promise.all(filenames.map(async (filename) => {
     const sql = await fs.readFile(path.join(migrationsDirectory, filename), 'utf8');
-    return { filename, sql, checksum: checksum(sql) };
+    // Git on Windows may change only line endings after a migration was applied.
+    // Accept either encoding of the identical SQL, without accepting content edits.
+    const lf = sql.replace(/\r\n/g, '\n');
+    return { filename, sql, checksum: checksum(sql), compatibleChecksums: [checksum(lf), checksum(lf.replace(/\n/g, '\r\n'))] };
   }));
 }
 
@@ -52,7 +55,7 @@ function classifyMigrations(migrations, applied) {
   return migrations.map((migration) => {
     const record = applied.get(migration.filename);
     if (!record) return { ...migration, status: 'pending', appliedAt: null };
-    if (record.checksum !== migration.checksum) return { ...migration, status: 'changed', appliedAt: record.applied_at };
+    if (record.checksum !== migration.checksum && !migration.compatibleChecksums.includes(record.checksum)) return { ...migration, status: 'changed', appliedAt: record.applied_at };
     return { ...migration, status: 'applied', appliedAt: record.applied_at };
   });
 }

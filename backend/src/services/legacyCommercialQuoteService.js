@@ -130,14 +130,14 @@ export async function duplicateLegacyCommercialQuoteWithClient(id, user, client)
       await client.query(`INSERT INTO commercial_quote_items(commercial_quote_id,line_order,item_type,product_id,
         commercial_product_id,product_code_snapshot,product_name_snapshot,measurement_unit_snapshot,description_snapshot,
         commercial_product_code_snapshot,commercial_product_name_snapshot,commercial_description_snapshot,quantity,
-        unit_price,gross_subtotal,discount_amount,subtotal,product_catalog_id,product_catalog_version_id,reference_price_snapshot,
+        unit_price,gross_subtotal,unit_discount_amount,discount_amount,subtotal,product_catalog_id,product_catalog_version_id,reference_price_snapshot,
         sop_discount_type_snapshot,sop_discount_value_snapshot,sop_minimum_price_snapshot,effective_unit_price,is_outside_sop,
         save_product_requested)
-        VALUES($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,FALSE)`,
+        VALUES($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,FALSE)`,
       [created.id,item.line_order,product?'product':'manual',product?.id||null,product?.commercial_code||item.product_code_snapshot,
         product?.name||item.product_name_snapshot,item.measurement_unit_snapshot,item.description_snapshot,
         product?.commercial_code||null,product?.name||null,product?.commercial_description||null,item.quantity,item.unit_price,
-        item.gross_subtotal,item.discount_amount,item.subtotal,catalog?.id||null,catalog?.active_version_id||null,
+        item.gross_subtotal,item.unit_discount_amount,item.discount_amount,item.subtotal,catalog?.id||null,catalog?.active_version_id||null,
         catalog?.reference_price||null,catalog?.sop_discount_type||null,catalog?.sop_discount_value||null,sop?.minimum_price||null,
         effectiveUnitPrice,outsideSop]);
     }

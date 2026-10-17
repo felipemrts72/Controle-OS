@@ -1,0 +1,13 @@
+✔ cadastro direto retorna número imediatamente, preço não cria gêmeo, duplicação recebe menor livre (81.4896ms)
+✔ ordenação numérica global ASC/DESC antes da paginação, junto a busca e filtros (29.021ms)
+✔ gêmeo exige setor válido, rollback remove órfão, persiste vínculo e não cria efeitos operacionais (68.3989ms)
+✔ nome igual requer escolha; existente mantém configurações e novo exige confirmação explícita (23.1612ms)
+✔ duas criações reais simultâneas deixam um Catálogo e um gêmeo (100.1919ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 424.5012

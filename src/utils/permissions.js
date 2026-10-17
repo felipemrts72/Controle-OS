@@ -31,6 +31,7 @@ export const legacyRolePermissions = {
     'shipping.confirm',
     'shipping.audit.view',
     'tv.view',
+    'commercial.sales.view',
   ],
   shipping: [
     'labels.view',
@@ -49,6 +50,8 @@ export function isSuperAdmin(user) {
 
 export function getDefaultRoute(user) {
   if (!user) return '/entrar';
+  const roleSlug = user.role_slug || user.role;
+  if (roleSlug === 'manager' && canAccessPermission(user, 'commercial.quotes.view')) return '/comercial/orcamentos';
   if (canAccessPermission(user, 'dashboard.view')) return '/dashboard';
   const route = routeCandidates.find((candidate) => canAccessPermission(user, candidate.permission));
   return route?.path || '/acesso-negado';

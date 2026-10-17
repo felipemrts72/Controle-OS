@@ -20,12 +20,15 @@ import { materialGroupRoutes, purchaseRoutes, supplierRoutes } from './routes/pu
 import { measurementUnitRoutes } from './routes/measurementUnitRoutes.js';
 import { customerRoutes } from './routes/customerRoutes.js';
 import { commercialQuoteRoutes } from './routes/commercialQuoteRoutes.js';
+import { commercialSaleRoutes } from './routes/commercialSaleRoutes.js';
 import { productCatalogRoutes } from './routes/productCatalogRoutes.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
+import { catalogRequestTrace } from './middlewares/catalogRequestTrace.js';
 
 export const app = express();
 
 app.use(cors({ exposedHeaders: ['Content-Disposition', 'Content-Length'] }));
+app.use(catalogRequestTrace('backend'));
 app.use(express.json());
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
@@ -43,6 +46,7 @@ app.use('/api/sectors', sectorRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/commercial/customers', customerRoutes);
 app.use('/api/commercial/quotes', commercialQuoteRoutes);
+app.use('/api/commercial/sales', commercialSaleRoutes);
 app.use('/api/commercial/catalog', productCatalogRoutes);
 app.use('/api/internal-orders', internalOrderRoutes);
 app.use('/api/tasks', taskRoutes);

@@ -6,6 +6,8 @@ export const productCatalogRoutes = Router();
 productCatalogRoutes.use(authenticate);
 productCatalogRoutes.get('/', requirePermission('commercial.catalog.view'), controller.index);
 productCatalogRoutes.get('/operational-products', requirePermission('commercial.catalog.view'), controller.operationalProducts);
+productCatalogRoutes.get('/manufacturing-sectors', requirePermission('commercial.catalog.view'), controller.manufacturingSectors);
+productCatalogRoutes.post('/operational-products', requireAnyPermission('commercial.catalog.create', 'commercial.catalog.edit'), requirePermission('products.create'), controller.quickOperationalProduct);
 productCatalogRoutes.get('/products/:commercialProductId', requirePermission('commercial.catalog.view'), controller.showCommercialProduct);
 productCatalogRoutes.post('/products', requirePermission('commercial.catalog.create'), controller.storeCommercialProduct);
 productCatalogRoutes.put('/products/:commercialProductId', requirePermission('commercial.catalog.edit'), controller.updateCommercialProduct);
@@ -14,6 +16,8 @@ productCatalogRoutes.post('/', requirePermission('commercial.catalog.create'), c
 productCatalogRoutes.put('/:catalogId', requirePermission('commercial.catalog.edit'), controller.update);
 productCatalogRoutes.post('/:catalogId/versions', requirePermission('commercial.catalog.edit'), controller.createVersion);
 productCatalogRoutes.put('/versions/:versionId', requirePermission('commercial.catalog.edit'), controller.updateVersion);
+productCatalogRoutes.get('/versions/:versionId/pdf', requirePermission('commercial.catalog.view'), controller.previewVersion);
+productCatalogRoutes.delete('/versions/:versionId', requirePermission('commercial.catalog.edit'), controller.removeVersion);
 productCatalogRoutes.post('/versions/:versionId/publish', requirePermission('commercial.catalog.publish'), controller.publishVersion);
 productCatalogRoutes.post('/versions/:versionId/images', requirePermission('commercial.catalog.edit'), express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: process.env.CATALOG_IMAGE_MAX_BYTES || '8mb' }), controller.uploadImage);
 productCatalogRoutes.patch('/images/:imageId', requirePermission('commercial.catalog.edit'), controller.updateImage);

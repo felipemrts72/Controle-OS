@@ -387,6 +387,25 @@
   width: min(100%, 900px);
 }
 
+.advances-page__correction-modal {
+  max-width: 560px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.advances-page__correction-modal .field,
+.advances-page__correction-modal .field__input {
+  min-width: 0;
+  width: 100%;
+}
+
+.advances-page__correction-modal .advances-page__modal-actions {
+  position: sticky;
+  bottom: -18px;
+  background: var(--color-surface);
+  padding: 10px 0 max(10px, env(safe-area-inset-bottom));
+}
+
 .advances-page__modal-header,
 .advances-page__selected-employee,
 .advances-page__modal-actions {

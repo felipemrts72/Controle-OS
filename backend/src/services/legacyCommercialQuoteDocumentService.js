@@ -1,3 +1,4 @@
+import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { createHash } from 'node:crypto';
 import { transaction } from '../database/pool.js';
 import { sanitizePdfFilename } from './pdf/pdfDocument.js';
@@ -30,6 +31,7 @@ export async function getOrCreateLegacyReconstructedDocumentWithClient(quoteId, 
     if (existing?.pdf_data) return responseDocument(existing);
 
     const quote = await getLegacyCommercialQuote(quoteId, client);
+    await lockQuoteCatalogVersions(client, quote);
     const { catalogs, imageAssets } = await loadFrozenQuoteCatalogs(client, quote);
     const company = await getCompanyPdfData(client);
     const { logo, logo_url: _logoUrl, ...companySnapshot } = company;
