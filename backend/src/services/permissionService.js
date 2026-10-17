@@ -89,6 +89,14 @@ const RAW_PERMISSIONS = [
   { code: 'employees.dependents.view', name: 'Ver dependentes', group_name: 'Funcionários' },
   { code: 'employees.dependents.manage', name: 'Gerenciar dependentes', group_name: 'Funcionários' },
   { code: 'employees.profile.print', name: 'Imprimir ficha de funcionário', group_name: 'Funcionários' },
+  { code: 'vacations.view', name: 'Ver férias', group_name: 'Férias' },
+  { code: 'vacations.absences.create', name: 'Lançar faltas', group_name: 'Férias' },
+  { code: 'vacations.absences.edit', name: 'Editar faltas', group_name: 'Férias' },
+  { code: 'vacations.schedule', name: 'Programar férias', group_name: 'Férias' },
+  { code: 'vacations.confirm', name: 'Confirmar férias gozadas', group_name: 'Férias' },
+  { code: 'vacations.correct', name: 'Corrigir ou cancelar lançamentos de férias', group_name: 'Férias' },
+  { code: 'vacations.review', name: 'Conferir períodos históricos', group_name: 'Férias' },
+  { code: 'vacations.confirmed.correct', name: 'Corrigir baixa confirmada', group_name: 'Férias' },
   { code: 'company_settings.view', name: 'Ver configurações da empresa', group_name: 'Configurações' },
   { code: 'company_settings.edit', name: 'Editar configurações da empresa', group_name: 'Configurações' },
   { code: 'awards.view', name: 'Ver prêmios', group_name: 'Prêmios' },
@@ -149,7 +157,7 @@ function permissionModule(code) {
     || code.startsWith('suppliers.') || code.startsWith('supplier_')
   ) return 'Compras';
   if (code.startsWith('labels.') || code.startsWith('shipping.')) return 'Expedição';
-  if (code.startsWith('employees.') || code.startsWith('awards.') || code.startsWith('advances.')) return 'Administrativo';
+  if (code.startsWith('employees.') || code.startsWith('awards.') || code.startsWith('advances.') || code.startsWith('vacations.')) return 'Administrativo';
   return 'Configurações';
 }
 

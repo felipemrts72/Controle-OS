@@ -26,6 +26,7 @@ import { EmployeeQuickCreatePage } from '../pages/EmployeesPage/EmployeeQuickCre
 import { EmployeeCreatePage } from '../pages/EmployeesPage/EmployeeCreatePage.jsx';
 import { EmployeeDetailPage } from '../pages/EmployeesPage/EmployeeDetailPage.jsx';
 import { AdvancesPage } from '../pages/AdvancesPage/AdvancesPage.jsx';
+import { VacationsPage } from '../pages/VacationsPage/VacationsPage.jsx';
 import { AdvanceSummaryPage } from '../pages/AdvancesPage/AdvanceSummaryPage.jsx';
 import { AdvancesReportsPage } from '../pages/AdvancesPage/AdvancesReportsPage.jsx';
 import { AdvanceGeneralReportPage } from '../pages/AdvancesPage/AdvanceGeneralReportPage.jsx';
@@ -171,6 +172,8 @@ export function AppRoutes() {
         <Route path="/funcionarios/novo" element={<RoleRoute permission="employees.create"><EmployeeCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/cadastro-rapido" element={<RoleRoute permission="employees.create"><EmployeeQuickCreatePage /></RoleRoute>} />
         <Route path="/funcionarios/:id" element={<RoleRoute permission="employees.view"><EmployeeDetailPage /></RoleRoute>} />
+        <Route path="/ferias" element={<RoleRoute permission="vacations.view"><VacationsPage /></RoleRoute>} />
+        <Route path="/ferias/:employeeId" element={<RoleRoute permission="vacations.view"><VacationsPage /></RoleRoute>} />
         <Route path="/vales" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />
         <Route path="/vales/relatorios" element={<RoleRoute permission="advances.reports.view"><AdvancesReportsPage /></RoleRoute>} />
         <Route path="/vales/:id" element={<RoleRoute permission="advances.view"><AdvancesPage /></RoleRoute>} />

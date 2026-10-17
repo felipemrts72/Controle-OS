@@ -13,6 +13,7 @@ import { qrRoutes } from './routes/qrRoutes.js';
 import { serviceRoutes } from './routes/serviceRoutes.js';
 import { employeeRoutes } from './routes/employeeRoutes.js';
 import { advanceRoutes } from './routes/advanceRoutes.js';
+import { vacationRoutes } from './routes/vacationRoutes.js';
 import { roleRoutes } from './routes/roleRoutes.js';
 import { companySettingsRoutes } from './routes/companySettingsRoutes.js';
 import { awardRoutes } from './routes/awardRoutes.js';
@@ -56,6 +57,7 @@ app.use('/api/qr', qrRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/advances', advanceRoutes);
+app.use('/api/vacations', vacationRoutes);
 app.use('/api', dashboardRoutes);
 
 app.use(errorMiddleware);
