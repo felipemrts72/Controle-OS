@@ -1,0 +1,12 @@
+[
+  {
+    "host": "http://localhost:4173",
+    "asset": "/assets/index-JHvHThVh.js",
+    "sha256": "c4406a6e6bf78fb51c02066a7c18151122b2a53a5ff20c3d77093bf83b135e19"
+  },
+  {
+    "host": "https://os.torneadorauniversal.com.br",
+    "asset": "/assets/index-JHvHThVh.js",
+    "sha256": "c4406a6e6bf78fb51c02066a7c18151122b2a53a5ff20c3d77093bf83b135e19"
+  }
+]

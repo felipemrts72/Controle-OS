@@ -1,0 +1,51 @@
+✔ cadastro direto retorna número imediatamente, preço não cria gêmeo, duplicação recebe menor livre (81.4327ms)
+✔ ordenação numérica global ASC/DESC antes da paginação, junto a busca e filtros (27.9054ms)
+(node:11792) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ gêmeo exige setor válido, rollback remove órfão, persiste vínculo e não cria efeitos operacionais (78.488ms)
+✔ nome igual requer escolha; existente mantém configurações e novo exige confirmação explícita (22.9762ms)
+✔ duas criações reais simultâneas deixam um Catálogo e um gêmeo (200.5072ms)
+(node:6572) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ cadastro rápido usa setor real, vincula e mantém zero efeitos operacionais (76.8629ms)
+{"event":"catalog_request","layer":"backend","id":"324f2b39-6aaa-4afe-a2cc-71c086ef323e","method":"POST","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63/publish","bytes":"737"}
+{"event":"catalog_response","layer":"backend","id":"324f2b39-6aaa-4afe-a2cc-71c086ef323e","method":"POST","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63/publish","bytes":"737","status":200,"ms":23}
+{"event":"catalog_request","layer":"backend","id":"acb37450-2690-432a-b7b3-c79a61e3bbb5","method":"PUT","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":"751"}
+{"event":"catalog_response","layer":"backend","id":"acb37450-2690-432a-b7b3-c79a61e3bbb5","method":"PUT","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":"751","status":200,"ms":14}
+{"event":"catalog_request","layer":"backend","id":"6a548967-d7da-4912-aafd-5c57c04d2c16","method":"POST","path":"/api/commercial/catalog/208752ce-7967-49c5-9a5e-a9cda8acbad4/versions","bytes":"2"}
+{"event":"catalog_response","layer":"backend","id":"6a548967-d7da-4912-aafd-5c57c04d2c16","method":"POST","path":"/api/commercial/catalog/208752ce-7967-49c5-9a5e-a9cda8acbad4/versions","bytes":"2","status":409,"ms":10}
+{"event":"catalog_request","layer":"backend","id":"e7f5c2d3-beb2-41ee-b7d4-d1540cb98a81","method":"GET","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63/pdf","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"e7f5c2d3-beb2-41ee-b7d4-d1540cb98a81","method":"GET","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63/pdf","bytes":null,"status":200,"ms":81}
+{"event":"catalog_request","layer":"backend","id":"915792c3-d337-42bd-8a20-cfb3cd588022","method":"GET","path":"/api/commercial/catalog/products/7a44330e-e3a2-4709-82dc-f9bf60f066de","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"915792c3-d337-42bd-8a20-cfb3cd588022","method":"GET","path":"/api/commercial/catalog/products/7a44330e-e3a2-4709-82dc-f9bf60f066de","bytes":null,"status":200,"ms":5}
+{"event":"catalog_request","layer":"backend","id":"e95ec023-052a-40a9-acba-22a360cc5d05","method":"DELETE","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"e95ec023-052a-40a9-acba-22a360cc5d05","method":"DELETE","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":null,"status":409,"ms":5}
+{"event":"catalog_request","layer":"backend","id":"73abd273-289d-48fd-9c6b-5c98d213cc87","method":"PUT","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":"705"}
+{"event":"catalog_response","layer":"backend","id":"73abd273-289d-48fd-9c6b-5c98d213cc87","method":"PUT","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":"705","status":409,"ms":6}
+{"event":"catalog_request","layer":"backend","id":"98c1e911-75cc-4ccd-8147-608e5287a9f7","method":"DELETE","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"98c1e911-75cc-4ccd-8147-608e5287a9f7","method":"DELETE","path":"/api/commercial/catalog/versions/681738d2-a1bc-40d7-a80e-67f67f60db63","bytes":null,"status":409,"ms":3}
+{"event":"catalog_request","layer":"backend","id":"5ee0e332-627b-4662-aee6-fdcc8043555b","method":"DELETE","path":"/api/commercial/catalog/versions/b3e438d8-c107-450f-859a-35fc8921a81f","bytes":null}
+{"event":"catalog_response","layer":"backend","id":"5ee0e332-627b-4662-aee6-fdcc8043555b","method":"DELETE","path":"/api/commercial/catalog/versions/b3e438d8-c107-450f-859a-35fc8921a81f","bytes":null,"status":200,"ms":6}
+✔ ciclo HTTP e persistência: publicar salva campos; sem uso edita V1; histórico bloqueia; nova V2 preserva V1 (1083.1699ms)
+✔ concorrência real: emissão bloqueia edição até commit e nova consulta retorna 409 (104.0928ms)
+✔ SOP suporta valor ou percentual sem ambiguidade (0.8067ms)
+✔ migration preserva estruturas operacionais e mantém perfil comercial legado (0.371ms)
+✔ listagem do Catálogo encerra loading, limita espera e permite tentar novamente (0.8317ms)
+✔ RBAC separa Catálogo, SOP e custo e não concede Comercial por atalhos (0.2667ms)
+✔ Produto Comercial é independente, aceita vínculo opcional e centraliza Catálogo, snapshots e item manual (389.3137ms)
+✔ cadastro operacional exige custo de quem pode editá-lo e não o expõe sem products.cost.view (57.9131ms)
+✔ Catálogo versionado alimenta snapshot e alteração futura da SOP não muda Orçamento (213.534ms)
+✔ Admin possui catálogo e custo; Estoquista não recebeu Comercial automaticamente (6.0382ms)
+✔ regularização preserva, reutiliza, cria uma vez e não produz efeitos operacionais (90.4146ms)
+✔ criação futura de Catálogo garante Produto interno no backend (37.4134ms)
+✔ duas transações concorrentes não criam dois Produtos para o mesmo Catálogo (70.2273ms)
+✔ código automático usa menor livre, preserva referências e UNIQUE rejeita duplicação (53.2139ms)
+✔ duas conexões concorrentes aguardam allocator e recebem números diferentes (161.3934ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4439.63

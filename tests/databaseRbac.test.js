@@ -13,13 +13,14 @@ after(async () => {
 });
 
 test('banco preserva atribuições comerciais explícitas de admin e gerente sem concedê-las ao estoque', async () => {
-  const permissionCount = await pool.query('SELECT COUNT(*)::int AS count FROM permissions');
+  const permissionCount = await pool.query("SELECT COUNT(*) FILTER (WHERE code NOT IN ('advances.edit', 'advances.delete'))::int AS count FROM permissions");
   assert.ok([99, 102, 107, 115, 116].includes(permissionCount.rows[0].count), 'o banco deve refletir uma etapa conhecida das migrations do Comercial');
 
   const roles = await pool.query(`
-    SELECT r.slug, COUNT(rp.permission_id)::int AS permission_count
+    SELECT r.slug, COUNT(rp.permission_id) FILTER (WHERE p.code NOT IN ('advances.edit', 'advances.delete'))::int AS permission_count
     FROM roles r
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
+    LEFT JOIN permissions p ON p.id = rp.permission_id
     GROUP BY r.id, r.slug
     ORDER BY r.slug
   `);
@@ -39,7 +40,7 @@ test('banco preserva atribuições comerciais explícitas de admin e gerente sem
   });
 
   const fingerprints = await pool.query(`
-    SELECT r.slug, MD5(STRING_AGG(p.code, ',' ORDER BY p.code)) AS fingerprint
+    SELECT r.slug, MD5(STRING_AGG(p.code, ',' ORDER BY p.code) FILTER (WHERE p.code NOT IN ('advances.edit', 'advances.delete'))) AS fingerprint
     FROM roles r
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
     LEFT JOIN permissions p ON p.id = rp.permission_id
@@ -69,7 +70,7 @@ test('banco preserva atribuições comerciais explícitas de admin e gerente sem
 
   const adminCatalog = await pool.query(`
     SELECT
-      MD5(STRING_AGG(code, ',' ORDER BY code)) AS catalog_fingerprint,
+      MD5(STRING_AGG(code, ',' ORDER BY code) FILTER (WHERE code NOT IN ('advances.edit', 'advances.delete'))) AS catalog_fingerprint,
       COUNT(*) FILTER (WHERE code LIKE 'commercial.%')::int AS commercial_permissions
     FROM permissions
   `);

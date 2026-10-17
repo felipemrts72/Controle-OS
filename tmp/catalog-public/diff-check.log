@@ -1,0 +1,10 @@
+warning: in the working copy of 'backend/src/controllers/productCatalogController.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/src/routes/productCatalogRoutes.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/src/services/commercialProductOperationalService.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/src/services/productCatalogService.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/migrate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/smoke-catalog-editor.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CommercialCatalogPage/CatalogEditorPage.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CommercialCatalogPage/CatalogPage.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/CommercialCatalogPage/CommercialCatalog.css', LF will be replaced by CRLF the next time Git touches it

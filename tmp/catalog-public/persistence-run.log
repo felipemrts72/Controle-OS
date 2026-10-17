@@ -1,0 +1,140 @@
+{
+  "at": "2026-09-21T16:36:53.424Z",
+  "http": [
+    {
+      "origin": "http://localhost:3333",
+      "route": "products/0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+      "status": 200,
+      "ms": 21,
+      "bytes": 252,
+      "requestId": "e7c865ae-1e1d-482e-8614-548c30c80ba8"
+    },
+    {
+      "origin": "http://localhost:3333",
+      "route": "versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+      "status": 200,
+      "ms": 17,
+      "bytes": 410,
+      "requestId": "db1a74ab-ce6a-466b-a16c-121ba8c2fa9c"
+    },
+    {
+      "origin": "http://localhost:4173",
+      "route": "products/0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+      "status": 200,
+      "ms": 10,
+      "bytes": 252,
+      "requestId": "21ef957f-5463-47a6-8407-b413a0a0b3cf"
+    },
+    {
+      "origin": "http://localhost:4173",
+      "route": "versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+      "status": 200,
+      "ms": 12,
+      "bytes": 410,
+      "requestId": "9d35ba06-f29f-4ddc-a6bb-8c953921dc97"
+    },
+    {
+      "origin": "https://os.torneadorauniversal.com.br",
+      "route": "products/0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+      "status": 200,
+      "ms": 91,
+      "bytes": 252,
+      "requestId": "8ec79730-6f9a-4174-8cf4-dd2ba1fc38e7"
+    },
+    {
+      "origin": "https://os.torneadorauniversal.com.br",
+      "route": "versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+      "status": 200,
+      "ms": 96,
+      "bytes": 426,
+      "requestId": "fae79445-e8c9-4e8b-bad9-f8b57d829b17"
+    },
+    {
+      "origin": "https://os.torneadorauniversal.com.br",
+      "route": "versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+      "status": 200,
+      "ms": 129,
+      "bytes": 185,
+      "requestId": "4d0c59bd-facf-4ab2-890b-d9750be8d8f3"
+    }
+  ],
+  "browser": {
+    "groups": 7,
+    "reload": true,
+    "reopen": true,
+    "database": true,
+    "imageHash": "673d6d73e1e25c28f19abc769da53d8eddb9df50f67ed3144a52c4bd2afe7c99",
+    "noReupload": true,
+    "versionNumber": 3,
+    "versionCount": 3,
+    "traffic": [
+      {
+        "method": "PUT",
+        "url": "https://os.torneadorauniversal.com.br/api/commercial/catalog/products/0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+        "payload": {
+          "name": "Jackpot 75 (H-3.5)",
+          "commercial_code": "84",
+          "is_active": true,
+          "operational_product_id": "2c48239a-fe65-4938-b722-8977348a113b",
+          "reference_price": "4000.00",
+          "commercial_description": "",
+          "sop_discount_type": "amount",
+          "sop_discount_value": "200.0000"
+        },
+        "bytes": 250
+      },
+      {
+        "method": "PUT",
+        "url": "https://os.torneadorauniversal.com.br/api/commercial/catalog/versions/c320b7f2-e422-4782-a681-d27a985f5cb3",
+        "payload": {
+          "commercial_title": "Teste público 1",
+          "subtitle": "Teste público 2",
+          "presentation_text": "Teste público 3",
+          "applications_text": "Teste público 4",
+          "additional_text": "Teste público 5",
+          "notes": null,
+          "specifications": [
+            {
+              "id": "ca0077ea-a830-486c-ad38-a782b5dfef19",
+              "product_catalog_version_id": "c320b7f2-e422-4782-a681-d27a985f5cb3",
+              "name": "Largura teste",
+              "value": "76",
+              "unit": null,
+              "position": 0,
+              "created_at": "2026-09-21T16:36:54.520Z",
+              "updated_at": "2026-09-21T16:36:54.520Z"
+            }
+          ],
+          "included_items": [
+            {
+              "id": "d79a58e0-6b2e-4dfa-985c-78f9aeb92aca",
+              "product_catalog_version_id": "c320b7f2-e422-4782-a681-d27a985f5cb3",
+              "description": "Item teste público",
+              "quantity": null,
+              "unit": null,
+              "notes": null,
+              "position": 0,
+              "created_at": "2026-09-21T16:36:54.520Z",
+              "updated_at": "2026-09-21T16:36:54.520Z"
+            }
+          ]
+        },
+        "bytes": 774
+      }
+    ],
+    "quickModal": true
+  },
+  "builds": [
+    {
+      "origin": "http://localhost:4173",
+      "asset": "/assets/index-JHvHThVh.js",
+      "sha256": "c4406a6e6bf78fb51c02066a7c18151122b2a53a5ff20c3d77093bf83b135e19"
+    },
+    {
+      "origin": "https://os.torneadorauniversal.com.br",
+      "asset": "/assets/index-JHvHThVh.js",
+      "sha256": "c4406a6e6bf78fb51c02066a7c18151122b2a53a5ff20c3d77093bf83b135e19"
+    }
+  ],
+  "restored": true
+}

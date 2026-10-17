@@ -204,6 +204,8 @@ export const PERMISSION_PRESENTATION = {
   'awards.pdf': permission('Administrativo', 'Prêmios', 'Baixar termos de prêmios'),
   'advances.view': permission('Administrativo', 'Vales', 'Ver vales'),
   'advances.manage': permission('Administrativo', 'Vales', 'Gerenciar vales'),
+  'advances.edit': permission('Administrativo', 'Vales', 'Editar vales individuais'),
+  'advances.delete': permission('Administrativo', 'Vales', 'Cancelar vales individuais'),
   'advances.create': permission('Administrativo', 'Vales', 'Criar listas de vales'),
   'advances.lists.delete': permission('Administrativo', 'Vales', 'Excluir listas de vales'),
   'advances.edit_own_list': permission('Administrativo', 'Vales', 'Editar própria lista de vales'),

@@ -1,0 +1,41 @@
+✔ ciclo HTTP e persistência: publicar salva campos; sem uso edita V1; histórico bloqueia; nova V2 preserva V1 (812.9381ms)
+✔ concorrência real: emissão bloqueia edição até commit e nova consulta retorna 409 (105.3988ms)
+✔ SOP suporta valor ou percentual sem ambiguidade (0.8587ms)
+✔ migration preserva estruturas operacionais e mantém perfil comercial legado (0.8482ms)
+✔ listagem do Catálogo encerra loading, limita espera e permite tentar novamente (1.2383ms)
+✔ RBAC separa Catálogo, SOP e custo e não concede Comercial por atalhos (0.2506ms)
+✔ Produto Comercial é independente, aceita vínculo opcional e centraliza Catálogo, snapshots e item manual (284.7648ms)
+✔ cadastro operacional exige custo de quem pode editá-lo e não o expõe sem products.cost.view (54.5872ms)
+✔ Catálogo versionado alimenta snapshot e alteração futura da SOP não muda Orçamento (206.211ms)
+✔ Admin possui catálogo e custo; Estoquista não recebeu Comercial automaticamente (10.185ms)
+✔ dados documentais usam snapshots e excluem informações internas (1.2881ms)
+✔ adapter legado preserva valores importados, identidade ERP e campos públicos (0.8562ms)
+✔ cliente cadastrado, avulso e não identificado são representados sem consulta viva (0.282ms)
+✔ PDFKit gera A4 válido, multipágina e determinístico quanto ao hash do buffer (76.2116ms)
+✔ PDF usa o número comercial persistido sem derivar o identificador técnico (0.1827ms)
+✔ data DATE recebida do PostgreSQL mantém o ano correto no snapshot (0.157ms)
+✔ Catálogo usa exatamente a versão congelada e ignora Produto sem versão e item manual (0.7241ms)
+✔ renderer portado anexa Catálogo, suporta pagamentos múltiplos e assinatura somente quando configurada (23.8278ms)
+✔ fechamento reserva assinatura na última página comercial sem página exclusiva (28.8981ms)
+✔ paginação preserva identidade do Orçamento e do Catálogo com conteúdo extenso (48.4001ms)
+✔ cálculo monetário usa quantidade, descontos em valor e frete sem ponto flutuante persistido (1.9872ms)
+✔ parcelas preservam todos os centavos e percentual é modo explícito (1.633ms)
+✔ RBAC separa leitura, criação, edição, aprovação e cancelamento (0.2315ms)
+✔ migrations são aditivas, numerações são atômicas e aprovação delega a Venda transacional (2.325ms)
+✔ fluxo completo preserva snapshots, item manual, estados, duplicação e isolamento operacional (1456.1624ms)
+✔ contador anual serializa concorrência e produz números únicos (41.3616ms)
+✔ contador comercial global serializa concorrência sem tocar a faixa real (8.2546ms)
+✔ GET /api/commercial/quotes retorna 200 para Administrador (199.0989ms)
+✔ usuário sem commercial.quotes.view recebe 403 (5.6018ms)
+✔ permissões de escrita são verificadas antes da validação do payload (25.5873ms)
+✔ endpoint PDF é protegido, entrega prévia e reutiliza o documento oficial com hash (812.161ms)
+✔ Vendas exige commercial.sales.view e Administrador pode listar (6.9946ms)
+✔ PDF legado é RECONSTRUCTED, protegido e idêntico em visualização e download (142.9085ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9451.6117

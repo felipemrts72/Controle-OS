@@ -98,6 +98,8 @@ const RAW_PERMISSIONS = [
   { code: 'awards.pdf', name: 'Baixar termos de prêmios', group_name: 'Prêmios' },
   { code: 'advances.view', name: 'Ver vales', group_name: 'Vales' },
   { code: 'advances.manage', name: 'Gerenciar vales', group_name: 'Vales' },
+  { code: 'advances.edit', name: 'Editar vales individuais', group_name: 'Vales' },
+  { code: 'advances.delete', name: 'Cancelar vales individuais', group_name: 'Vales' },
   { code: 'advances.create', name: 'Criar listas de vales', group_name: 'Vales' },
   { code: 'advances.lists.delete', name: 'Excluir listas de vales', group_name: 'Vales' },
   { code: 'advances.edit_own_list', name: 'Editar própria lista de vales', group_name: 'Vales' },

@@ -3,6 +3,8 @@ import {
   closeCycle,
   createAdvanceList,
   createIndividualAdvance,
+  updateIndividualAdvance,
+  cancelIndividualAdvance,
   createCycle,
   convertIndividualAdvanceToInstallments,
   deleteAdvanceList,
@@ -52,6 +54,16 @@ export async function individualStore(req, res, next) {
   try {
     res.status(201).json(await createIndividualAdvance(req.body, req.user));
   } catch (error) { next(error); }
+}
+
+export async function individualUpdate(req, res, next) {
+  try { res.json(await updateIndividualAdvance(req.params.id, req.params.itemId, req.body, req.user)); }
+  catch (error) { next(error); }
+}
+
+export async function individualDestroy(req, res, next) {
+  try { res.json(await cancelIndividualAdvance(req.params.id, req.params.itemId, req.body, req.user)); }
+  catch (error) { next(error); }
 }
 
 export async function eligibleInstallments(req, res, next) {

@@ -1,0 +1,337 @@
+{
+  "codes": {
+    "firstSnapshotTotal": 87,
+    "total": 88,
+    "previousMissing": 52,
+    "previousNumeric": 27,
+    "previousAlphanumeric": 9,
+    "newNumbers": 61,
+    "missing": 0,
+    "duplicates": 0,
+    "min": 1,
+    "max": 88,
+    "allPreviousReferencesPreserved": true,
+    "smallestFreeVerified": true,
+    "assigned": [
+      {
+        "id": "90eefef7-b710-43e2-ae59-9c9b0bde8c8a",
+        "old": null,
+        "number": 11
+      },
+      {
+        "id": "0f1f1954-5ae4-4cbf-8070-d1a84b8159eb",
+        "old": null,
+        "number": 15
+      },
+      {
+        "id": "15671595-e13e-4dd7-9ca7-b62aa07b5ada",
+        "old": "TELH-H06CXALTA",
+        "number": 16
+      },
+      {
+        "id": "24961356-9d62-41d2-b2ef-d7f8e4412f3a",
+        "old": null,
+        "number": 17
+      },
+      {
+        "id": "271463a7-bc10-4479-b61f-0f5cb14304d5",
+        "old": null,
+        "number": 18
+      },
+      {
+        "id": "2ac43a42-a79f-41ba-b72a-c4acc696dbd9",
+        "old": "LATSUP-GRA-H06CXALTA",
+        "number": 19
+      },
+      {
+        "id": "30aff263-cbcf-4fed-a7b1-9c08efc9437c",
+        "old": null,
+        "number": 20
+      },
+      {
+        "id": "33c9d25e-7ee0-4393-9d9d-c61b9782c6d6",
+        "old": null,
+        "number": 21
+      },
+      {
+        "id": "37431ea3-e570-408f-9305-d73b8287e155",
+        "old": "LATSUP-GRA-H10CXALTA",
+        "number": 22
+      },
+      {
+        "id": "4acaebee-c075-4a2e-8948-3ac3a8ede872",
+        "old": null,
+        "number": 23
+      },
+      {
+        "id": "4b943638-1607-4436-88e5-d9b2c87a6941",
+        "old": null,
+        "number": 24
+      },
+      {
+        "id": "4c6c0ee8-36a2-4f66-b919-7d3999e57769",
+        "old": null,
+        "number": 25
+      },
+      {
+        "id": "4e79f6e4-bfaf-49bd-989e-bd3ab67dcea6",
+        "old": "LATSUP-PEQ-H06CXALTA",
+        "number": 30
+      },
+      {
+        "id": "590d9a8a-beef-4fde-9a54-d776617d8fe2",
+        "old": null,
+        "number": 31
+      },
+      {
+        "id": "5b4bc8a8-d232-4a7f-aa7b-b530825b6985",
+        "old": null,
+        "number": 32
+      },
+      {
+        "id": "6c99a87f-15cc-476d-87b1-d225c466421d",
+        "old": null,
+        "number": 33
+      },
+      {
+        "id": "76a0f3d1-940c-4e87-a27a-74b6a4570f7e",
+        "old": "TELH-H10CXALT",
+        "number": 34
+      },
+      {
+        "id": "77e30fca-fec5-4e39-ba47-6ffbca94b242",
+        "old": "MART-UN2",
+        "number": 35
+      },
+      {
+        "id": "79054ad8-bb77-41e2-87c8-7916d563c59a",
+        "old": "MLUA-BIPAR-H06CXALT",
+        "number": 36
+      },
+      {
+        "id": "7aeb07fa-3e11-4ed0-a2b1-9c4ce93c6e3c",
+        "old": null,
+        "number": 37
+      },
+      {
+        "id": "7fabe805-5ce6-475d-b44e-cd1c623a3704",
+        "old": null,
+        "number": 39
+      },
+      {
+        "id": "81ee4d2d-a12c-4f44-b37d-8be485f2e432",
+        "old": null,
+        "number": 41
+      },
+      {
+        "id": "84070c5a-fa6e-4b4c-a38d-9c5766287cf9",
+        "old": null,
+        "number": 42
+      },
+      {
+        "id": "841df237-37fe-405d-801a-9f3e84df9f0a",
+        "old": null,
+        "number": 43
+      },
+      {
+        "id": "84ee4ef0-9650-473a-bb50-bd06c32984a9",
+        "old": null,
+        "number": 44
+      },
+      {
+        "id": "89236673-f571-4925-8c10-342eec0864bd",
+        "old": null,
+        "number": 46
+      },
+      {
+        "id": "8af8f978-e594-4b33-88ff-c160b8541d67",
+        "old": null,
+        "number": 47
+      },
+      {
+        "id": "926dcbf2-d5f8-4a4a-acc4-7b4762cf91e7",
+        "old": null,
+        "number": 48
+      },
+      {
+        "id": "99faa275-9015-4fca-9f8e-f88d48d41449",
+        "old": null,
+        "number": 49
+      },
+      {
+        "id": "9e6c4c8f-65f3-4aa3-8071-a2f295d1c1e2",
+        "old": null,
+        "number": 52
+      },
+      {
+        "id": "a0eac1fd-43e5-487b-a516-2255a567c969",
+        "old": null,
+        "number": 53
+      },
+      {
+        "id": "a30f6614-17b1-477d-a8a0-0098a62492c8",
+        "old": null,
+        "number": 54
+      },
+      {
+        "id": "ad8ef48f-eeb1-461a-8b1a-11828547e3da",
+        "old": null,
+        "number": 55
+      },
+      {
+        "id": "af8fb250-dc64-4425-86d7-a9bcf095e9c7",
+        "old": "MLUA-BIPAR-H10CXALT",
+        "number": 56
+      },
+      {
+        "id": "b023dba8-fbdc-4797-8ec8-2f0bf9096e4c",
+        "old": null,
+        "number": 59
+      },
+      {
+        "id": "b18a07b9-2d0d-4f83-a9da-9581f830bf9a",
+        "old": null,
+        "number": 60
+      },
+      {
+        "id": "b2388061-ed29-41c3-b8d1-5bca81dcb143",
+        "old": null,
+        "number": 63
+      },
+      {
+        "id": "b2b6bb3d-3682-483f-8518-00fcfcaf98d8",
+        "old": null,
+        "number": 64
+      },
+      {
+        "id": "cb1bfbda-95bf-407f-a457-11efeafe0730",
+        "old": null,
+        "number": 65
+      },
+      {
+        "id": "cdb79c70-d88a-44f7-8d44-7c6410f114d2",
+        "old": null,
+        "number": 66
+      },
+      {
+        "id": "d40a4821-6c9d-4466-8b23-f16e75644018",
+        "old": null,
+        "number": 67
+      },
+      {
+        "id": "dc390def-fb56-4bcd-b3fc-a854c16a6eb2",
+        "old": null,
+        "number": 68
+      },
+      {
+        "id": "dd7e9258-6c2e-4f53-bd34-0ee090fc65cc",
+        "old": null,
+        "number": 69
+      },
+      {
+        "id": "e79f18a7-b212-489c-9cd3-d1121e0817e0",
+        "old": null,
+        "number": 70
+      },
+      {
+        "id": "e81a5b95-31e9-433d-b9c7-f435e5809f6b",
+        "old": null,
+        "number": 71
+      },
+      {
+        "id": "eb4c4a01-57db-4853-a983-9d792a30513d",
+        "old": null,
+        "number": 72
+      },
+      {
+        "id": "ebd57c40-eb05-4216-8605-c300d265c6ae",
+        "old": null,
+        "number": 73
+      },
+      {
+        "id": "f1a67047-d8b5-4d3d-ae51-a2f61e16d834",
+        "old": null,
+        "number": 74
+      },
+      {
+        "id": "f3903e10-faa8-49d1-bf3c-8d5981587241",
+        "old": null,
+        "number": 75
+      },
+      {
+        "id": "f5cdadb6-327c-4666-bdcd-04c7423c55aa",
+        "old": "QUEIX-H6",
+        "number": 76
+      },
+      {
+        "id": "f841a8f9-720b-4d57-92f5-bdbb83614da0",
+        "old": null,
+        "number": 77
+      },
+      {
+        "id": "f8e69afb-4509-4243-bf75-0f052ff99481",
+        "old": null,
+        "number": 78
+      },
+      {
+        "id": "5c8692ae-93fb-4395-9971-9173da5ff6c4",
+        "old": null,
+        "number": 79
+      },
+      {
+        "id": "875445b6-b58b-46ad-80a9-31466cb81796",
+        "old": null,
+        "number": 81
+      },
+      {
+        "id": "14273ec0-663e-4f1a-b7fb-bfef0d60fd95",
+        "old": null,
+        "number": 82
+      },
+      {
+        "id": "4e1ae1f0-01dd-4973-9326-30f682dc2fc9",
+        "old": null,
+        "number": 83
+      },
+      {
+        "id": "0592a871-cb8d-4e45-88c2-f3625dac2a5f",
+        "old": null,
+        "number": 84
+      },
+      {
+        "id": "a7225e6b-dd76-44d9-a6e2-a591b5f36d40",
+        "old": null,
+        "number": 85
+      },
+      {
+        "id": "175a75ed-c272-459c-9416-e26bf1895f3f",
+        "old": null,
+        "number": 86
+      },
+      {
+        "id": "99204f53-0492-4583-9cc3-3e4bbcaabb87",
+        "old": null,
+        "number": 87
+      },
+      {
+        "id": "47c0f6a4-f3aa-4d5e-8599-66448f549f23",
+        "old": null,
+        "number": 88
+      }
+    ]
+  },
+  "smoke": [
+    {
+      "url": "http://localhost:3333/api/health",
+      "status": 200
+    },
+    {
+      "url": "http://localhost:4173",
+      "status": 200
+    },
+    {
+      "url": "https://os.torneadorauniversal.com.br/api/health",
+      "status": 200
+    }
+  ]
+}

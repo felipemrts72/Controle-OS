@@ -30,9 +30,13 @@ function assertSpecificAdvancePermission(user, permission, message) {
 }
 
 function money(value, field = 'valor') {
-  const number = Number(String(value ?? '').replace(',', '.'));
-  if (!Number.isFinite(number) || number <= 0) throw httpError(400, `Informe um ${field} valido.`);
-  return Math.round(number * 100) / 100;
+  const raw = String(value ?? '').trim();
+  const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw httpError(400, `Informe um ${field} valido.`);
+  const [whole, fraction = ''] = normalized.split('.');
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  if (!Number.isSafeInteger(cents) || cents <= 0) throw httpError(400, `Informe um ${field} valido.`);
+  return cents / 100;
 }
 
 function localDateFromDate(date = new Date()) {
@@ -255,7 +259,9 @@ async function hydrateList(client, listId) {
   );
   if (!listResult.rows[0]) throw httpError(404, 'Lista de vales nao encontrada.');
   const items = await client.query(
-    `SELECT ali.*, e.full_name AS employee_name, e.job_title, e.sector_id, s.name AS sector_name,
+    `SELECT ali.*, ali.xmin::text AS row_version, e.full_name AS employee_name, e.job_title, e.sector_id, s.name AS sector_name,
+       EXISTS (SELECT 1 FROM advance_installment_plans aip WHERE aip.original_individual_advance_id = ali.id)
+       OR EXISTS (SELECT 1 FROM advance_installments ai WHERE ai.posted_advance_item_id = ali.id) AS has_linked_installments,
        e.pix_key, e.current_salary, e.employment_status
      FROM advance_list_items ali
      JOIN employees e ON e.id = ali.employee_id
@@ -319,6 +325,8 @@ export async function getAdvancesHome() {
           THEN 'installment'
           ELSE 'list'
         END AS card_type,
+        BOOL_OR(EXISTS (SELECT 1 FROM advance_installment_plans aip WHERE aip.original_individual_advance_id = ali.id)
+          OR EXISTS (SELECT 1 FROM advance_installments ai WHERE ai.posted_advance_item_id = ali.id)) AS has_linked_installments,
         MIN(e.full_name) FILTER (WHERE ali.status = 'active' AND ali.removed_at IS NULL) AS single_employee_name
        FROM advance_lists al
        JOIN advance_cycles ac ON ac.id = al.cycle_id
@@ -1290,6 +1298,79 @@ export async function createIndividualAdvance(body, user) {
         installment: installmentInfo,
       },
     };
+  });
+}
+
+async function editableIndividual(client, listId, itemId, version) {
+  const list = await fetchList(client, listId, true);
+  if (list.cycle_status !== 'open') throw httpError(409, 'Este Vale não pode mais ser alterado porque o ciclo já foi fechado.');
+  if (list.status !== 'approved') throw httpError(409, 'Este Vale não está disponível para correção.');
+  const found = await client.query(
+    `SELECT ali.*, ali.xmin::text AS row_version, e.full_name AS employee_name
+     FROM advance_list_items ali JOIN employees e ON e.id = ali.employee_id
+     WHERE ali.id = $1 AND ali.list_id = $2 AND ali.entry_type = 'individual'
+       AND ali.status = 'active' AND ali.removed_at IS NULL FOR UPDATE OF ali`,
+    [itemId, listId],
+  );
+  const item = found.rows[0];
+  if (!item) throw httpError(404, 'Vale individual não encontrado.');
+  if (!version || String(version) !== item.row_version) throw httpError(409, 'Este lançamento foi alterado por outro usuário. Atualize os dados.');
+  const linked = await client.query(
+    `SELECT 1 FROM advance_installment_plans WHERE original_individual_advance_id = $1
+     UNION ALL SELECT 1 FROM advance_installments WHERE posted_advance_item_id = $1 LIMIT 1`,
+    [itemId],
+  );
+  if (linked.rows.length) throw httpError(409, 'Este Vale possui parcelas vinculadas e não pode ser alterado diretamente.');
+  return { list, item };
+}
+
+export async function updateIndividualAdvance(listId, itemId, body, user) {
+  assertSpecificAdvancePermission(user, 'advances.edit', 'Você não possui permissão para editar vales.');
+  return advanceWriteTransaction(async (client) => {
+    const { list, item } = await editableIndividual(client, listId, itemId, body.row_version);
+    const employee = await fetchEmployeeForAdvance(client, body.employee_id || item.employee_id, true);
+    const amount = money(body.amount);
+    const receipt = parseReceiptAt(body.receipt_at);
+    const sourceBank = String(body.source_bank ?? '').trim();
+    if (sourceBank && !['Sicoob', 'Sicredi', 'Asaas', 'Itaú'].includes(sourceBank)) throw httpError(400, 'Banco de origem inválido.');
+    const accumulatedBefore = await accumulatedInCycle(client, list.cycle_id, employee.id, item.id);
+    const snapshot = buildAdvanceSnapshot(employee, accumulatedBefore, amount);
+    if (snapshot.exceeded) assertSpecificAdvancePermission(user, 'advances.override_limits', 'O valor excede o limite deste funcionário. É necessária permissão para exceder limites.');
+    const updated = await client.query(
+      `UPDATE advance_list_items SET employee_id = $1, amount = $2, receipt_at = $3, source_bank = $4,
+       salary_at_confirmation = $5, accumulated_before = $6, accumulated_after = $7,
+       warning_percentage = 40, maximum_percentage = $8, projected_percentage = $9,
+       threshold_warning_confirmed = $10, override_used = $11, override_by = $12,
+       updated_by = $13, updated_at = clock_timestamp() WHERE id = $14 RETURNING *`,
+      [employee.id, amount, receipt.timestamp, sourceBank || null, snapshot.salary,
+        accumulatedBefore, snapshot.projectedTotal, snapshot.maximumPercentage, snapshot.projectedPercentage,
+        snapshot.projectedPercentage !== null && snapshot.projectedPercentage >= 40,
+        snapshot.exceeded, snapshot.exceeded ? user.id : null, user.id, item.id],
+    );
+    await client.query('UPDATE advance_lists SET list_date = $1, updated_by = $2, updated_at = clock_timestamp() WHERE id = $3', [receipt.dateOnly, user.id, listId]);
+    await logAudit(client, { entityType: 'advance_list', entityId: listId, action: 'individual_advance_update',
+      previousValue: { item_id: item.id, employee_id: item.employee_id, employee_name: item.employee_name, amount: item.amount, receipt_at: item.receipt_at, source_bank: item.source_bank },
+      newValue: { item_id: item.id, employee_id: employee.id, employee_name: employee.full_name, amount: updated.rows[0].amount, receipt_at: updated.rows[0].receipt_at, source_bank: updated.rows[0].source_bank, override_used: snapshot.exceeded }, userId: user.id });
+    return hydrateList(client, listId);
+  });
+}
+
+export async function cancelIndividualAdvance(listId, itemId, body, user) {
+  assertSpecificAdvancePermission(user, 'advances.delete', 'Você não possui permissão para excluir vales.');
+  return advanceWriteTransaction(async (client) => {
+    const { item } = await editableIndividual(client, listId, itemId, body.row_version);
+    await client.query(`UPDATE advance_list_items SET status = 'cancelled', removed_at = clock_timestamp(),
+      removed_by = $1, updated_by = $1, updated_at = clock_timestamp() WHERE id = $2`, [user.id, item.id]);
+    const remaining = await client.query(`SELECT 1 FROM advance_list_items
+      WHERE list_id = $1 AND status = 'active' AND removed_at IS NULL LIMIT 1`, [listId]);
+    if (!remaining.rowCount) {
+      await client.query(`UPDATE advance_lists SET status = 'cancelled', deleted_at = clock_timestamp(),
+        deleted_by = $1, updated_by = $1, updated_at = clock_timestamp() WHERE id = $2`, [user.id, listId]);
+    }
+    await logAudit(client, { entityType: 'advance_list', entityId: listId, action: 'individual_advance_cancel',
+      previousValue: { item_id: item.id, employee_id: item.employee_id, employee_name: item.employee_name, amount: item.amount, receipt_at: item.receipt_at, source_bank: item.source_bank },
+      newValue: { item_id: item.id, status: 'cancelled', cancelled_by: user.id }, userId: user.id });
+    return { ok: true, id: item.id };
   });
 }
 
