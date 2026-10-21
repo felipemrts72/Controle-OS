@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { pool } from '../backend/src/database/pool.js';
-import { getAdvanceList, getAdvancesHome, updateIndividualAdvance, cancelIndividualAdvance } from '../backend/src/services/advanceService.js';
+import { createIndividualAdvance, getAdvanceList, getAdvancesHome, updateIndividualAdvance, cancelIndividualAdvance } from '../backend/src/services/advanceService.js';
 
 const schema = `test_advance_correction_${randomUUID().replaceAll('-', '')}`;
 const tables = ['employees', 'advance_cycles', 'advance_lists', 'advance_list_items', 'advance_installment_plans', 'advance_installments', 'audit_logs'];
@@ -57,7 +57,10 @@ test('versão antiga e usuário sem permissão são recusados', async () => {
 test('revalida limite e exige override', async () => {
   const item = await current();
   await assert.rejects(updateIndividualAdvance(listId, itemId, body(item.row_version, '2.000,00'), actor(['advances.edit'])), { status: 403 });
-  const list = await updateIndividualAdvance(listId, itemId, body(item.row_version, '2.000,00'), editable());
+  await assert.rejects(updateIndividualAdvance(listId, itemId, body(item.row_version, '2.000,00'), editable()), { status: 403 });
+  const admin = { ...editable(), is_super_admin: true };
+  await assert.rejects(updateIndividualAdvance(listId, itemId, body(item.row_version, '2.000,00'), admin), { status: 400 });
+  const list = await updateIndividualAdvance(listId, itemId, { ...body(item.row_version, '2.000,00'), justification: 'Exceção autorizada em teste isolado' }, admin);
   assert.equal(list.items[0].override_used, true);
   assert.equal(Number(list.total_amount), 2000);
 });
@@ -83,5 +86,17 @@ test('cancelamento preserva linha e auditoria, remove dos totais e do limite', a
   assert.equal((await db.query('SELECT status, deleted_at FROM advance_lists WHERE id = $1', [listId])).rows[0].status, 'approved');
   assert.equal((await db.query('SELECT status FROM advance_list_items WHERE id = $1', [otherItemId])).rows[0].status, 'active');
   assert.equal((await db.query("SELECT COUNT(*)::int AS count FROM audit_logs WHERE action = 'individual_advance_cancel'")).rows[0].count, 1);
+});
+
+test('criação individual respeita teto de 60% e audita exceção administrativa', async () => {
+  const payload = { employee_id: employeeId, amount: '1600.00', receipt_at: '2026-10-07T10:00' };
+  await assert.rejects(createIndividualAdvance(payload, actor(['advances.create_individual', 'advances.override_limits'])), { status: 403 });
+  const admin = { ...actor(['advances.create_individual']), is_super_admin: true };
+  await assert.rejects(createIndividualAdvance(payload, admin), { status: 400 });
+  const result = await createIndividualAdvance({ ...payload, justification: 'Exceção de teste isolado' }, admin);
+  assert.equal(result.result.exceeded, true);
+  const audit = await db.query("SELECT new_value FROM audit_logs WHERE action = 'override_limits' ORDER BY created_at DESC LIMIT 1");
+  assert.equal(audit.rows[0].new_value.justification, 'Exceção de teste isolado');
+  assert.equal(audit.rows[0].new_value.excess_60, 100);
 });
 

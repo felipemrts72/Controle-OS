@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildGeneralAdvanceReportPdf, buildIndividualAdvanceReportPdf } from '../backend/src/services/pdf/advancePdfService.js';
+import { buildAdvanceSummaryPdf, buildGeneralAdvanceReportPdf, buildIndividualAdvanceReportPdf } from '../backend/src/services/pdf/advancePdfService.js';
 import { buildAwardTermPdf } from '../backend/src/services/pdf/awardPdfService.js';
 import { buildEmployeeProfilePdf } from '../backend/src/services/pdf/employeePdfService.js';
 import { formatDateBR } from '../backend/src/services/pdf/pdfDocument.js';
@@ -98,4 +98,15 @@ test('PDFs compartilhados de vales, funcionários, compras e prêmios continuam 
   ]);
 
   for (const pdf of documents) assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+});
+
+test('resumo de pagamentos gera PDF com chave Pix longa, ausência e centavos', async () => {
+  const items = [
+    { employee_name: 'João da Silva', pix_key: '5f58b26b-e055-4138-87c0-444444444444', amount: '500.25' },
+    { employee_name: 'Pedro Souza', pix_key: null, amount: '350.50' },
+  ];
+  const pdf = await buildAdvanceSummaryPdf({ list_date: '2026-10-19', items, total_amount: '850.75' });
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(pdf.length > 1_000);
+  assert.equal(items[0].pix_key, '5f58b26b-e055-4138-87c0-444444444444');
 });

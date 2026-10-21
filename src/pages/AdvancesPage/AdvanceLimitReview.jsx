@@ -7,6 +7,7 @@ import './AdvanceLimitReview.css';
 export function AdvanceLimitReview({ review, busy, error, onCancel, onConfirm }) {
   const dialogRef = useRef(null);
   const [decisions, setDecisions] = useState({});
+  const [justifications, setJustifications] = useState({});
   const items = review.review_items;
   const reviewed = items.filter((item) => decisions[item.line_id]).length;
   const overrides = items.filter((item) => item.classification === 'OVERRIDE_REQUIRED').length;
@@ -58,7 +59,8 @@ export function AdvanceLimitReview({ review, busy, error, onCancel, onConfirm })
                 <div><dt>Projetado</dt><dd>{formatMoney(item.projected_total)}</dd></div>
                 <div><dt>Percentual</dt><dd>{item.projected_percentage == null ? '—' : `${Number(item.projected_percentage).toFixed(2).replace('.', ',')}%`}</dd></div>
               </dl>
-              {override && <p className="advance-review__reason">{item.salary ? `Limite máximo: ${item.maximum_percentage}% do salário.` : 'Salário ausente: exige autorização especial.'}</p>}
+              {override && <p className="advance-review__reason">{item.salary ? `Teto máximo: ${item.maximum_percentage}% do salário.` : 'Salário inválido. Regularize o cadastro.'}</p>}
+              {override && item.salary && <label className="field"><span className="field__label">Justificativa obrigatória</span><textarea className="field__input" value={justifications[item.line_id] || ''} onChange={(event) => setJustifications((current) => ({ ...current, [item.line_id]: event.target.value }))} /></label>}
               {!item.can_authorize && <p className="advance-review__notice">Você não tem permissão para autorizar este override.</p>}
               <div className="advance-review__decision">
                 <strong className="advance-review__state">{decision === 'approve' ? '✓ Aprovada' : decision === 'reject' ? '✕ Rejeitada' : 'Pendente'}</strong>
@@ -82,8 +84,8 @@ export function AdvanceLimitReview({ review, busy, error, onCancel, onConfirm })
         {error && <p role="alert" className="advance-review__notice">{error}</p>}
         <div>
           <button type="button" className="button" disabled={busy} onClick={onCancel}>Cancelar</button>
-          <button type="button" className="button button_primary" disabled={busy || reviewed !== items.length}
-            onClick={() => onConfirm({ review_token: review.review_token, decisions: items.map((item) => ({ line_id: item.line_id, decision: decisions[item.line_id] })) })}>
+          <button type="button" className="button button_primary" disabled={busy || reviewed !== items.length || items.some((item) => item.classification === 'OVERRIDE_REQUIRED' && decisions[item.line_id] === 'approve' && !justifications[item.line_id]?.trim())}
+            onClick={() => onConfirm({ review_token: review.review_token, decisions: items.map((item) => ({ line_id: item.line_id, decision: decisions[item.line_id], justification: justifications[item.line_id] })) })}>
             {busy ? 'Validando…' : 'Confirmar decisões'}
           </button>
         </div>
