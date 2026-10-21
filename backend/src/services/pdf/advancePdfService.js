@@ -135,34 +135,21 @@ export async function buildAdvanceSummaryPdf(summary, options = {}) {
   const context = createPdfDocument({
     title: 'Lista de vales',
     subtitle: `Data: ${formatDateBR(summary.list_date)}`,
-    orientation: 'landscape',
+    orientation: 'portrait',
     company: options.company || {},
   });
 
   addSectionTitle(context, 'Valores da lista');
   addTable(context, {
     columns: [
-      { key: 'employee_name', label: 'Funcionário', width: 0.28 },
-      { key: 'job_title', label: 'Cargo', width: 0.2 },
-      { key: 'sector_name', label: 'Setor', width: 0.14 },
-      { key: 'pix_key', label: 'Chave Pix', width: 0.23 },
-      { key: 'amount', label: 'Valor', width: 0.15, align: 'right', format: formatCurrencyBR },
+      { key: 'employee_name', label: 'Funcionário', width: 0.34 },
+      { key: 'pix_key', label: 'Chave Pix', width: 0.43, format: (value) => value || 'Não cadastrada' },
+      { key: 'amount', label: 'Valor', width: 0.23, align: 'right', format: formatCurrencyBR },
     ],
     rows: summary.items,
     keepWithNextHeight: 48,
   });
   addTotalLine(context, 'Total', formatCurrencyBR(summary.total_amount));
-
-  addSectionTitle(context, 'Conferência de limites');
-  addTable(context, {
-    columns: [
-      { key: 'employee_name', label: 'Funcionário', width: 0.32 },
-      { key: 'amount', label: 'Valor desta lista', width: 0.2, align: 'right', format: formatCurrencyBR },
-      { key: 'remaining', label: 'Restante disponível', width: 0.2, align: 'right', format: formatCurrencyBR },
-      { key: 'observation', label: 'Observação', width: 0.28 },
-    ],
-    rows: summary.items.map((item) => ({ ...item, observation: observation(item) })),
-  });
 
   return finalizePdf(context);
 }

@@ -8,11 +8,12 @@ import { canAccessPermission, isSuperAdmin } from '../../utils/permissions.js';
 import { formatDate, formatMoney, toDateInput } from '../EmployeesPage/employeeUtils.js';
 import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import { AdvanceLimitReview } from './AdvanceLimitReview.jsx';
+import { AdvanceLimitPreview } from './AdvanceLimitPreview.jsx';
 import './AdvancesPage.css';
 
 const emptyLine = { employee_id: '', amount: '' };
 const emptyLimitLookup = { open: false, search: '', results: [], searched: false, loading: false };
-const emptyIndividual = { open: false, search: '', results: [], selected: null, amount: '', receipt_at: '', source_bank: '', installments_enabled: false, installments_count: 2, loading: false };
+const emptyIndividual = { open: false, search: '', results: [], selected: null, amount: '', justification: '', receipt_at: '', source_bank: '', installments_enabled: false, installments_count: 2, loading: false };
 const emptyConvert = { open: false, search: '', results: [], selectedEmployee: null, eligible: [], selectedItem: null, installments_count: 2, loading: false };
 const banks = ['Sicoob', 'Sicredi', 'Asaas', 'Itaú'];
 
@@ -73,6 +74,7 @@ export function AdvancesPage() {
   const toast = useToast();
   const user = getStoredUser();
   const isAdmin = isSuperAdmin(user);
+  const canOverride = isAdmin || user?.role_slug === 'admin';
   const canCreate = canAccessPermission(user, 'advances.create') || canAccessPermission(user, 'advances.manage');
   const canReview = canAccessPermission(user, 'advances.review') || canAccessPermission(user, 'advances.manage');
   const canApprove = canAccessPermission(user, 'advances.approve');
@@ -106,6 +108,7 @@ export function AdvancesPage() {
   const [correctionEmployees, setCorrectionEmployees] = useState([]);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [closeModal, setCloseModal] = useState(false);
+  const [cycleJustification, setCycleJustification] = useState('');
   const [review, setReview] = useState(null);
   const [reviewError, setReviewError] = useState('');
   const approvalRequest = useRef(0);
@@ -140,7 +143,7 @@ export function AdvancesPage() {
 
   function showIndividualCorrection(item, listId, mode) {
     const data = { list_id: listId, item_id: item.id, row_version: item.row_version,
-      employee_id: item.employee_id, employee_name: item.employee_name, amount: item.amount,
+      employee_id: item.employee_id, employee_name: item.employee_name, amount: item.amount, justification: '',
       receipt_at: String(item.receipt_at || '').slice(0, 16).replace(' ', 'T'), source_bank: item.source_bank || '', loading: false };
     if (mode === 'delete') setIndividualDeletion(data);
     else setIndividualCorrection(data);
@@ -216,15 +219,16 @@ export function AdvancesPage() {
   }, [employees, editing, list]);
 
   async function refreshAll() {
-    await Promise.all([loadHome(), loadList()]);
+    await Promise.all([loadHome(), loadList(), loadEmployees()]);
   }
 
   async function startCycle() {
     setBusy(true);
     try {
-      await api.post('/advances/cycles');
+      await api.post('/advances/cycles', { justification: cycleJustification });
+      setCycleJustification('');
       toast.success('Ciclo de vales iniciado.');
-      await loadHome();
+      await Promise.all([loadHome(), loadEmployees()]);
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Não foi possível iniciar o ciclo.'));
     } finally {
@@ -236,7 +240,8 @@ export function AdvancesPage() {
     if (!home.open_cycle) return;
     setBusy(true);
     try {
-      await api.post(`/advances/cycles/${home.open_cycle.id}/close`, { start_new: startNew });
+      await api.post(`/advances/cycles/${home.open_cycle.id}/close`, { start_new: startNew, justification: cycleJustification });
+      setCycleJustification('');
       toast.success(startNew ? 'Ciclo fechado e novo ciclo iniciado.' : 'Ciclo fechado.');
       setCloseModal(false);
       await loadHome();
@@ -273,7 +278,7 @@ export function AdvancesPage() {
       setLine(emptyLine);
       setEditing(null);
       toast.success('Linha confirmada.');
-      await loadHome();
+      await Promise.all([loadHome(), loadEmployees()]);
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Não foi possível confirmar a linha.'));
     } finally {
@@ -287,7 +292,7 @@ export function AdvancesPage() {
       const response = await api.delete(`/advances/lists/${id}/items/${itemId}`);
       setList(response.data);
       toast.success('Funcionário removido da lista.');
-      await loadHome();
+      await Promise.all([loadHome(), loadEmployees()]);
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Não foi possível remover o funcionário.'));
     } finally {
@@ -467,6 +472,7 @@ export function AdvancesPage() {
         receipt_at: individual.receipt_at,
         source_bank: individual.source_bank,
         installments_count: individual.installments_enabled ? individual.installments_count : 1,
+        justification: individual.justification,
       });
       setIndividual(emptyIndividual);
       setIndividualResult(response.data.result);
@@ -558,7 +564,7 @@ export function AdvancesPage() {
                   <strong>Inicie um ciclo para lançar vales.</strong>
                   <p>O acumulado começa em zero no novo ciclo e o histórico anterior permanece preservado.</p>
                 </div>
-                {canCycleCreate && <button className="button button_primary" type="button" onClick={startCycle} disabled={busy}>Iniciar ciclo de vales</button>}
+                {canCycleCreate && <div><button className="button button_primary" type="button" onClick={startCycle} disabled={busy}>Iniciar ciclo de vales</button>{canOverride && <label className="field"><span className="field__label">Justificativa se parcelas pendentes excederem 60%</span><input className="field__input" value={cycleJustification} onChange={(event) => setCycleJustification(event.target.value)} /></label>}</div>}
               </>
             )}
           </div>
@@ -658,6 +664,7 @@ export function AdvancesPage() {
                       {employeeOptions.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}
                     </select>
                     <input className="field__input" type="number" min="0.01" step="0.01" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: event.target.value })} />
+                    <AdvanceLimitPreview employee={employees.find((employee) => employee.id === editing.employee_id)} amount={Number(editing.amount || 0) - (editing.employee_id === item.employee_id ? Number(item.amount) : 0)} />
                     <button className="button button_primary advances-page__confirm-button" title="Confirmar linha" type="button" onClick={() => saveItem(item.id, editing)} disabled={busy}><Check size={18} /><span>Confirmar</span></button>
                   </>
                 ) : (
@@ -689,6 +696,7 @@ export function AdvancesPage() {
                   {employeeOptions.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}
                 </select>
                 <input className="field__input" type="number" min="0.01" step="0.01" placeholder="R$ 0,00" value={line.amount} onChange={(event) => setLine({ ...line, amount: event.target.value })} />
+                <AdvanceLimitPreview employee={employees.find((employee) => employee.id === line.employee_id)} amount={line.amount} />
                 <button className="button button_primary advances-page__confirm-button" title="Confirmar linha" type="button" onClick={() => saveItem(null, line)} disabled={busy}><Check size={18} /><span>Confirmar linha</span></button>
               </div>
             )}
@@ -716,6 +724,7 @@ export function AdvancesPage() {
               <label className="field"><span className="field__label">Data e hora do comprovante</span><input className="field__input" type="datetime-local" value={individualCorrection.receipt_at} onChange={(event) => setIndividualCorrection((current) => ({ ...current, receipt_at: event.target.value }))} required /></label>
               <label className="field"><span className="field__label">Banco de origem</span><select className="field__input" value={individualCorrection.source_bank} onChange={(event) => setIndividualCorrection((current) => ({ ...current, source_bank: event.target.value }))}><option value="">Não informado</option>{banks.map((bank) => <option key={bank} value={bank}>{bank}</option>)}</select></label>
             </div>
+            {canOverride && <label className="field"><span className="field__label">Justificativa para exceção acima de 60%</span><textarea className="field__input" value={individualCorrection.justification} onChange={(event) => setIndividualCorrection((current) => ({ ...current, justification: event.target.value }))} /></label>}
             <div className="advances-page__modal-actions"><button className="button" type="button" onClick={() => setIndividualCorrection(null)}>Voltar</button><button className="button button_primary" type="submit" disabled={individualCorrection.loading}>{individualCorrection.loading ? 'Salvando...' : 'Salvar alterações'}</button></div>
           </form>
         </div>
@@ -759,7 +768,7 @@ export function AdvancesPage() {
                     <tr key={result.employee_id}>
                       <td>{result.employee_name}</td>
                       <td>{formatMoney(result.used_amount)}</td>
-                      <td>{formatMoney(result.remaining)}</td>
+                      <td>{result.remaining == null ? 'Salário inválido' : formatMoney(result.remaining)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -771,7 +780,7 @@ export function AdvancesPage() {
                   <h3>{result.employee_name}</h3>
                   <dl>
                     <div><dt>Valor utilizado</dt><dd>{formatMoney(result.used_amount)}</dd></div>
-                    <div><dt>Valor restante</dt><dd>{formatMoney(result.remaining)}</dd></div>
+                    <div><dt>Valor restante</dt><dd>{result.remaining == null ? 'Salário inválido' : formatMoney(result.remaining)}</dd></div>
                   </dl>
                 </article>
               ))}
@@ -834,6 +843,8 @@ export function AdvancesPage() {
                 </select>
               </label>
             </div>
+            <AdvanceLimitPreview employee={individual.selected} amount={individual.installments_enabled ? (individualInstallmentPreview[0] || 0) : individual.amount} hideName />
+            {canOverride && individual.selected && <label className="field"><span className="field__label">Justificativa para exceção acima de 60%</span><textarea className="field__input" value={individual.justification} onChange={(event) => setIndividual((current) => ({ ...current, justification: event.target.value }))} /></label>}
 
             {canCreateInstallments && (
               <label className="advances-page__checkbox">
@@ -852,7 +863,6 @@ export function AdvancesPage() {
                 </label>
                 <dl className="advances-page__facts">
                   <div><dt>Valor total</dt><dd>{formatMoney(individual.amount || 0)}</dd></div>
-                  <div><dt>Valor aproximado por parcela</dt><dd>{formatMoney(individualInstallmentPreview[0] || 0)}</dd></div>
                   <div><dt>Valor da primeira parcela</dt><dd>{formatMoney(individualInstallmentPreview[0] || 0)}</dd></div>
                   <div><dt>Parcelas futuras</dt><dd>{Math.max(0, Number(individual.installments_count) - 1)}</dd></div>
                 </dl>
@@ -1018,6 +1028,7 @@ export function AdvancesPage() {
         )}
       >
         <p>Após o fechamento, novos vales serão lançados em um novo ciclo e o cálculo dos limites começará novamente do zero. O histórico anterior será preservado.</p>
+        {canOverride && <label className="field"><span className="field__label">Justificativa se parcelas pendentes excederem 60%</span><input className="field__input" value={cycleJustification} onChange={(event) => setCycleJustification(event.target.value)} /></label>}
         <dl className="advances-page__facts">
           <div><dt>Aberto em</dt><dd>{formatDate(home.open_cycle?.opened_at)}</dd></div>
           <div><dt>Listas</dt><dd>{home.open_cycle?.list_count || 0}</dd></div>

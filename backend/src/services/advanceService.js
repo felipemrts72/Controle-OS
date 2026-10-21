@@ -23,6 +23,10 @@ function isAdvanceAdmin(user) {
   return isSuperAdmin(user);
 }
 
+function isAdvanceLimitAdmin(user) {
+  return isSuperAdmin(user) || user?.role_slug === 'admin';
+}
+
 function assertSpecificAdvancePermission(user, permission, message) {
   if (isAdvanceAdmin(user)) return;
   if (hasPermission(user, permission)) return;
@@ -86,20 +90,18 @@ function splitInstallments(totalAmount, count) {
 
 function percentageClass(value) {
   if (!Number.isFinite(value)) return 'normal';
-  if (value >= 60) return 'danger';
-  if (value >= 40) return 'warning';
+  if (value > 60) return 'danger';
+  if (value > 40) return 'warning';
   return 'normal';
 }
 
 function buildLimitDetails({ employee, salary, accumulatedBefore, amount }) {
-  const lowSalary = salary <= 1999.99;
   const warningPercentage = 40;
-  const maximumPercentage = lowSalary ? 40 : 60;
-  const warningLimit = salary * 0.4;
-  const maximumLimit = salary * (maximumPercentage / 100);
-  const projectedTotal = accumulatedBefore + amount;
+  const maximumPercentage = 60;
+  const warningLimit = fromCents(Math.round(toCents(salary) * 0.4));
+  const maximumLimit = fromCents(Math.round(toCents(salary) * 0.6));
+  const projectedTotal = fromCents(toCents(accumulatedBefore) + toCents(amount));
   const projectedPercentage = salary > 0 ? (projectedTotal / salary) * 100 : null;
-  const remaining = Math.max(0, maximumLimit - accumulatedBefore);
 
   return {
     employee_id: employee.id,
@@ -113,8 +115,11 @@ function buildLimitDetails({ employee, salary, accumulatedBefore, amount }) {
     warning_limit: warningLimit,
     maximum_percentage: maximumPercentage,
     maximum_limit: maximumLimit,
-    remaining,
-    low_salary: lowSalary,
+    remaining: fromCents(Math.max(0, toCents(maximumLimit) - toCents(accumulatedBefore))),
+    missing_to_40: fromCents(Math.max(0, toCents(warningLimit) - toCents(projectedTotal))),
+    available_to_60: fromCents(Math.max(0, toCents(maximumLimit) - toCents(projectedTotal))),
+    excess_40: fromCents(Math.max(0, toCents(projectedTotal) - toCents(warningLimit))),
+    excess_60: fromCents(Math.max(0, toCents(projectedTotal) - toCents(maximumLimit))),
   };
 }
 
@@ -190,11 +195,12 @@ async function fetchOpenCycle(client) {
 function buildCycleLimitResult(employee, accumulated) {
   const salary = Number(employee.current_salary);
   const hasSalary = Number.isFinite(salary) && salary > 0;
-  const maximumPercentage = hasSalary ? (salary <= 1999.99 ? 40 : 60) : null;
-  const maximumLimit = hasSalary ? salary * (maximumPercentage / 100) : null;
+  const maximumPercentage = hasSalary ? 60 : null;
+  const maximumLimit = hasSalary ? fromCents(Math.round(toCents(salary) * 0.6)) : null;
   const used = Number(accumulated) || 0;
-  const remaining = maximumLimit === null ? 0 : Math.max(0, maximumLimit - used);
+  const remaining = maximumLimit === null ? null : fromCents(Math.max(0, toCents(maximumLimit) - toCents(used)));
   const usedPercentage = hasSalary ? (used / salary) * 100 : null;
+  const warningLimit = hasSalary ? fromCents(Math.round(toCents(salary) * 0.4)) : null;
 
   return {
     employee_id: employee.id,
@@ -202,8 +208,13 @@ function buildCycleLimitResult(employee, accumulated) {
     current_salary: hasSalary ? salary : null,
     maximum_percentage: maximumPercentage,
     maximum_limit: maximumLimit,
+    warning_limit: warningLimit,
     used_amount: used,
     remaining,
+    missing_to_40: warningLimit === null ? null : fromCents(Math.max(0, toCents(warningLimit) - toCents(used))),
+    available_to_60: maximumLimit === null ? null : fromCents(Math.max(0, toCents(maximumLimit) - toCents(used))),
+    excess_40: warningLimit === null ? null : fromCents(Math.max(0, toCents(used) - toCents(warningLimit))),
+    excess_60: maximumLimit === null ? null : fromCents(Math.max(0, toCents(used) - toCents(maximumLimit))),
     used_percentage: usedPercentage,
     exceeded: maximumLimit !== null && used > maximumLimit,
     status_level: percentageClass(usedPercentage),
@@ -225,8 +236,8 @@ function classifyListLimit(employee, accumulatedBefore, amount) {
     ? buildLimitDetails({ employee, salary, accumulatedBefore, amount })
     : buildSalaryMissingDetails({ employee, amount, accumulatedBefore });
   const rule = !details.salary ? 'SALARY_MISSING'
-    : details.projected_total > details.maximum_limit ? 'MAXIMUM_EXCEEDED'
-      : !details.low_salary && details.projected_total > details.warning_limit ? 'WARNING_EXCEEDED' : 'WITHIN_LIMIT';
+    : toCents(details.projected_total) > toCents(details.maximum_limit) ? 'MAXIMUM_EXCEEDED'
+      : toCents(details.projected_total) > toCents(details.warning_limit) ? 'WARNING_EXCEEDED' : 'WITHIN_LIMIT';
   const classification = rule === 'WITHIN_LIMIT' ? 'OK'
     : rule === 'WARNING_EXCEEDED' ? 'WARNING' : 'OVERRIDE_REQUIRED';
   return { ...details, rule, classification };
@@ -281,12 +292,18 @@ export async function listAdvanceEmployees({ search = '' }) {
   return transaction(async (client) => {
     const term = `%${String(search || '').trim().toLowerCase()}%`;
     const result = await client.query(
-      `SELECT id, full_name, current_salary, employment_status
-       FROM employees
-       WHERE deleted_at IS NULL
-         AND employment_status <> 'desligado'
-         AND ($1 = '%%' OR LOWER(full_name) LIKE $1 OR normalized_name ILIKE $1)
-       ORDER BY full_name
+      `SELECT e.id, e.full_name, e.current_salary, e.employment_status,
+         COALESCE((SELECT SUM(ali.amount) FROM advance_list_items ali
+           JOIN advance_lists al ON al.id = ali.list_id
+           JOIN advance_cycles ac ON ac.id = al.cycle_id
+           WHERE ac.status = 'open' AND ali.employee_id = e.id
+             AND al.status <> 'cancelled' AND al.deleted_at IS NULL
+             AND ali.status = 'active' AND ali.removed_at IS NULL AND ali.confirmed = TRUE), 0) AS used_amount
+       FROM employees e
+       WHERE e.deleted_at IS NULL
+         AND e.employment_status <> 'desligado'
+         AND ($1 = '%%' OR LOWER(e.full_name) LIKE $1 OR e.normalized_name ILIKE $1)
+       ORDER BY e.full_name
        LIMIT 80`,
       [term],
     );
@@ -367,7 +384,7 @@ export async function listCycles() {
   });
 }
 
-export async function createCycle(user) {
+export async function createCycle(user, body = {}) {
   assertCan(user, 'advances.cycles.create');
   return advanceWriteTransaction(async (client) => {
     const existing = await client.query("SELECT id FROM advance_cycles WHERE status = 'open'");
@@ -385,7 +402,7 @@ export async function createCycle(user) {
       newValue: created.rows[0],
       userId: user.id,
     });
-    await postPendingInstallmentsForCycle(client, created.rows[0], user);
+    await postPendingInstallmentsForCycle(client, created.rows[0], user, body.justification);
     return created.rows[0];
   });
 }
@@ -429,7 +446,7 @@ export async function closeCycle(cycleId, body, user) {
         newValue: nextCycle,
         userId: user.id,
       });
-      await postPendingInstallmentsForCycle(client, nextCycle, user);
+      await postPendingInstallmentsForCycle(client, nextCycle, user, body.justification);
     }
 
     return { closed_cycle: closed.rows[0], next_cycle: nextCycle };
@@ -503,6 +520,10 @@ export async function saveAdvanceItem(listId, itemId, body, user) {
     const employeeId = body.employee_id || currentItem?.employee_id;
     if (!employeeId) throw httpError(400, 'Selecione um funcionario.');
     const employee = await fetchEmployeeForAdvance(client, employeeId, true);
+    const accumulatedBefore = await accumulatedInCycle(client, list.cycle_id, employee.id, currentItem?.employee_id === employee.id ? currentItem?.id : null);
+    const draftLimit = classifyListLimit(employee, accumulatedBefore, amount);
+    if (draftLimit.rule === 'SALARY_MISSING') throw httpError(400, 'Salário atual inválido. Regularize o cadastro antes de lançar Vales.');
+    if (draftLimit.rule === 'MAXIMUM_EXCEEDED' && !isAdvanceLimitAdmin(user)) throw httpError(403, 'Teto de 60% ultrapassado. Necessária autorização administrativa.');
     // Confirmed means the line was entered, not that a limit was authorized.
     // Never accept authorization flags on draft writes.
     const saved = currentItem ? await client.query(
@@ -724,7 +745,7 @@ async function buildListReview(client, list, user) {
     return { ...details, line_id: item.id, row_version: item.row_version,
       employee_version: item.employee_version, updated_at: item.updated_at,
       rejected_at: item.limit_review_rejected_at,
-      can_authorize: details.classification !== 'OVERRIDE_REQUIRED' || can(user, 'advances.override_limits', false) };
+      can_authorize: details.rule !== 'SALARY_MISSING' && (details.classification !== 'OVERRIDE_REQUIRED' || isAdvanceLimitAdmin(user)) };
   });
   const reviewToken = createHash('sha256').update(JSON.stringify({
     list_id: list.id, cycle_id: list.cycle_id, list_date: list.list_date,
@@ -751,11 +772,11 @@ export async function approveAdvanceList(listId, body = {}, user) {
       code: stale ? 'LIST_REVIEW_STALE' : 'LIST_REVIEW_REQUIRED',
       message: stale ? 'Os dados mudaram. Revise os valores atualizados e escolha novamente.' : 'Revise os limites antes de aprovar a lista.',
       review_token: review.review_token, review_items: review.review_items });
+    const decisions = new Map();
     // Even if a change removes every warning, an old confirmation cannot approve it.
     if (stale || (!hasSubmission && review.review_items.length)) return reviewResponse();
     if (hasSubmission) {
       if (!Array.isArray(body.decisions)) throw httpError(400, 'Envie todas as decisões da revisão.');
-      const decisions = new Map();
       const required = new Map(review.review_items.map((item) => [item.line_id, item]));
       for (const decision of body.decisions) {
         if (!decision || !required.has(decision.line_id) || decisions.has(decision.line_id)
@@ -763,10 +784,12 @@ export async function approveAdvanceList(listId, body = {}, user) {
         if (decision.decision === 'approve' && !required.get(decision.line_id).can_authorize) {
           throw httpError(403, 'Você não possui permissão para autorizar override de limites.');
         }
-        decisions.set(decision.line_id, decision.decision);
+        if (decision.decision === 'approve' && required.get(decision.line_id).classification === 'OVERRIDE_REQUIRED'
+          && !String(decision.justification || '').trim()) throw httpError(400, 'Informe a justificativa da autorização.');
+        decisions.set(decision.line_id, decision);
       }
       if (decisions.size !== required.size) throw httpError(400, 'Decida todas as pendências antes de confirmar.');
-      const rejected = review.review_items.filter((item) => decisions.get(item.line_id) === 'reject');
+      const rejected = review.review_items.filter((item) => decisions.get(item.line_id)?.decision === 'reject');
       if (rejected.length) {
         for (const item of rejected) {
           await client.query(`UPDATE advance_list_items SET limit_review_rejected_at = clock_timestamp(),
@@ -791,7 +814,9 @@ export async function approveAdvanceList(listId, body = {}, user) {
       );
       if (warning || override) await logAudit(client, {
         entityType: 'advance_list', entityId: listId, action: override ? 'override_limits' : 'threshold_warning_confirmed',
-        newValue: { ...item, list_id: listId, decision: 'approve', review_token: review.review_token }, userId: user.id,
+        newValue: { ...item, list_id: listId, cycle_id: list.cycle_id, authorized_by: override ? user.id : null,
+          justification: override ? String(decisions.get(item.line_id)?.justification).trim() : null,
+          excess_60: item.excess_60, decision: 'approve', review_token: review.review_token }, userId: user.id,
       });
     }
     const updated = await client.query(
@@ -812,8 +837,8 @@ export async function getAdvanceSummary(listId) {
     const items = [];
     for (const item of list.items) {
       const salary = Number(item.current_salary);
-      const maximumPercentage = salary <= 1999.99 ? 40 : 60;
-      const maximumLimit = Number.isFinite(salary) && salary > 0 ? salary * (maximumPercentage / 100) : null;
+      const maximumPercentage = 60;
+      const maximumLimit = Number.isFinite(salary) && salary > 0 ? fromCents(Math.round(toCents(salary) * 0.6)) : null;
       const accumulated = await accumulatedInCycle(client, list.cycle_id, item.employee_id);
       items.push({
         ...item,
@@ -838,9 +863,9 @@ export async function getEmployeeAdvanceProfile(employeeId) {
     const cycleResult = await client.query("SELECT * FROM advance_cycles WHERE status = 'open'");
     const openCycle = cycleResult.rows[0] || null;
     const salary = Number(employee.current_salary);
-    const maximumPercentage = Number.isFinite(salary) && salary > 0 ? (salary <= 1999.99 ? 40 : 60) : null;
-    const warningLimit = Number.isFinite(salary) && salary > 0 ? salary * 0.4 : null;
-    const maximumLimit = maximumPercentage ? salary * (maximumPercentage / 100) : null;
+    const maximumPercentage = Number.isFinite(salary) && salary > 0 ? 60 : null;
+    const warningLimit = Number.isFinite(salary) && salary > 0 ? fromCents(Math.round(toCents(salary) * 0.4)) : null;
+    const maximumLimit = maximumPercentage ? fromCents(Math.round(toCents(salary) * 0.6)) : null;
     const accumulated = openCycle ? await accumulatedInCycle(client, openCycle.id, employeeId) : 0;
     const history = await client.query(
       `SELECT al.id AS list_id, al.list_date, al.status AS list_status, ac.id AS cycle_id, ac.status AS cycle_status,
@@ -944,25 +969,47 @@ function validateInstallmentsCount(value, { min = 1 } = {}) {
 function buildAdvanceSnapshot(employee, accumulatedBefore, amount) {
   const salary = Number(employee.current_salary);
   const hasSalary = Number.isFinite(salary) && salary > 0;
-  const maximumPercentage = hasSalary ? (salary <= 1999.99 ? 40 : 60) : null;
-  const maximumLimit = hasSalary ? salary * (maximumPercentage / 100) : null;
-  const projectedTotal = accumulatedBefore + amount;
+  if (!hasSalary) throw httpError(400, 'Salário atual inválido. Regularize o cadastro antes de lançar Vales.');
+  const maximumPercentage = 60;
+  const warningLimit = fromCents(Math.round(toCents(salary) * 0.4));
+  const maximumLimit = fromCents(Math.round(toCents(salary) * 0.6));
+  const projectedTotal = fromCents(toCents(accumulatedBefore) + toCents(amount));
   const projectedPercentage = hasSalary ? (projectedTotal / salary) * 100 : null;
   return {
     salary: hasSalary ? salary : null,
     maximumPercentage,
     maximumLimit,
+    warningLimit,
     projectedTotal,
     projectedPercentage,
     remaining: maximumLimit === null ? 0 : Math.max(0, maximumLimit - projectedTotal),
-    exceeded: maximumLimit !== null && projectedTotal > maximumLimit,
+    exceeded: toCents(projectedTotal) > toCents(maximumLimit),
   };
 }
 
-async function insertAdvanceItem(client, { cycle, employee, amount, receiptAt, receiptDate, sourceBank, entryType, user, excludingItemId = null, list = null }) {
+async function authorizeAdvanceOverride(client, { snapshot, employee, cycleId, amount, user, justification, entityId }) {
+  if (!snapshot.exceeded) return;
+  if (!isAdvanceLimitAdmin(user)) throw httpError(403, 'Teto de 60% ultrapassado. Necessária autorização administrativa.');
+  const reason = String(justification || '').trim();
+  if (!reason) throw httpError(400, 'Informe a justificativa da autorização acima de 60%.');
+  await logAudit(client, {
+    entityType: 'advance_list', entityId, action: 'override_limits', userId: user.id,
+    newValue: { employee_id: employee.id, cycle_id: cycleId, amount,
+      salary: snapshot.salary, projected_total: snapshot.projectedTotal,
+      projected_percentage: snapshot.projectedPercentage, maximum_limit: snapshot.maximumLimit,
+      excess_60: fromCents(toCents(snapshot.projectedTotal) - toCents(snapshot.maximumLimit)),
+      authorized_by: user.id, justification: reason },
+  });
+}
+
+async function insertAdvanceItem(client, { cycle, employee, amount, receiptAt, receiptDate, sourceBank, entryType, user, justification, excludingItemId = null, list = null }) {
   const accumulatedBefore = await accumulatedInCycle(client, cycle.id, employee.id, excludingItemId);
   const snapshot = buildAdvanceSnapshot(employee, accumulatedBefore, amount);
+  if (snapshot.exceeded && (!isAdvanceLimitAdmin(user) || !String(justification || '').trim())) {
+    throw httpError(isAdvanceLimitAdmin(user) ? 400 : 403, 'Teto de 60% ultrapassado. Necessária autorização administrativa com justificativa.');
+  }
   const targetList = list || await findOrCreateIndividualList(client, cycle, user, receiptDate || localDateFromDate());
+  await authorizeAdvanceOverride(client, { snapshot, employee, cycleId: cycle.id, amount, user, justification, entityId: targetList.id });
   const saved = await client.query(
     `INSERT INTO advance_list_items (
       list_id, employee_id, amount, status, confirmed, threshold_warning_confirmed, override_used, override_by,
@@ -975,7 +1022,7 @@ async function insertAdvanceItem(client, { cycle, employee, amount, receiptAt, r
       targetList.id,
       employee.id,
       amount,
-      snapshot.projectedPercentage !== null && snapshot.projectedPercentage >= 40,
+      toCents(snapshot.projectedTotal) > toCents(snapshot.warningLimit),
       snapshot.exceeded,
       snapshot.exceeded ? user.id : null,
       snapshot.salary,
@@ -1002,7 +1049,7 @@ async function createInstallmentRows(client, planId, amounts) {
   }
 }
 
-async function postInstallment(client, { cycle, installment, employee, user, receiptAt = null, receiptDate = null, sourceBank = null, reuseItemId = null }) {
+async function postInstallment(client, { cycle, installment, employee, user, justification, receiptAt = null, receiptDate = null, sourceBank = null, reuseItemId = null }) {
   let item;
   let snapshot;
   let list = null;
@@ -1018,6 +1065,7 @@ async function postInstallment(client, { cycle, installment, employee, user, rec
     if (!item) throw httpError(404, 'Vale individual nao encontrado para conversao.');
     const accumulatedBefore = await accumulatedInCycle(client, cycle.id, employee.id, reuseItemId);
     snapshot = buildAdvanceSnapshot(employee, accumulatedBefore, Number(installment.installment_amount));
+    await authorizeAdvanceOverride(client, { snapshot, employee, cycleId: cycle.id, amount: Number(installment.installment_amount), user, justification, entityId: item.list_id });
     const updated = await client.query(
       `UPDATE advance_list_items
        SET amount = $1,
@@ -1039,7 +1087,7 @@ async function postInstallment(client, { cycle, installment, employee, user, rec
         snapshot.salary,
         accumulatedBefore,
         snapshot.projectedTotal,
-        snapshot.projectedPercentage !== null && snapshot.projectedPercentage >= 40,
+        toCents(snapshot.projectedTotal) > toCents(snapshot.warningLimit),
         snapshot.exceeded,
         snapshot.exceeded ? user.id : null,
         snapshot.maximumPercentage,
@@ -1061,6 +1109,7 @@ async function postInstallment(client, { cycle, installment, employee, user, rec
       sourceBank,
       entryType: 'installment',
       user,
+      justification,
     });
     item = inserted.item;
     list = inserted.list;
@@ -1128,7 +1177,7 @@ async function finalizeInstallmentPlanIfNeeded(client, planId, user) {
   }
 }
 
-async function postPendingInstallmentsForCycle(client, cycle, user) {
+async function postPendingInstallmentsForCycle(client, cycle, user, justification) {
   const plans = await client.query(
     `SELECT aip.*, e.full_name, e.current_salary, e.employment_status
      FROM advance_installment_plans aip
@@ -1172,6 +1221,7 @@ async function postPendingInstallmentsForCycle(client, cycle, user) {
         employment_status: plan.employment_status,
       },
       user,
+      justification,
       receiptAt: `${todayDate} 00:00:00`,
       receiptDate: todayDate,
       sourceBank: null,
@@ -1226,6 +1276,7 @@ export async function createIndividualAdvance(body, user) {
         installment: firstInstallment,
         employee,
         user,
+        justification: body.justification,
         receiptAt: receipt.timestamp,
         receiptDate: receipt.dateOnly,
         sourceBank,
@@ -1260,6 +1311,7 @@ export async function createIndividualAdvance(body, user) {
         sourceBank,
         entryType: 'individual',
         user,
+        justification: body.justification,
       });
       saved = { rows: [inserted.item] };
       list = inserted.list;
@@ -1335,7 +1387,8 @@ export async function updateIndividualAdvance(listId, itemId, body, user) {
     if (sourceBank && !['Sicoob', 'Sicredi', 'Asaas', 'Itaú'].includes(sourceBank)) throw httpError(400, 'Banco de origem inválido.');
     const accumulatedBefore = await accumulatedInCycle(client, list.cycle_id, employee.id, item.id);
     const snapshot = buildAdvanceSnapshot(employee, accumulatedBefore, amount);
-    if (snapshot.exceeded) assertSpecificAdvancePermission(user, 'advances.override_limits', 'O valor excede o limite deste funcionário. É necessária permissão para exceder limites.');
+    await authorizeAdvanceOverride(client, { snapshot, employee, cycleId: list.cycle_id, amount, user,
+      justification: body.justification, entityId: listId });
     const updated = await client.query(
       `UPDATE advance_list_items SET employee_id = $1, amount = $2, receipt_at = $3, source_bank = $4,
        salary_at_confirmation = $5, accumulated_before = $6, accumulated_after = $7,
@@ -1344,7 +1397,7 @@ export async function updateIndividualAdvance(listId, itemId, body, user) {
        updated_by = $13, updated_at = clock_timestamp() WHERE id = $14 RETURNING *`,
       [employee.id, amount, receipt.timestamp, sourceBank || null, snapshot.salary,
         accumulatedBefore, snapshot.projectedTotal, snapshot.maximumPercentage, snapshot.projectedPercentage,
-        snapshot.projectedPercentage !== null && snapshot.projectedPercentage >= 40,
+        toCents(snapshot.projectedTotal) > toCents(snapshot.warningLimit),
         snapshot.exceeded, snapshot.exceeded ? user.id : null, user.id, item.id],
     );
     await client.query('UPDATE advance_lists SET list_date = $1, updated_by = $2, updated_at = clock_timestamp() WHERE id = $3', [receipt.dateOnly, user.id, listId]);

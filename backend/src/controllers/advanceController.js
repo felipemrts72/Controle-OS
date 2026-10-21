@@ -132,7 +132,7 @@ export async function cyclesIndex(_req, res, next) {
 
 export async function cycleStore(req, res, next) {
   try {
-    res.status(201).json(await createCycle(req.user));
+    res.status(201).json(await createCycle(req.user, req.body));
   } catch (error) { next(error); }
 }
 

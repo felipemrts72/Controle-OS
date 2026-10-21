@@ -69,7 +69,8 @@ after(async () => {
 
 const approve = (body = {}, actor = user) => approveAdvanceList(listId, body, actor);
 const choices = (review, reject = []) => ({ review_token: review.review_token,
-  decisions: review.review_items.map((item) => ({ line_id: item.line_id, decision: reject.includes(item.line_id) ? 'reject' : 'approve' })) });
+  decisions: review.review_items.map((item) => ({ line_id: item.line_id, decision: reject.includes(item.line_id) ? 'reject' : 'approve',
+    justification: item.classification === 'OVERRIDE_REQUIRED' ? 'Exceção autorizada em teste isolado' : undefined })) });
 const state = async () => ({
   list: (await db.query('SELECT * FROM advance_lists WHERE id = $1', [listId])).rows[0],
   items: (await db.query('SELECT * FROM advance_list_items WHERE list_id = $1 ORDER BY id', [listId])).rows,
@@ -222,10 +223,9 @@ test('decisões incompletas, duplicadas ou de outra linha são recusadas sem gra
   assert.equal((await state()).audit.length, 0);
 });
 
-test('lançar e salvar nunca exige warning/override, mesmo com salário ausente', async () => {
+test('salário ausente impede salvar novos valores', async () => {
   await db.query('UPDATE employees SET current_salary = NULL WHERE id = $1', [ids[0].employeeId]);
-  await saveAdvanceItem(listId, ids[0].lineId, { amount: 100000, override_confirmed: true }, user);
-  await submitAdvanceList(listId, user);
+  await assert.rejects(() => saveAdvanceItem(listId, ids[0].lineId, { amount: 100000, override_confirmed: true }, user), { status: 400 });
   assert.equal((await state()).audit.some((entry) => entry.action === 'override_limits'), false);
   assert.equal((await state()).items.some((item) => item.override_used), false);
   const review = await approve();
@@ -239,5 +239,5 @@ test('preserva limites exatos: 40%, 60% e salários até 1999,99', async () => {
   const review = await approve();
   assert.deepEqual(review.review_items.map((item) => item.employee_name).sort(), ['Teste B', 'Teste C']);
   assert.equal(review.review_items.find((item) => item.employee_name === 'Teste B').classification, 'WARNING');
-  assert.equal(review.review_items.find((item) => item.employee_name === 'Teste C').maximum_percentage, 40);
+  assert.equal(review.review_items.find((item) => item.employee_name === 'Teste C').maximum_percentage, 60);
 });
