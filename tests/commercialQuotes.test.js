@@ -275,7 +275,7 @@ test('fluxo completo preserva snapshots, item manual, estados, duplicação e is
     await client.query('ROLLBACK TO SAVEPOINT commercial_number_immutability');
 
     await client.query('SAVEPOINT commercial_number_uniqueness');
-    await client.query("UPDATE commercial_quote_commercial_counters SET last_value = 249 WHERE counter_key = 'global'");
+    await client.query("UPDATE commercial_quote_commercial_counters SET last_value = $1 WHERE counter_key = 'global'", [Number(created.commercial_number) - 1]);
     await assert.rejects(
       duplicateCommercialQuote(created.id, user),
       (error) => error.code === '23505' && /commercial_number/.test(error.constraint || ''),

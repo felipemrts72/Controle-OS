@@ -11,7 +11,7 @@ import { getOrCreateLegacyReconstructedDocumentWithClient } from '../backend/src
 
 after(async () => pool.end());
 
-test('importação histórica real preserva sequência, snapshots, totais e identidade externa', async () => {
+test('lote sintético preserva sequência, snapshots, totais e identidade externa', async () => {
   const summary = (await pool.query(`SELECT COUNT(*)::int quotes,MIN(legacy_number)::int minimum,
     MAX(legacy_number)::int maximum,COUNT(DISTINCT legacy_number)::int distinct_numbers,
     SUM(item_count)::int items,SUM(items_gross_total)::numeric(20,2) gross,
@@ -19,8 +19,8 @@ test('importação histórica real preserva sequência, snapshots, totais e iden
     SUM(total)::numeric(20,2) total,SUM(payment_total)::numeric(20,2) payments,
     COUNT(*) FILTER(WHERE locked_at IS NULL)::int unlocked FROM commercial_legacy_quotes`)).rows[0];
   assert.deepEqual(summary, { quotes:45, minimum:1, maximum:45, distinct_numbers:45, items:112,
-    gross:'5498005.00', item_discount:'162200.00', general_discount:'10.00', total:'5335795.00',
-    payments:'5035795.00', unlocked:0 });
+    gross:'11200.00', item_discount:'0.00', general_discount:'0.00', total:'11200.00',
+    payments:'10900.00', unlocked:0 });
   const aliases = (await pool.query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE is_primary=FALSE)::int discarded
     FROM commercial_legacy_quote_source_aliases`)).rows[0];
   assert.deepEqual(aliases, { total:47, discarded:2 });

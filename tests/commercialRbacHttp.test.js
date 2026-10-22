@@ -50,7 +50,7 @@ before(async () => {
           FROM role_permissions rp
           JOIN permissions p ON p.id = rp.permission_id
           WHERE rp.role_id = r.id
-            AND p.code = 'commercial.customers.view'
+            AND p.code IN ('commercial.customers.view','commercial.catalog.view')
         )
       ORDER BY u.id
       LIMIT 1
