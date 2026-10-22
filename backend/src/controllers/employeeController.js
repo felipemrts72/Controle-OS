@@ -11,6 +11,7 @@ import {
   listDocuments,
   listEmployeeAudit,
   listEmployees,
+  listEmployeesForReport,
   listMealAllowanceHistory,
   listSalaryHistory,
   removeDependent,
@@ -25,6 +26,7 @@ import {
 import { getEmployeeAdvanceProfile } from '../services/advanceService.js';
 import { buildEmployeeProfilePdf } from '../services/pdf/employeePdfService.js';
 import { buildEmployeePendingReportPdf } from '../services/pdf/employeePendingPdfService.js';
+import { buildEmployeeListPdf, buildEmployeeListExcel } from '../services/employeeListReportService.js';
 import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 import { getCompanyPdfData } from '../services/companySettingsService.js';
 import { httpError } from '../utils/httpError.js';
@@ -46,6 +48,23 @@ export function selectPendingReportItems(employees, selectedTypes) {
 export async function index(req, res, next) {
   try {
     res.json(await listEmployees({ user: req.user, query: req.query }));
+  } catch (error) { next(error); }
+}
+
+export async function listReportPdf(req, res, next) {
+  try {
+    const rows = await listEmployeesForReport(req.query);
+    sendPdfResponse(res, await buildEmployeeListPdf(rows, req.query), 'relatorio-funcionarios.pdf');
+  } catch (error) { next(error); }
+}
+
+export async function listReportExcel(req, res, next) {
+  try {
+    const rows = await listEmployeesForReport(req.query);
+    const workbook = await buildEmployeeListExcel(rows, req.query);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="relatorio-funcionarios.xlsx"');
+    res.send(workbook);
   } catch (error) { next(error); }
 }
 

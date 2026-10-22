@@ -219,8 +219,7 @@ async function insertHistoryOnCreate(client, employee, userId) {
   }
 }
 
-export async function listEmployees({ user, query }) {
-  return transaction(async (client) => {
+export function employeeListFilters(query = {}) {
     const params = [];
     const filters = ['e.deleted_at IS NULL'];
     if (query.search) {
@@ -244,18 +243,69 @@ export async function listEmployees({ user, query }) {
       params.push(query.sector_id);
       filters.push(`e.sector_id = $${params.length}`);
     }
+    for (const [key, operator] of [['admission_from', '>='], ['admission_to', '<=']]) {
+      const value = query[key];
+      if (value === undefined || value === '') continue;
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+        Number.isNaN(Date.parse(`${value}T00:00:00Z`)) ||
+        new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) {
+        throw httpError(400, 'Data de admissão inválida.', { field: key });
+      }
+      params.push(value);
+      filters.push(`e.admission_date ${operator} $${params.length}::date`);
+    }
+    if (query.admission_from && query.admission_to && query.admission_from > query.admission_to) {
+      throw httpError(400, 'A data inicial não pode ser posterior à data final.');
+    }
+    return { params, where: filters.join(' AND ') };
+}
+
+export function employeePage(query = {}) {
+  const page = Number(query.page);
+  const pageSize = Number(query.page_size || 20);
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    throw httpError(400, 'Paginação inválida.');
+  }
+  return { page, pageSize, offset: (page - 1) * pageSize };
+}
+
+export async function listEmployees({ user, query }) {
+  return transaction(async (client) => {
+    const { params, where } = employeeListFilters(query);
+    const paged = query.page !== undefined;
+    const { page, pageSize, offset } = paged ? employeePage(query) : { page: 1, pageSize: 20, offset: 0 };
+    const count = paged ? Number((await client.query(`SELECT COUNT(*)::int AS total FROM employees e WHERE ${where}`, params)).rows[0].total) : null;
+    const values = [...params];
+    const limit = paged ? ` LIMIT $${values.push(pageSize)} OFFSET $${values.push(offset)}` : '';
     const result = await client.query(
       `SELECT e.id, e.full_name, e.cpf, e.job_title, e.sector_id, s.name AS sector_name,
         s.is_active AS sector_is_active,
-        e.admission_date, e.employment_status, e.registration_type, e.profile_completed,
+        e.admission_date::text AS admission_date, e.employment_status, e.registration_type, e.profile_completed,
         e.current_salary, e.meal_allowance, e.created_at
        FROM employees e
        LEFT JOIN sectors s ON s.id = e.sector_id
-       WHERE ${filters.join(' AND ')}
-       ORDER BY e.full_name`,
-      params,
+       WHERE ${where}
+       ORDER BY e.admission_date ASC NULLS LAST, e.full_name ASC, e.id ASC${limit}`,
+      values,
     );
-    return result.rows.map((row) => redactEmployee(row, user));
+    const rows = result.rows.map((row) => redactEmployee(row, user));
+    if (!paged) return rows;
+    const facets = await client.query(`SELECT ARRAY(SELECT DISTINCT job_title FROM employees WHERE deleted_at IS NULL AND job_title IS NOT NULL ORDER BY job_title) AS job_titles,
+      (SELECT json_agg(json_build_object('id', id, 'name', name, 'is_active', is_active) ORDER BY name) FROM sectors) AS sectors`);
+    return { rows, total: count, page, page_size: pageSize, job_titles: facets.rows[0].job_titles, sectors: facets.rows[0].sectors || [] };
+  });
+}
+
+export async function listEmployeesForReport(query) {
+  return transaction(async (client) => {
+    const { params, where } = employeeListFilters(query);
+    const result = await client.query(
+      `SELECT e.full_name, e.admission_date::text AS admission_date, e.job_title, s.name AS sector_name, e.employment_status
+       FROM employees e LEFT JOIN sectors s ON s.id = e.sector_id
+       WHERE ${where}
+       ORDER BY e.admission_date ASC NULLS LAST, e.full_name ASC, e.id ASC`, params,
+    );
+    return result.rows;
   });
 }
 

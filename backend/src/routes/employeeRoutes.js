@@ -14,6 +14,8 @@ import {
   employeeIncompleteReportPdf,
   employeeIncompleteReportPreview,
   index,
+  listReportPdf,
+  listReportExcel,
   incompleteReportPdf,
   incompleteReportPreview,
   mealAllowanceHistory,
@@ -35,6 +37,8 @@ export const employeeRoutes = Router();
 employeeRoutes.use(authenticate);
 
 employeeRoutes.get('/', requirePermission('employees.view'), index);
+employeeRoutes.get('/report-pdf', requirePermission('employees.view'), requirePermission('employees.profile.print'), listReportPdf);
+employeeRoutes.get('/report-excel', requirePermission('employees.view'), requirePermission('employees.profile.print'), listReportExcel);
 employeeRoutes.post('/', requirePermission('employees.create'), store);
 employeeRoutes.post('/quick', requirePermission('employees.create'), quickStore);
 employeeRoutes.get('/incomplete-report', requirePermission('employees.profile.print'), incompleteReportPreview);

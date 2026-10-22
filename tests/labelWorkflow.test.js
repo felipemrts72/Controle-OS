@@ -190,8 +190,10 @@ test('regras puras mantêm estados e contagens distintos', () => {
   assert.equal(validateLabelContext({ invoice_number: 'NF', delivery_type: 'transportadora', destination_city: 'Sinop', destination_uf: 'MT' }), null);
 });
 
-test('venda 190000 permanece íntegra em qualquer etapa legítima do ciclo de etiquetas', async () => {
-  const result = await pool.query(
+test('venda sintética permanece íntegra em qualquer etapa legítima do ciclo de etiquetas', async () => {
+  await withRollback(async (client) => {
+  const fixture = await createSyntheticItem(client, { count:10, status:'ready_without_label', invoiceNumber:'QA-8888888', destinationCity:'Cidade QA', destinationUf:'MT' });
+  const result = await client.query(
     `SELECT io.sale_number, io.customer_name, io.invoice_number, io.destination_city, io.destination_uf,
             si.product_name_snapshot,
             COUNT(sv.id)::int AS volumes,
@@ -200,21 +202,24 @@ test('venda 190000 permanece íntegra em qualquer etapa legítima do ciclo de et
        FROM internal_orders io
        JOIN sold_items si ON si.internal_order_id = io.id
        JOIN shipment_volumes sv ON sv.sold_item_id = si.id
-      WHERE io.sale_number = '190000'
+      WHERE io.id = $1
       GROUP BY io.id, si.id`,
-  );
-  assert.deepEqual({...result.rows[0],ready_without_label:undefined,generated:undefined}, {sale_number:'190000',customer_name:'Jose Teste',invoice_number:'8888888',destination_city:'Juara',destination_uf:'PA',product_name_snapshot:'Martelo P/ H-3.5',volumes:10,ready_without_label:undefined,generated:undefined});
+    [fixture.orderId]);
+  assert.deepEqual({...result.rows[0],ready_without_label:undefined,generated:undefined}, {sale_number:fixture.saleNumber,customer_name:'Cliente sintético',invoice_number:'QA-8888888',destination_city:'Cidade QA',destination_uf:'MT',product_name_snapshot:'Produto sintético',volumes:10,ready_without_label:undefined,generated:undefined});
   assert.equal(result.rows[0].ready_without_label+result.rows[0].generated,10);
+  });
 });
 
-test('venda 190000 gera ou reimprime dez códigos sem alterar o estado persistido', async () => {
-  const baseline=await pool.query(`SELECT COUNT(*) FILTER(WHERE sv.shipment_code IS NOT NULL)::int generated,COUNT(*) FILTER(WHERE sv.label_status='ready_without_label')::int ready_without_label FROM shipment_volumes sv JOIN sold_items si ON si.id=sv.sold_item_id JOIN internal_orders io ON io.id=si.internal_order_id WHERE io.sale_number='190000'`);
+test('venda sintética gera ou reimprime dez códigos sem alterar o estado persistido', async () => {
   await withRollback(async (client) => {
+    const fixture=await createSyntheticItem(client,{ count:10,status:'ready_without_label',invoiceNumber:'QA-NF-10' });
+    const baseline=await client.query("SELECT COUNT(*) FILTER(WHERE shipment_code IS NOT NULL)::int generated,COUNT(*) FILTER(WHERE label_status='ready_without_label')::int ready_without_label FROM shipment_volumes WHERE sold_item_id=$1",[fixture.soldItemId]);
+    await client.query('SAVEPOINT qa_label_rollback');
     const item = await client.query(
       `SELECT si.id, io.invoice_number
          FROM sold_items si
          JOIN internal_orders io ON io.id = si.internal_order_id
-        WHERE io.sale_number = '190000'`,
+        WHERE io.id = $1`,[fixture.orderId],
     );
     if(baseline.rows[0].generated===0){const result = await generateSoldItemLabels(client, {soldItemId:item.rows[0].id,invoiceNumber:item.rows[0].invoice_number,userId:null});assert.equal(result.generated,10);}
 
@@ -232,17 +237,10 @@ test('venda 190000 gera ou reimprime dez códigos sem alterar o estado persistid
     const pdf = await buildLabelBatchPdf(volumes.rows, { labelModel: '15x10' });
     assert.equal(pdf.subarray(0, 4).toString(), '%PDF');
     assert.ok(pdf.length > 1000);
+    await client.query('ROLLBACK TO SAVEPOINT qa_label_rollback');
+    const unchanged=await client.query("SELECT COUNT(*) FILTER(WHERE shipment_code IS NOT NULL)::int generated,COUNT(*) FILTER(WHERE label_status='ready_without_label')::int ready_without_label FROM shipment_volumes WHERE sold_item_id=$1",[fixture.soldItemId]);
+    assert.deepEqual(unchanged.rows[0],baseline.rows[0]);
   });
-
-  const unchanged = await pool.query(
-    `SELECT COUNT(*) FILTER (WHERE sv.shipment_code IS NOT NULL)::int AS generated,
-            COUNT(*) FILTER (WHERE sv.label_status = 'ready_without_label')::int AS ready_without_label
-       FROM shipment_volumes sv
-       JOIN sold_items si ON si.id = sv.sold_item_id
-       JOIN internal_orders io ON io.id = si.internal_order_id
-      WHERE io.sale_number = '190000'`,
-  );
-  assert.deepEqual(unchanged.rows[0], baseline.rows[0]);
 });
 
 test('fluxo do frontend atualiza persistência antes do download e oferece nova tentativa sem novo POST', () => {

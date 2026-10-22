@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, Plus, Search, Zap } from 'lucide-react';
+import { Download, Plus, Search, SlidersHorizontal, Zap } from 'lucide-react';
 import { DataTable } from '../../components/DataTable/DataTable.jsx';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
 import { api, getStoredUser } from '../../services/api.js';
@@ -17,18 +17,28 @@ export function EmployeesPage() {
   const canEdit = canAccessPermission(user, 'employees.edit') || canAccessPermission(user, 'employees.manage');
   const canPrint = canAccessPermission(user, 'employees.profile.print');
   const [employees, setEmployees] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [jobTitles, setJobTitles] = useState([]);
+  const [sectors, setSectors] = useState([]);
+  const [showDates, setShowDates] = useState(false);
+  const [exporting, setExporting] = useState('');
   const [loading, setLoading] = useState(true);
   const [pendingReportModalOpen, setPendingReportModalOpen] = useState(false);
   const [pendingReportEmployees, setPendingReportEmployees] = useState([]);
   const [loadingPendingReport, setLoadingPendingReport] = useState(false);
   const [downloadingPendingReport, setDownloadingPendingReport] = useState(false);
-  const [filters, setFilters] = useState({ search: '', cpf: '', status: '', job_title: '', sector_id: '' });
+  const [filters, setFilters] = useState({ search: '', cpf: '', status: '', job_title: '', sector_id: '', admission_from: '', admission_to: '' });
+  const [applied, setApplied] = useState(filters);
 
-  async function load() {
+  async function load(nextFilters = applied, nextPage = page) {
     setLoading(true);
     try {
-      const response = await api.get('/employees', { params: filters });
-      setEmployees(response.data);
+      const response = await api.get('/employees', { params: { ...nextFilters, page: nextPage, page_size: 20 } });
+      setEmployees(response.data.rows);
+      setTotal(response.data.total);
+      setJobTitles(response.data.job_titles);
+      setSectors(response.data.sectors);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Não foi possível carregar funcionários.');
     } finally {
@@ -37,14 +47,8 @@ export function EmployeesPage() {
   }
 
   useEffect(() => {
-    load();
+    load(filters, 1);
   }, []);
-
-  const jobTitles = useMemo(() => [...new Set(employees.map((employee) => employee.job_title).filter(Boolean))].sort(), [employees]);
-  const sectors = useMemo(() => [...new Map(employees.filter((employee) => employee.sector_id).map((employee) => [
-    employee.sector_id,
-    `${employee.sector_name || 'Não informado'}${employee.sector_is_active === false ? ' — inativo' : ''}`,
-  ])).entries()], [employees]);
 
   function changeFilter(event) {
     setFilters((current) => ({ ...current, [event.target.name]: event.target.value }));
@@ -52,7 +56,35 @@ export function EmployeesPage() {
 
   function submitFilters(event) {
     event.preventDefault();
-    load();
+    if (filters.admission_from && filters.admission_to && filters.admission_from > filters.admission_to) {
+      toast.error('A data inicial não pode ser posterior à data final.');
+      return;
+    }
+    setApplied({ ...filters });
+    setPage(1);
+    load(filters, 1);
+  }
+
+  function clearFilters() {
+    const empty = Object.fromEntries(Object.keys(filters).map((key) => [key, '']));
+    setFilters(empty);
+    setApplied(empty);
+    setPage(1);
+    load(empty, 1);
+  }
+
+  function changePage(nextPage) {
+    setPage(nextPage);
+    load(applied, nextPage);
+  }
+
+  async function exportReport(kind) {
+    setExporting(kind);
+    try {
+      await downloadAuthenticatedFile(`/employees/report-${kind}`, `relatorio-funcionarios.${kind === 'pdf' ? 'pdf' : 'xlsx'}`, { params: applied });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Não foi possível gerar o relatório.');
+    } finally { setExporting(''); }
   }
 
   async function openPendingReport() {
@@ -164,18 +196,37 @@ export function EmployeesPage() {
           <span className="field__label">Setor</span>
           <select className="field__input" name="sector_id" value={filters.sector_id} onChange={changeFilter}>
             <option value="">Todos</option>
-            {sectors.map(([sectorId, sectorName]) => <option key={sectorId} value={sectorId}>{sectorName}</option>)}
+            {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}{!sector.is_active ? ' — inativo' : ''}</option>)}
           </select>
         </label>
+        <button className="button" type="button" aria-expanded={showDates} onClick={() => setShowDates((current) => !current)}><SlidersHorizontal size={16} /> Filtros</button>
+        {showDates && <div className="employees-page__date-filters">
+          <label className="field"><span className="field__label">Data de admissão — De</span><input className="field__input" type="date" name="admission_from" value={filters.admission_from} onChange={changeFilter} /></label>
+          <label className="field"><span className="field__label">Data de admissão — Até</span><input className="field__input" type="date" name="admission_to" value={filters.admission_to} onChange={changeFilter} min={filters.admission_from || undefined} /></label>
+        </div>}
         <button className="button button_primary employees-page__filter-button" type="submit">
           <Search size={18} />
-          <span>Filtrar</span>
+          <span>Aplicar filtros</span>
         </button>
+        <button className="button" type="button" onClick={clearFilters}>Limpar filtros</button>
       </form>
+
+      <div className="employees-page__report-actions">
+        <strong>{total} funcionário(s) encontrado(s)</strong>
+        {canPrint && <div className="employees-page__actions">
+          <button className="button" type="button" disabled={Boolean(exporting)} onClick={() => exportReport('pdf')}>Gerar PDF</button>
+          <button className="button" type="button" disabled={Boolean(exporting)} onClick={() => exportReport('excel')}>Exportar Excel</button>
+        </div>}
+      </div>
 
       <div className="panel">
         {loading ? <p>Carregando funcionários...</p> : <DataTable columns={columns} rows={employees} emptyText="Nenhum funcionário encontrado." />}
       </div>
+      {total > 20 && <nav className="employees-page__pagination" aria-label="Paginação de funcionários">
+        <button className="button" disabled={loading || page === 1} onClick={() => changePage(page - 1)}>Anterior</button>
+        <span>Página {page} de {Math.ceil(total / 20)}</span>
+        <button className="button" disabled={loading || page >= Math.ceil(total / 20)} onClick={() => changePage(page + 1)}>Próxima</button>
+      </nav>}
 
       <PendingReportModal
         open={pendingReportModalOpen}

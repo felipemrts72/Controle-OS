@@ -5,6 +5,49 @@
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
 }
 
+.employees-page__date-filters {
+  display: grid;
+  gap: 12px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  min-width: 0;
+}
+
+.employees-page__filters > *,
+.employees-page__date-filters > *,
+.employees-page__date-filters .field__input { min-width: 0; max-width: 100%; }
+
+.employees-page__report-actions,
+.employees-page__pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  margin: 12px 0;
+}
+
+@media (max-width: 430px) {
+  .employees-page__filters > .button,
+  .employees-page__report-actions .button { width: 100%; }
+  .employees-page__report-actions .employees-page__actions { width: 100%; }
+  .employees-page__report-actions .employees-page__actions .button { flex: 1 1 100%; }
+}
+
+@media (max-width: 900px) {
+  .employees-page .data-table { overflow: visible; }
+  .employees-page .data-table__table { border-collapse: separate; border-spacing: 0 10px; min-width: 0; }
+  .employees-page .data-table__table thead { display: none; }
+  .employees-page .data-table__table,
+  .employees-page .data-table__table tbody,
+  .employees-page .data-table__table tr,
+  .employees-page .data-table__table td { display: block; width: 100%; }
+  .employees-page .data-table__table tr { background: var(--color-white); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; }
+  .employees-page .data-table__table td { border-bottom: 0; padding: 8px 4px; overflow-wrap: anywhere; }
+  .employees-page .data-table__table td::before { color: var(--color-text-muted); content: attr(data-label); display: block; font-size: 12px; font-weight: 800; margin-bottom: 4px; text-transform: uppercase; }
+  .employees-page .data-table__empty::before { content: none; }
+}
+
 .employees-page__filter-button,
 .employees-page__save {
   min-width: 140px;

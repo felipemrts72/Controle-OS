@@ -233,8 +233,15 @@ test('mapeadores de status são específicos por entidade',()=>{
   assert.equal(getPurchaseRequestStatusLabel('approved'),'Aprovada — aguardando cotação ou compra');assert.equal(getQuoteStatusLabel('draft'),'Rascunho');assert.equal(getPurchaseOrderStatusLabel('partially_received'),'Parcialmente recebido');assert.equal(getProductReviewStatusLabel('pending_review'),'Pendente de revisão');
 });
 
-test('SC-2026-00004 permanece histórica e pode originar cotação sem fornecedor congelado',async()=>{
-  const result=await pool.query(`SELECT pr.status,pri.product_id,pri.unit FROM purchase_requests pr JOIN purchase_request_items pri ON pri.request_id=pr.id WHERE pr.number='SC-2026-00004'`);
-  assert.equal(result.rows[0]?.status,'approved');assert.equal(result.rows[0]?.product_id,null);assert.equal(result.rows[0]?.unit,'un');
-  assert.match(purchaseService,/supplierIds=Array\.isArray/);
+test('solicitação sintética aprovada conserva unidade original e permite cotação sem fornecedor congelado',async()=>{
+  const client=await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user=(await client.query("SELECT id FROM users WHERE username='felipe'")).rows[0].id;
+    const request=(await client.query("INSERT INTO purchase_requests(number,requester_id,justification,purpose,status) VALUES($1,$2,'QA sintética','maintenance','approved') RETURNING id",[`QA-${crypto.randomUUID().slice(0,24)}`,user])).rows[0].id;
+    await client.query("INSERT INTO purchase_request_items(request_id,description,unit,quantity) VALUES($1,'Item QA','un',1)",[request]);
+    const result=await client.query('SELECT pr.status,pri.product_id,pri.unit FROM purchase_requests pr JOIN purchase_request_items pri ON pri.request_id=pr.id WHERE pr.id=$1',[request]);
+    assert.equal(result.rows[0].status,'approved');assert.equal(result.rows[0].product_id,null);assert.equal(result.rows[0].unit,'un');
+    assert.match(purchaseService,/supplierIds=Array\.isArray/);
+  } finally { await client.query('ROLLBACK'); client.release(); }
 });
