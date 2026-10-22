@@ -16,9 +16,9 @@ test('GET de listagem e detalhe projeta períodos estáveis sem executar escrita
     if (statement === 'BEGIN' || statement === 'COMMIT' || statement === 'SET TRANSACTION READ ONLY') return { rows: [] };
     if (statement.startsWith('SELECT id, full_name, admission_date, employment_status FROM employees WHERE deleted_at')) return { rows: [person] };
     if (statement.startsWith('SELECT id, full_name, admission_date, employment_status FROM employees WHERE id=')) return { rows: [person] };
-    if (statement.startsWith('SELECT * FROM vacation_periods WHERE employee_id=')) return { rows: [] };
-    if (statement.startsWith('SELECT * FROM vacation_absences WHERE employee_id=')) return { rows: [] };
-    if (statement.startsWith('SELECT * FROM vacation_leaves WHERE employee_id=')) return { rows: [] };
+    if (statement.startsWith('SELECT * FROM vacation_periods WHERE employee_id')) return { rows: [] };
+    if (statement.startsWith('SELECT * FROM vacation_absences WHERE employee_id')) return { rows: [] };
+    if (statement.startsWith('SELECT * FROM vacation_leaves WHERE employee_id')) return { rows: [] };
     if (statement.startsWith('SELECT a.*, u.name AS actor_name')) return { rows: [] };
     throw new Error(`SQL inesperada: ${statement}`);
   };

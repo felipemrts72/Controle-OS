@@ -1,18 +1,11 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import dotenv from 'dotenv';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 
-const env = dotenv.parse(fs.readFileSync('.env'));
-const source = new URL(env.DATABASE_URL);
-const testName = process.env.VACATION_TEST_DB;
-if (!/^controle_os_ferias_validacao_[0-9a-f]{8}$/.test(testName || '')) throw new Error('VACATION_TEST_DB deve identificar banco isolado de Férias.');
-if (decodeURIComponent(source.pathname.slice(1)) === testName) throw new Error('Origem e teste não podem ser iguais.');
-const testUrl = new URL(source);
-testUrl.pathname = `/${testName}`;
-process.env.DATABASE_URL = testUrl.toString();
-process.env.JWT_SECRET = env.JWT_SECRET;
+const testUrl = new URL(process.env.DATABASE_URL || '');
+const testName = decodeURIComponent(testUrl.pathname.slice(1));
+if (!['127.0.0.1','localhost'].includes(testUrl.hostname) || !/^(olimen_qa_[a-z0-9_]+|controle_os_ferias_validacao_[0-9a-f]{8})$/.test(testName)) throw new Error('Use DATABASE_URL de banco local sintético de Férias.');
+process.env.JWT_SECRET ||= 'synthetic-qa-secret';
 
 const { query, pool } = await import('../backend/src/database/pool.js');
 const { dateOnly } = await import('../backend/src/services/vacationRules.js');
@@ -35,7 +28,7 @@ const identity = await query('SELECT current_database() AS database_name, to_reg
 assert.equal(identity.rows[0].database_name, testName);
 assert.equal(identity.rows[0].module_present, true);
 const permission = await query("SELECT COUNT(*)::int AS total FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id JOIN roles r ON r.id=rp.role_id WHERE p.code LIKE 'vacations.%' AND r.slug='admin'");
-assert.equal(permission.rows[0].total, 8);
+assert.equal(permission.rows[0].total, 10);
 const schema = await query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1::text[])", [['vacation_periods', 'vacation_absences', 'vacation_leaves', 'vacation_audit']]);
 assert.equal(schema.rows.length, 4);
 const constraints = await query("SELECT conname FROM pg_constraint WHERE conrelid IN ('vacation_absences'::regclass,'vacation_leaves'::regclass,'vacation_audit'::regclass) AND contype='f' AND conname LIKE '%employee_id_fkey'");
@@ -199,7 +192,7 @@ try {
   record('HTTP 200/403 com RBAC real');
 } finally { server.close(); }
 
-const touched = await query("SELECT COUNT(*)::int AS non_synthetic FROM vacation_periods vp JOIN employees e ON e.id=vp.employee_id WHERE e.full_name NOT LIKE 'QA Férias %'");
+const touched = await query("SELECT COUNT(*)::int AS non_synthetic FROM vacation_periods vp JOIN employees e ON e.id=vp.employee_id WHERE e.full_name NOT LIKE 'QA %'");
 assert.equal(touched.rows[0].non_synthetic, 0);
 record('nenhum período criado para funcionários restaurados');
 await pool.end();
