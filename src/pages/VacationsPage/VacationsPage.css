@@ -3,8 +3,12 @@
 .vacations__muted { color: var(--color-text-muted); line-height: 1.45; }
 .vacations__detail-header { align-items: flex-start; }
 .vacations__detail-header h1 { margin-top: 8px; overflow-wrap: anywhere; }
-.vacations__indicators { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.vacations__indicators { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .vacations__metric { display: grid; gap: 9px; min-height: 102px; align-content: center; }
+.vacations__metric-button { width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--color-text); }
+.vacations__metric-button:hover, .vacations__metric-button:focus-visible, .vacations__metric-active { border-color: var(--color-primary); }
+.vacations__metric-urgent { border-color: #dc2626; }
+.vacations__metric-urgent:hover, .vacations__metric-urgent:focus-visible, .vacations__metric-urgent.vacations__metric-active { border-color: #b91c1c; box-shadow: 0 0 0 2px #fee2e2; }
 .vacations__metric span { color: var(--color-text-muted); font-size: 13px; font-weight: 700; }
 .vacations__metric strong { font-size: clamp(24px, 2.6vw, 32px); line-height: 1; }
 .vacations__filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
@@ -23,8 +27,16 @@
 .vacations__employee dl div { display: flex; justify-content: space-between; gap: 10px; min-width: 0; }
 .vacations__employee dt { color: var(--color-text-muted); font-size: 13px; }
 .vacations__employee dd { margin: 0; text-align: right; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
-.vacations__employee-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--color-border); font-size: 12px; }
+.vacations__employee-foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--color-border); font-size: 12px; }
 .vacations__employee-foot strong { margin-left: auto; color: var(--color-primary-dark); white-space: nowrap; }
+.vacations__employee-foot a { font-weight: 700; white-space: nowrap; }
+.vacations__tabs, .vacations__pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vacations__tabs .button { min-height: 40px; }
+.vacations__alert-period { display: grid; gap: 5px; padding: 11px; border: 1px solid var(--color-border); border-radius: 8px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.vacations__alert-period strong { font-size: 13px; }
+.vacations__alert-period a { width: fit-content; font-weight: 700; }
+.vacations__alert-period-overdue { border-color: #dc2626; }
+.vacations__alert-period-overdue > span:nth-child(3) { color: #b91c1c; font-weight: 700; }
 .vacations__pending { color: #a16207; font-weight: 700; }
 .vacations__state, .vacations__empty { color: var(--color-text-muted); }
 .vacations__state p { margin: 0 0 12px; }
@@ -48,7 +60,16 @@
 .vacations__dates div, .vacations__stats div { display: grid; gap: 5px; min-width: 0; }
 .vacations__dates span, .vacations__stats span { color: var(--color-text-muted); font-size: 12px; }
 .vacations__dates strong { font-size: 14px; overflow-wrap: anywhere; }
-.vacations__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-white); }
+.vacations__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(125px, 100%), 1fr)); gap: 12px; padding: 14px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-white); }
+.vacations__agenda { display: grid; gap: 14px; min-width: 0; }
+.vacations__agenda h2 { margin: 0; font-size: 19px; }
+.vacations__agenda-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr)); align-items: end; gap: 10px; }
+.vacations__agenda-filters label { display: grid; gap: 5px; min-width: 0; font-size: 12px; font-weight: 700; }
+.vacations__agenda-filters input, .vacations__agenda-filters select { width: 100%; min-width: 0; min-height: 40px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 7px; background: var(--color-white); color: var(--color-text); }
+.vacations__agenda-list { display: grid; gap: 0; }
+.vacations__agenda-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-top: 1px solid var(--color-border); font-size: 13px; }
+.vacations__agenda-row > div { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.vacations__agenda-row span { color: var(--color-text-muted); }
 .vacations__stats strong { font-size: 19px; }
 .vacations__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .vacations__section { min-width: 0; border-top: 1px solid var(--color-border); padding-top: 14px; }
@@ -61,7 +82,7 @@
 .vacations__month small { color: var(--color-text-muted); }
 .vacations__record { border-top: 1px solid var(--color-border); padding-top: 9px; overflow-wrap: anywhere; }
 .vacations__record p { margin: 4px 0; color: var(--color-text-muted); }
-.vacations__leave { display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--color-border); }
+.vacations__leave { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--color-border); }
 .vacations__leave p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .vacations__audit p { margin: 12px 0 0; overflow-wrap: anywhere; }
 .vacations__overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: #0008; }
@@ -73,3 +94,42 @@
 .vacations__error { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1100; width: max-content; max-width: 90vw; margin: 0; padding: 12px; border: 1px solid #b91c1c; border-radius: 8px; background: var(--color-white); color: #b91c1c; box-shadow: var(--shadow-soft); }
 @media (max-width: 850px) { .vacations__indicators { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vacations__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vacations__filters button { grid-column: 1 / -1; } }
 @media (max-width: 600px) { .vacations__indicators { gap: 9px; } .vacations__metric { min-height: 84px; padding: 13px; } .vacations__filters { grid-template-columns: minmax(0, 1fr); } .vacations__filters button { grid-column: auto; } .vacations__grid { grid-template-columns: minmax(0, 1fr); } .vacations__employee { min-height: 0; } .vacations__employee-summary { grid-template-columns: minmax(0, 1fr); } .vacations__employee-summary div { border-right: 0; border-bottom: 1px solid var(--color-border); padding: 0 0 9px; } .vacations__employee-summary div:last-child { border-bottom: 0; padding-bottom: 0; } .vacations__dates { grid-template-columns: minmax(0, 1fr); } .vacations__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vacations__leave { display: grid; } .vacations__actions .button { max-width: 100%; } }
+.vacations__documents { width: 100%; flex-basis: 100%; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--border, #ddd); }
+.vacations__documents summary { cursor: pointer; font-weight: 600; }
+.vacations__document { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .5rem 0; border-bottom: 1px solid var(--border, #ddd); }
+.vacations__document span, .vacations__document small { display: block; overflow-wrap: anywhere; }
+.vacations__document-form { display: grid; gap: .5rem; max-width: 38rem; margin-top: .75rem; }
+.vacations__document-form input, .vacations__document-form select { width: 100%; max-width: 100%; }
+@media (max-width: 600px) { .vacations__document { display: block; } .vacations__document .vacations__actions { margin-top: .5rem; flex-wrap: wrap; } }
+/* Uma dimensão para todos os campos editáveis de Férias no celular. */
+@media (max-width: 600px) {
+  .vacations__compact-fields :is(input:not([type="checkbox"]):not([type="file"]), select) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 38px;
+    min-height: 38px;
+    padding: 5px 8px;
+    font-size: 16px;
+    line-height: 1.2;
+  }
+  .vacations__compact-fields textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 64px;
+    padding: 7px 8px;
+    font-size: 16px;
+    line-height: 1.3;
+  }
+  .vacations__compact-fields input[type="file"] {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-height: 38px;
+    padding: 5px 8px;
+    font-size: 14px;
+  }
+}

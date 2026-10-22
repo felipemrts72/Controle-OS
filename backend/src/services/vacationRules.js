@@ -24,6 +24,13 @@ export function addDays(value, days) {
   return date.toISOString().slice(0, 10);
 }
 
+export function addCalendarMonths(value, months) {
+  const [year, month, day] = dateOnly(value).split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
 export function anniversary(admission, years) {
   const [year, month, day] = dateOnly(admission).split('-').map(Number);
   const targetYear = year + years;
@@ -104,4 +111,10 @@ export function validateLeaveCollection(leaves, entitlement) {
   const balance = entitlement - taken;
   if (balance < 0) throw httpError(409, 'Correção deixaria saldo negativo.');
   return { taken, balance };
+}
+
+export function vacationBalances(entitlement, leaves) {
+  const taken = leaves.filter((leave) => ['gozada', 'historica'].includes(leave.status)).reduce((sum, leave) => sum + Number(leave.days), 0);
+  const planned = leaves.filter((leave) => leave.status === 'programada').reduce((sum, leave) => sum + Number(leave.days), 0);
+  return { taken, planned, balance: entitlement == null ? null : entitlement - taken, free_balance: entitlement == null ? null : entitlement - taken - planned };
 }
