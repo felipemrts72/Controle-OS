@@ -1,6 +1,16 @@
 import { addCalendarMonths, addDays, businessToday, dateOnly } from './vacationRules.js';
 
-export const vacationFilters = ['all', 'acquired', 'due_soon', 'overdue', 'bonus_deadline'];
+export const vacationFilters = ['all', 'acquired', 'due_soon', 'overdue', 'bonus_deadline', 'december'];
+
+export function decemberPriority(period, year, today = businessToday()) {
+  const current = dateOnly(today);
+  const yearEnd = `${year}-12-31`;
+  if (dateOnly(period.acquisition_end) >= current || Number(period.balance || 0) <= 0) return null;
+  const due = dateOnly(period.concession_end);
+  if (due < current) return 'Atrasadas';
+  if (due <= yearEnd) return 'Vencem até 31 de dezembro';
+  return 'Planejar para dezembro';
+}
 
 export function bonusDeadlineAlert(period, today = businessToday()) {
   const deadline = addDays(period.acquisition_end, -15);

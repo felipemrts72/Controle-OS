@@ -80,6 +80,7 @@ export const NAVIGATION_ENTRIES = [
     items: [
       { to: '/funcionarios', label: 'Funcionários', icon: IdCard, permission: 'employees.view', match: (path) => path === '/funcionarios' || path.startsWith('/funcionarios/') },
       { to: '/ferias', label: 'Férias', icon: CalendarDays, permission: 'vacations.view', match: (path) => path === '/ferias' || path.startsWith('/ferias/') },
+      { to: '/feriados', label: 'Feriados', icon: CalendarDays, permission: 'vacations.view' },
       { to: '/premios', label: 'Prêmios', icon: Trophy, permission: 'awards.view' },
       { to: '/vales', label: 'Vales', icon: HandCoins, permission: 'advances.view', match: (path) => path === '/vales' || (/^\/vales\/[^/]+$/.test(path) && path !== '/vales/relatorios') },
       { to: '/vales/relatorios', label: 'Relatórios de vales', icon: FileSearch, permission: 'advances.reports.view', match: (path) => path.startsWith('/vales/relatorios') },

@@ -2,7 +2,8 @@ import { query, transaction } from '../database/pool.js';
 import { createHash } from 'node:crypto';
 import { httpError } from '../utils/httpError.js';
 import { addCalendarMonths, addDays, article130Days, businessToday, calendarDays, dateOnly, monthsInPeriod, periodsFromAdmission, validateLeaveCollection, vacationComplianceAlerts, vacationStatus } from './vacationRules.js';
-import { bonusDeadlineAlert, decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
+import { bonusDeadlineAlert, decemberPriority, decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
+import { holidayOn } from './holidayService.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function id(value) { if (!uuid.test(String(value))) throw httpError(400, 'Identificador inválido.'); return value; }
@@ -15,10 +16,15 @@ function bonusFields(payload, period, entitlement, others = []) {
   if (bonus && others.some((row) => Number(row.bonus_days || 0) > 0)) throw httpError(409, 'Já existe abono neste período aquisitivo.');
   return { bonus, requested: bonus ? requested : null };
 }
-function validateFutureDates(start, end, period, notice) {
-  if (start <= businessToday() || start < dateOnly(period.concession_start) || end > dateOnly(period.concession_end)) throw httpError(400, 'Datas fora do intervalo programável.');
-  const weekday = new Date(`${start}T00:00:00Z`).getUTCDay();
-  if (weekday === 5 || weekday === 6) throw httpError(400, 'O início das férias não pode ocorrer nos dois dias anteriores ao repouso semanal de domingo. Confira a escala do funcionário.');
+export async function validateFutureDates(start, end, period, notice, today = businessToday(), holidayLookup = holidayOn) {
+  if (start <= today || start < dateOnly(period.concession_start)) throw httpError(400, 'O gozo futuro deve começar após hoje e após a aquisição do direito.');
+  // O prazo vencido é exibido como atraso, mas não impede a organização do gozo pendente.
+  for (const offset of [1, 2]) {
+    const target = addDays(start, offset);
+    const rest = new Date(`${target}T00:00:00Z`).getUTCDay() === 0;
+    const holiday = (await holidayLookup(target)).find((item) => item.classification === 'feriado_legal' || item.no_work);
+    if (rest || holiday) throw httpError(400, `Início vedado em ${start}: ${target} é ${holiday?.name || 'repouso semanal remunerado'}. As férias não podem começar nos dois dias anteriores.`);
+  }
   if (!notice || calendarDays(notice, start) - 1 < 30) throw httpError(400, 'O aviso escrito deve anteceder o início das férias em pelo menos 30 dias.');
 }
 export function entitlementForPeriod(period, absences, leaves, today = businessToday()) {
@@ -138,7 +144,9 @@ export async function listVacationAgenda(options = {}) {
 }
 export async function listVacationEmployees(options = {}, admin = false) {
   const legacy = typeof options === 'string';
-  const { search = '', filter = 'all', status = '', page = 1 } = legacy ? { search: options } : options;
+  const { search = '', filter = 'all', status = '', page = 1, year = Number(businessToday().slice(0,4)) } = legacy ? { search: options } : options;
+  const selectedYear = Number(year);
+  if (!Number.isInteger(selectedYear) || selectedYear < 1900 || selectedYear > 2200) throw httpError(400, 'Ano inválido.');
   if (filter === 'bonus_deadline' && !admin) throw httpError(403, 'Acesso negado.');
   if (!vacationFilters.includes(filter)) throw httpError(400, 'Filtro de férias inválido.');
   const pageNumber = Number(page);
@@ -146,7 +154,7 @@ export async function listVacationEmployees(options = {}, admin = false) {
   const today = businessToday();
   const items = await transaction(async (client) => {
     await client.query('SET TRANSACTION READ ONLY');
-    const people = (await client.query(`SELECT id, full_name, admission_date, employment_status FROM employees WHERE deleted_at IS NULL AND employment_status='ativo' AND full_name ILIKE $1 ORDER BY full_name`, [`%${String(search).slice(0, 100)}%`])).rows;
+    const people = (await client.query(`SELECT id, full_name, job_title, admission_date, employment_status FROM employees WHERE deleted_at IS NULL AND employment_status='ativo' AND full_name ILIKE $1 ORDER BY full_name`, [`%${String(search).slice(0, 100)}%`])).rows;
     if (!people.length) return [];
     const employeeIds = people.map((person) => person.id);
     const periodRows = await client.query('SELECT * FROM vacation_periods WHERE employee_id = ANY($1::uuid[]) ORDER BY ordinal DESC', [employeeIds]);
@@ -160,7 +168,7 @@ export async function listVacationEmployees(options = {}, admin = false) {
       const periods = visiblePeriods(person, existingByEmployee.get(person.id) || [], today).sort((a, b) => b.ordinal - a.ordinal);
       const absences = absencesByEmployee.get(person.id) || [];
       const leaves = leavesByEmployee.get(person.id) || [];
-      return { ...person, periods: decorateVacationPeriods(periods.map((period) => summarize(period, absences.filter((item) => item.period_id === period.id), leaves.filter((item) => item.period_id === period.id), today, admin)), today) };
+      return { ...person, periods: decorateVacationPeriods(periods.map((period) => summarize(period, absences.filter((item) => item.period_id === period.id), leaves.filter((item) => item.period_id === period.id), today, admin)), today).map((period) => ({ ...period, alert: { ...period.alert, december: decemberPriority(period, selectedYear, today) } })) };
     });
   });
   if (admin) for (const item of items) for (const period of item.periods) Object.assign(period.alert, bonusDeadlineAlert(period, today));
@@ -175,6 +183,7 @@ export async function listVacationEmployees(options = {}, admin = false) {
     near_due: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.due_soon)).length,
     on_leave: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.leaves.some((leave) => ['gozada', 'historica'].includes(leave.status) && dateOnly(leave.start_date) <= today && dateOnly(leave.end_date) >= today))).length,
     pending: indicatorItems.reduce((sum, item) => sum + item.periods.filter((period) => inStatus(period) && period.status === 'INFORMAÇÕES INSUFICIENTES').length, 0),
+    december: indicatorItems.reduce((sum, item) => sum + item.periods.filter((period) => inStatus(period) && period.alert.december).length, 0),
   };
   if (admin) indicators.bonus_deadline = indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.bonus_deadline)).length;
   const filtered = items.filter((item) => item.periods.some((period) => matchesVacationFilter(period, filter) && (!status || period.status === status)) || (filter === 'all' && !status && item.periods.length === 0));
@@ -185,6 +194,10 @@ export async function listVacationEmployees(options = {}, admin = false) {
   if (filter === 'due_soon') filtered.sort((a, b) => {
     const closest = (item) => item.periods.filter((period) => period.alert.due_soon).map((period) => dateOnly(period.concession_end)).sort()[0];
     return closest(a).localeCompare(closest(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
+  });
+  if (filter === 'december') filtered.sort((a,b) => {
+    const priority = (item) => item.periods.filter((period) => period.alert.december).map((period) => `${period.alert.december === 'Atrasadas' ? '0' : period.alert.december === 'Vencem até 31 de dezembro' ? '1' : '2'}-${dateOnly(period.concession_end)}`).sort()[0];
+    return priority(a).localeCompare(priority(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
   });
   const pageSize = 20;
   return { indicators, employees: legacy ? filtered : filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize), total: filtered.length, page: pageNumber, page_size: pageSize };
@@ -206,6 +219,8 @@ export async function getEmployeeVacations(employeeId, admin = false) {
 export async function saveAbsence(employeeId, payload, actor, absenceId = null) {
   return transaction(async (client) => {
     const person = await employee(client, employeeId, true);
+    const noWorkHoliday = (await holidayOn(payload.occurrence_date)).find((item) => item.no_work);
+    if (noWorkHoliday && payload.classification === 'injustificada' && payload.confirm_scheduled_work !== true) throw httpError(400, `${noWorkHoliday.name}: sem expediente previsto. Para registrar falta injustificada, confirme que havia jornada excepcional.`);
     const period = await periodForDate(client, person, payload.occurrence_date);
     const quantity = Number(payload.quantity);
     if (![0.5, 1].includes(quantity) || !['justificada', 'injustificada', 'pendente'].includes(payload.classification)) throw httpError(400, 'Quantidade ou classificação inválida.');
@@ -281,7 +296,7 @@ export async function saveLeave(employeeId, periodId, payload, actor) {
     const start = dateOnly(payload.start_date); const end = dateOnly(payload.end_date);
     const days = calendarDays(start, end);
     const notice = payload.notice_date ? dateOnly(payload.notice_date) : null;
-    validateFutureDates(start, end, period, notice);
+    await validateFutureDates(start, end, period, notice);
     const calendarReview = note(payload.calendar_review_note);
     if (payload.employee_agreed !== true || payload.calendar_confirmed !== true || !calendarReview || calendarReview.length < 10) throw httpError(400, 'Registre a concordância e a conferência administrativa do calendário e da escala.');
     const absences = (await client.query('SELECT * FROM vacation_absences WHERE period_id=$1 AND cancelled_at IS NULL', [period.id])).rows;
@@ -311,7 +326,7 @@ export async function editScheduledLeave(employeeId, leaveId, payload, actor) {
     if (!period || period.special_case) throw httpError(409, 'Período com divergência cadastral.');
     const start = dateOnly(payload.start_date); const end = dateOnly(payload.end_date);
     const days = calendarDays(start, end);
-    validateFutureDates(start, end, period, before.notice_date ? dateOnly(before.notice_date) : null);
+    await validateFutureDates(start, end, period, before.notice_date ? dateOnly(before.notice_date) : null);
     const calendarReview = note(payload.calendar_review_note);
     if (payload.calendar_confirmed !== true || !calendarReview || calendarReview.length < 10) throw httpError(400, 'Confirme a revisão do calendário e da escala para as novas datas.');
     const existing = (await client.query("SELECT * FROM vacation_leaves WHERE employee_id=$1 AND id<>$2 AND status<>'cancelada' FOR UPDATE", [person.id, before.id])).rows;
