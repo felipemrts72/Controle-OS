@@ -3,6 +3,7 @@ import { authenticate, requirePermission } from '../middlewares/authMiddleware.j
 import { cancelAbsence, changeLeave, correctConfirmedLeave, declareHistoricalEntitlement, editScheduledLeave, getEmployeeVacations, listVacationAgenda, listVacationEmployees, regularizeHistoricalLeave, reviewPeriod, saveAbsence, saveLeave } from '../services/vacationService.js';
 import { archiveVacationDocument, listVacationDocuments, readVacationDocument, uploadVacationDocument, zipVacationPeriod } from '../services/vacationDocumentService.js';
 import { vacationAccountingPdf } from '../services/vacationAccountingService.js';
+import { vacationProgrammedReport } from '../services/vacationProgrammedReportService.js';
 import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 
 export const vacationRoutes = Router();
@@ -11,6 +12,7 @@ const handle = (operation, status = 200) => async (req, res, next) => {
   try { res.status(status).json(await operation(req)); } catch (error) { next(error); }
 };
 vacationRoutes.get('/', requirePermission('vacations.view'), handle((req) => listVacationEmployees(req.query)));
+vacationRoutes.get('/programmed-report.pdf', requirePermission('vacations.view'), async (req, res, next) => { try { const { pdf, filename } = await vacationProgrammedReport(req.query); sendPdfResponse(res, pdf, filename); } catch (error) { next(error); } });
 vacationRoutes.get('/agenda', requirePermission('vacations.view'), handle((req) => listVacationAgenda(req.query)));
 vacationRoutes.get('/employees/:employeeId', requirePermission('vacations.view'), handle((req) => getEmployeeVacations(req.params.employeeId)));
 vacationRoutes.post('/employees/:employeeId/absences', requirePermission('vacations.absences.create'), handle((req) => saveAbsence(req.params.employeeId, req.body, req.user.id), 201));

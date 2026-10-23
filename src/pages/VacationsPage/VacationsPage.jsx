@@ -18,18 +18,18 @@ const documentTypes = { signed_receipt: 'Recibo de férias', notice: 'Aviso de f
 const documentBase = (employeeId, periodId, leaveId) => `/vacations/employees/${employeeId}/periods/${periodId}/leaves/${leaveId}/documents`;
 const fileMime = (file) => file.type || (/\.pdf$/i.test(file.name) ? 'application/pdf' : /\.png$/i.test(file.name) ? 'image/png' : /\.jpe?g$/i.test(file.name) ? 'image/jpeg' : 'application/octet-stream');
 const sendDocument = (base, item) => api.post(base, item.file, { headers: { 'Content-Type': fileMime(item.file), 'x-document-type': item.type, 'x-original-name': encodeURIComponent(item.file.name) } });
-async function downloadAccountingPdf(employeeId, periodId, leave, employeeName) {
+async function downloadVacationPdf(path, filename, params) {
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const tab = ios ? window.open('', '_blank') : null;
   try {
-    const response = await api.get(`/vacations/employees/${employeeId}/periods/${periodId}/leaves/${leave.id}/accounting.pdf`, { responseType: 'blob' });
+    const response = await api.get(path, { responseType: 'blob', params });
     if (!String(response.headers['content-type'] || '').includes('application/pdf')) throw new Error('O servidor não retornou um PDF válido.');
     const url = URL.createObjectURL(response.data);
     if (tab) tab.location.href = url;
     else {
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Ferias_Contabilidade_${employeeName.replace(/[^a-zA-Z0-9]+/g, '_')}_${String(leave.start_date).slice(0, 10)}.pdf`;
+      link.download = filename;
       document.body.appendChild(link); link.click(); link.remove();
     }
     window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
@@ -42,6 +42,7 @@ async function downloadAccountingPdf(employeeId, periodId, leave, employeeName) 
     throw error;
   }
 }
+const downloadAccountingPdf = (employeeId, periodId, leave, employeeName) => downloadVacationPdf(`/vacations/employees/${employeeId}/periods/${periodId}/leaves/${leave.id}/accounting.pdf`, `Ferias_Contabilidade_${employeeName.replace(/[^a-zA-Z0-9]+/g, '_')}_${String(leave.start_date).slice(0, 10)}.pdf`);
 
 function VacationDocuments({ employeeId, periodId, leave, can }) {
   const base = documentBase(employeeId, periodId, leave.id);
@@ -145,6 +146,21 @@ function VacationContent({ employeeId, initialPeriodId, initialLeaveId, initialL
   const [createdLaunch, setCreatedLaunch] = useState(null);
   const [documentType, setDocumentType] = useState('signed_receipt');
   const [uploadStatus, setUploadStatus] = useState('');
+  const [reportRange, setReportRange] = useState({ start_date: '', end_date: '' });
+  const [reportBusy, setReportBusy] = useState(false);
+
+  async function downloadProgrammedReport() {
+    if (reportBusy) return;
+    if (reportRange.start_date && reportRange.end_date && reportRange.start_date > reportRange.end_date) { toast.error('A data inicial deve ser anterior ou igual à data final.'); return; }
+    setReportBusy(true);
+    try {
+      const params = Object.fromEntries(Object.entries(reportRange).filter(([, value]) => value));
+      const filenameDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
+      await downloadVacationPdf('/vacations/programmed-report.pdf', `Ferias_Programadas_${filenameDate}.pdf`, params);
+      toast.success('Relatório de férias programadas gerado.');
+    } catch (failure) { toast.error(message(failure)); }
+    finally { setReportBusy(false); }
+  }
 
   async function load() {
     const currentRequest = ++requestId.current;
@@ -204,6 +220,7 @@ function VacationContent({ employeeId, initialPeriodId, initialLeaveId, initialL
     return <section className="page vacations vacations__compact-fields"><header className="page__header"><div><h1 className="page__title">Férias</h1><p className="vacations__muted">Acompanhe períodos, faltas e programações por funcionário.</p></div><a className="button" href="#agenda-ferias">Agenda de férias ↓</a></header>
       <div className="vacations__indicators">{cards.map(([key, label, value]) => <button type="button" className={`panel vacations__metric vacations__metric-button ${key === 'due_soon' ? 'vacations__metric-urgent' : ''} ${filter === key ? 'vacations__metric-active' : ''}`} aria-pressed={filter === key} key={key} onClick={() => selectFilter(key)}><span>{label}</span><strong>{value ?? 0}</strong></button>)}</div>
       <form className="panel vacations__filters" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedSearch(search); }}><label><span>Funcionário</span><input aria-label="Pesquisar funcionário" placeholder="Pesquisar por nome" value={search} onChange={(event) => setSearch(event.target.value)} /></label><label><span>Situação</span><select aria-label="Filtrar situação" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">Todas as situações</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><button className="button button_primary" type="submit">Pesquisar</button></form>
+      {can('vacations.view') && <div className="panel vacations__report"><div><strong>Relatório para contabilidade</strong><p className="vacations__muted">Todas as férias programadas. Informe um intervalo apenas se quiser limitar pelas datas de gozo.</p></div><div className="vacations__report-controls"><label>De<input type="date" value={reportRange.start_date} onChange={(event) => setReportRange((current) => ({ ...current, start_date: event.target.value }))} /></label><label>Até<input type="date" value={reportRange.end_date} onChange={(event) => setReportRange((current) => ({ ...current, end_date: event.target.value }))} /></label><button type="button" className="button button_primary" disabled={reportBusy} onClick={downloadProgrammedReport}>{reportBusy ? 'Gerando relatório...' : 'Gerar relatório de férias programadas'}</button></div></div>}
       <div className="vacations__tabs" role="group" aria-label="Filtrar períodos de férias">{[['all', 'Todos'], ['acquired', 'Período adquirido'], ['due_soon', 'Vencem em 4 meses'], ['overdue', 'Vencidas']].map(([key, label]) => <button type="button" className={`button ${filter === key ? 'button_primary' : ''}`} aria-pressed={filter === key} key={key} onClick={() => selectFilter(key)}>{label}</button>)}</div>
       <div className="vacations__list-heading"><h2>Funcionários</h2><span>{data.total} encontrado(s)</span></div>
       {rows.length === 0 ? <div className="panel vacations__empty">Nenhum funcionário encontrado para os filtros selecionados.</div> : <div className="vacations__grid">{rows.map((item) => {
