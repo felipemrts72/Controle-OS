@@ -22,7 +22,7 @@ function validateFutureDates(start, end, period, notice) {
   if (weekday === 5 || weekday === 6) throw httpError(400, 'O início das férias não pode ocorrer nos dois dias anteriores ao repouso semanal de domingo. Confira a escala do funcionário.');
   if (!notice || calendarDays(notice, start) - 1 < 30) throw httpError(400, 'O aviso escrito deve anteceder o início das férias em pelo menos 30 dias.');
 }
-function entitlementForPeriod(period, absences, leaves, today = businessToday()) {
+export function entitlementForPeriod(period, absences, leaves, today = businessToday()) {
   if (period.special_case || dateOnly(period.acquisition_end) >= today) return { entitlement: null, source: 'incomplete' };
   if (period.historical_entitlement != null) return { entitlement: Number(period.historical_entitlement), source: 'declared' };
   if (absences.some((row) => row.classification === 'pendente' || (row.classification === 'injustificada' && Number(row.quantity) === 0.5))) return { entitlement: null, source: 'unresolved_absences' };

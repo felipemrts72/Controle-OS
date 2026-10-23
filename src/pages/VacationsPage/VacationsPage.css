@@ -82,8 +82,17 @@
 .vacations__month small { color: var(--color-text-muted); }
 .vacations__record { border-top: 1px solid var(--color-border); padding-top: 9px; overflow-wrap: anywhere; }
 .vacations__record p { margin: 4px 0; color: var(--color-text-muted); }
-.vacations__leave { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--color-border); }
+.vacations__leave { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; margin-top: 12px; padding: 16px; border: 1px solid var(--color-border); border-radius: 10px; }
 .vacations__leave p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
+.vacations__leave > div { min-width: 0; overflow-wrap: anywhere; }
+.vacations__leave-documents, .vacations__leave-actions { padding-top: 12px; border-top: 1px solid var(--color-border); }
+.vacations__leave-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+.vacations__leave-buttons .button { width: auto; max-width: 100%; white-space: normal; text-align: center; }
+.vacations__saved { display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.vacations__saved p { margin: 6px 0 0; }
+.vacations__saved .vacations__leave-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.vacations__created-actions { display: grid; justify-items: start; gap: 8px; min-width: 0; }
+.vacations__created-actions p { margin: 0; }
 .vacations__audit p { margin: 12px 0 0; overflow-wrap: anywhere; }
 .vacations__overlay { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); overflow-y: auto; background: #0008; }
 .vacations__dialog { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; box-sizing: border-box; width: min(100%, 520px); max-width: calc(100vw - 24px); min-width: 0; max-height: calc(100vh - 24px); margin-inline: auto; overflow-y: auto; }
@@ -107,7 +116,7 @@
 .vacations__document span, .vacations__document small { display: block; overflow-wrap: anywhere; }
 .vacations__document-form { display: grid; gap: .5rem; max-width: 38rem; margin-top: .75rem; }
 .vacations__document-form input, .vacations__document-form select { width: 100%; max-width: 100%; }
-@media (max-width: 600px) { .vacations__document { display: block; } .vacations__document .vacations__actions { margin-top: .5rem; flex-wrap: wrap; } }
+@media (max-width: 600px) { .vacations__document { display: block; } .vacations__document .vacations__actions { margin-top: .5rem; flex-wrap: wrap; } .vacations__leave { padding: 12px; } .vacations__leave-buttons { display: grid; grid-template-columns: minmax(0, 1fr); } .vacations__leave-buttons .button, .vacations__saved .button, .vacations__created-actions .button { width: 100%; } .vacations__saved .vacations__leave-actions { display: grid; grid-template-columns: minmax(0, 1fr); } }
 .vacations__pending-documents { display: grid; gap: 10px; min-width: 0; border-top: 1px solid var(--color-border); padding-top: 12px; }
 .vacations__pending-documents h3 { margin: 0; font-size: 16px; }
 .vacations__dialog .vacations__file-button { display: inline-flex; width: fit-content; cursor: pointer; }
