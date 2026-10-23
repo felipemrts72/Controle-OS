@@ -409,3 +409,7 @@
     width: 100%;
   }
 }
+.employees-page__vacation { min-width: 0; border-top: 1px solid var(--color-border); padding-top: 12px; overflow-wrap: anywhere; }
+.employees-page__vacation h3 { margin: 0 0 6px; }
+.employees-page__vacation p { margin: 5px 0; }
+.employees-page__vacation-alert { color: #a16207; font-weight: 700; }

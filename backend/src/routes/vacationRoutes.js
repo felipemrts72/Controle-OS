@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { authenticate, requirePermission } from '../middlewares/authMiddleware.js';
-import { cancelAbsence, changeLeave, correctConfirmedLeave, editScheduledLeave, getEmployeeVacations, listVacationAgenda, listVacationEmployees, regularizeHistoricalLeave, reviewPeriod, saveAbsence, saveLeave } from '../services/vacationService.js';
+import { cancelAbsence, changeLeave, correctConfirmedLeave, declareHistoricalEntitlement, editScheduledLeave, getEmployeeVacations, listVacationAgenda, listVacationEmployees, regularizeHistoricalLeave, reviewPeriod, saveAbsence, saveLeave } from '../services/vacationService.js';
 import { archiveVacationDocument, listVacationDocuments, readVacationDocument, uploadVacationDocument, zipVacationPeriod } from '../services/vacationDocumentService.js';
 import { vacationAccountingPdf } from '../services/vacationAccountingService.js';
 import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
@@ -17,6 +17,7 @@ vacationRoutes.post('/employees/:employeeId/absences', requirePermission('vacati
 vacationRoutes.put('/employees/:employeeId/absences/:absenceId', requirePermission('vacations.absences.edit'), handle((req) => saveAbsence(req.params.employeeId, req.body, req.user.id, req.params.absenceId)));
 vacationRoutes.delete('/employees/:employeeId/absences/:absenceId', requirePermission('vacations.correct'), handle((req) => cancelAbsence(req.params.employeeId, req.params.absenceId, req.user.id)));
 vacationRoutes.post('/employees/:employeeId/periods/:periodId/review', requirePermission('vacations.review'), handle((req) => reviewPeriod(req.params.employeeId, req.params.periodId, req.body, req.user.id)));
+vacationRoutes.put('/employees/:employeeId/periods/:periodId/historical-entitlement', requirePermission('vacations.review'), handle((req) => declareHistoricalEntitlement(req.params.employeeId, req.params.periodId, req.body, req.user.id)));
 vacationRoutes.post('/employees/:employeeId/periods/:periodId/leaves', requirePermission('vacations.schedule'), requirePermission('vacations.review'), handle((req) => saveLeave(req.params.employeeId, req.params.periodId, req.body, req.user.id), 201));
 vacationRoutes.post('/employees/:employeeId/periods/:periodId/historical-leaves', requirePermission('vacations.review'), handle((req) => regularizeHistoricalLeave(req.params.employeeId, req.params.periodId, req.body, req.user.id), 201));
 vacationRoutes.post('/employees/:employeeId/leaves/:leaveId/confirm', requirePermission('vacations.confirm'), handle((req) => changeLeave(req.params.employeeId, req.params.leaveId, 'confirm', req.user.id)));

@@ -9,7 +9,7 @@ import { documentTypes, formatCpf, formatDate, formatMoney, isValidCpf, maritalS
 import { PendingReportModal } from './PendingReportModal.jsx';
 import './EmployeesPage.css';
 
-const tabs = ['Resumo', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'Dependentes', 'Documentos', 'Histórico salarial', 'Histórico de vale alimentação', 'Vales', 'Auditoria'];
+const tabs = ['Resumo', 'Férias', 'Dados pessoais', 'Endereço', 'Dados trabalhistas', 'Dependentes', 'Documentos', 'Histórico salarial', 'Histórico de vale alimentação', 'Vales', 'Auditoria'];
 
 const editableFields = [
   'full_name', 'birth_date', 'cpf', 'rg', 'rg_issuer', 'rg_state', 'rg_issue_date', 'phone', 'alternate_phone', 'email',
@@ -71,11 +71,14 @@ export function EmployeeDetailPage() {
   const canDocumentsManage = canAccessPermission(user, 'employees.documents.manage') || canAccessPermission(user, 'employees.manage');
   const canPrint = canAccessPermission(user, 'employees.profile.print');
   const canAdvancesView = canAccessPermission(user, 'advances.view');
+  const canVacationsView = canAccessPermission(user, 'vacations.view');
+  const canVacationDocumentsView = canAccessPermission(user, 'vacations.documents.view');
   const canAudit = canEdit;
 
   const [activeTab, setActiveTab] = useState(searchParams.get('complete') ? 'Dados pessoais' : 'Resumo');
   const [completeMode, setCompleteMode] = useState(Boolean(searchParams.get('complete')));
   const [employee, setEmployee] = useState(null);
+  const [vacations, setVacations] = useState(null);
   const [form, setForm] = useState(emptyEmployeeForm());
   const [saving, setSaving] = useState(false);
   const [salaryHistory, setSalaryHistory] = useState([]);
@@ -93,6 +96,7 @@ export function EmployeeDetailPage() {
   const [pendingReportEmployees, setPendingReportEmployees] = useState([]);
   const [loadingPendingReport, setLoadingPendingReport] = useState(false);
   const [downloadingPendingReport, setDownloadingPendingReport] = useState(false);
+  useEffect(() => { if (activeTab === 'Férias' && canVacationsView) api.get(`/vacations/employees/${id}`).then((response) => setVacations(response.data)).catch(() => toast.error('Não foi possível carregar as férias.')); }, [activeTab, canVacationsView, id]);
 
   async function loadEmployee() {
     const response = await api.get(`/employees/${id}`);
@@ -305,9 +309,10 @@ export function EmployeeDetailPage() {
     if (tab === 'Histórico salarial') return canSalaryView;
     if (tab === 'Histórico de vale alimentação') return canMealView;
     if (tab === 'Vales') return canAdvancesView;
+    if (tab === 'Férias') return canVacationsView;
     if (tab === 'Auditoria') return canAudit;
     return true;
-  }), [canAdvancesView, canAudit, canDependentsView, canDocumentsView, canMealView, canSalaryView]);
+  }), [canAdvancesView, canAudit, canDependentsView, canDocumentsView, canMealView, canSalaryView, canVacationsView]);
 
   const missingForCompletion = useMemo(() => {
     const required = [
@@ -407,6 +412,8 @@ export function EmployeeDetailPage() {
           <div><span>Endereço</span><strong>{[employee.street, employee.address_number, employee.neighborhood, employee.city, employee.state].filter(Boolean).join(', ') || '-'}</strong></div>
         </div>
       )}
+
+      {activeTab === 'Férias' && <div className="panel employees-page__stack"><h2>Férias por período aquisitivo</h2>{!vacations && <p>Carregando férias...</p>}{vacations?.periods.map((period) => <article className="employees-page__vacation" key={period.id}><h3>{formatDate(period.acquisition_start)} a {formatDate(period.acquisition_end)} · {period.status}</h3><p>Concessivo: {formatDate(period.concession_start)} a {formatDate(period.concession_end)}</p><p>Direito: {period.entitlement ?? 'A apurar'} · Gozados: {period.taken} · Programados: {period.planned} · Abono: {period.bonus} · Livre: {period.free_balance ?? 'A apurar'}</p>{period.alerts?.map((alert) => <p className="employees-page__vacation-alert" key={alert}>{alert}</p>)}{period.leaves.map((leave) => <p key={leave.id}>{formatDate(leave.start_date)} a {formatDate(leave.end_date)} · {leave.days} dias · {leave.status} · abono {leave.bonus_days || 0}{canVacationDocumentsView && <> · <Link to={`/ferias/${id}?period=${period.id}&leave=${leave.id}`}>{leave.document_count} documento(s)</Link></>}</p>)}<Link to={`/ferias/${id}?period=${period.id}`}>Abrir período de férias</Link></article>)}</div>}
 
       {['Dados pessoais', 'Endereço', 'Dados trabalhistas'].includes(activeTab) && (
         <form className="panel employees-page__form" onSubmit={saveEmployee}>
