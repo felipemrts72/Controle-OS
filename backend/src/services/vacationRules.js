@@ -96,8 +96,10 @@ export function validateFractions(lengths, entitlement, complete = false) {
 
 export function validateLeaveCollection(leaves, entitlement) {
   const active = leaves.filter((leave) => leave.status !== 'cancelada');
+  const bonus = active.reduce((total, leave) => total + Number(leave.bonus_days || 0), 0);
+  if (active.some((leave) => !Number.isInteger(Number(leave.bonus_days || 0)) || Number(leave.bonus_days || 0) < 0) || bonus > Math.floor(entitlement / 3)) throw httpError(400, 'Abono excede um terço do direito adquirido.');
   const lengths = active.map((leave) => Number(leave.days));
-  validateFractions(lengths, entitlement);
+  validateFractions(lengths, entitlement - bonus);
   for (let index = 0; index < active.length; index += 1) {
     for (let other = index + 1; other < active.length; other += 1) {
       if (dateOnly(active[index].start_date) <= dateOnly(active[other].end_date)
@@ -108,13 +110,15 @@ export function validateLeaveCollection(leaves, entitlement) {
   }
   const taken = active.filter((leave) => ['gozada', 'historica'].includes(leave.status))
     .reduce((total, leave) => total + Number(leave.days), 0);
-  const balance = entitlement - taken;
+  const balance = entitlement - taken - bonus;
   if (balance < 0) throw httpError(409, 'Correção deixaria saldo negativo.');
   return { taken, balance };
 }
 
 export function vacationBalances(entitlement, leaves) {
+  const active = leaves.filter((leave) => leave.status !== 'cancelada');
+  const bonus = active.reduce((sum, leave) => sum + Number(leave.bonus_days || 0), 0);
   const taken = leaves.filter((leave) => ['gozada', 'historica'].includes(leave.status)).reduce((sum, leave) => sum + Number(leave.days), 0);
   const planned = leaves.filter((leave) => leave.status === 'programada').reduce((sum, leave) => sum + Number(leave.days), 0);
-  return { taken, planned, balance: entitlement == null ? null : entitlement - taken, free_balance: entitlement == null ? null : entitlement - taken - planned };
+  return { taken, planned, balance: entitlement == null ? null : entitlement - taken - bonus, free_balance: entitlement == null ? null : entitlement - taken - planned - bonus };
 }

@@ -2,6 +2,8 @@ import express, { Router } from 'express';
 import { authenticate, requirePermission } from '../middlewares/authMiddleware.js';
 import { cancelAbsence, changeLeave, correctConfirmedLeave, editScheduledLeave, getEmployeeVacations, listVacationAgenda, listVacationEmployees, regularizeHistoricalLeave, reviewPeriod, saveAbsence, saveLeave } from '../services/vacationService.js';
 import { archiveVacationDocument, listVacationDocuments, readVacationDocument, uploadVacationDocument, zipVacationPeriod } from '../services/vacationDocumentService.js';
+import { vacationAccountingPdf } from '../services/vacationAccountingService.js';
+import { sendPdfResponse } from '../services/pdf/pdfDocument.js';
 
 export const vacationRoutes = Router();
 vacationRoutes.use(authenticate);
@@ -20,6 +22,7 @@ vacationRoutes.post('/employees/:employeeId/periods/:periodId/historical-leaves'
 vacationRoutes.post('/employees/:employeeId/leaves/:leaveId/confirm', requirePermission('vacations.confirm'), handle((req) => changeLeave(req.params.employeeId, req.params.leaveId, 'confirm', req.user.id)));
 vacationRoutes.post('/employees/:employeeId/leaves/:leaveId/cancel', requirePermission('vacations.correct'), handle((req) => changeLeave(req.params.employeeId, req.params.leaveId, 'cancel', req.user.id)));
 vacationRoutes.put('/employees/:employeeId/leaves/:leaveId', requirePermission('vacations.correct'), handle((req) => editScheduledLeave(req.params.employeeId, req.params.leaveId, req.body, req.user.id)));
+vacationRoutes.get('/employees/:employeeId/periods/:periodId/leaves/:leaveId/accounting.pdf', requirePermission('vacations.view'), async (req,res,next) => { try { const { pdf, filename } = await vacationAccountingPdf(req.params.employeeId,req.params.periodId,req.params.leaveId,req.user.id); sendPdfResponse(res,pdf,filename); } catch(error) { next(error); } });
 const documentPath = '/employees/:employeeId/periods/:periodId/leaves/:leaveId/documents';
 vacationRoutes.get('/employees/:employeeId/periods/:periodId/documents.zip', requirePermission('vacations.documents.view'), async (req,res,next) => { try { const zip=await zipVacationPeriod(req.params.employeeId,req.params.periodId,req.user.id); res.set('Content-Type','application/zip').set('Content-Disposition',`attachment; filename="ferias-periodo-${req.params.periodId}.zip"`).send(zip); } catch(error) { next(error); } });
 vacationRoutes.get(documentPath, requirePermission('vacations.documents.view'), handle((req) => listVacationDocuments(req.params.employeeId,req.params.periodId,req.params.leaveId)));

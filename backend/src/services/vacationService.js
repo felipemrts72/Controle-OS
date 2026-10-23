@@ -7,6 +7,15 @@ import { decorateVacationPeriods, matchesVacationFilter, vacationFilters } from 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function id(value) { if (!uuid.test(String(value))) throw httpError(400, 'Identificador inválido.'); return value; }
 function note(value) { const text = String(value || '').trim(); if (text.length > 3000) throw httpError(400, 'Observação muito longa.'); return text || null; }
+function bonusFields(payload, period, entitlement, others = []) {
+  const bonus = payload.bonus_days === '' || payload.bonus_days == null ? 0 : Number(payload.bonus_days);
+  if (!Number.isInteger(bonus) || bonus < 0 || bonus > Math.floor(entitlement / 3)) throw httpError(400, 'Abono deve ser inteiro e limitado a um terço do direito adquirido.');
+  const requested = payload.bonus_requested_at ? dateOnly(payload.bonus_requested_at) : null;
+  if (requested && requested > businessToday()) throw httpError(400, 'Data do pedido de abono não pode estar no futuro.');
+  if (bonus && others.some((row) => Number(row.bonus_days || 0) > 0)) throw httpError(409, 'Já existe abono neste período aquisitivo.');
+  if (bonus && requested && requested > addDays(period.acquisition_end, -15)) throw httpError(400, 'Pedido de abono fora do prazo do art. 143 da CLT.');
+  return { bonus, requested: bonus ? requested : null };
+}
 async function audit(client, employeeId, periodId, type, entityId, action, before, after, actor, reason = null) {
   await client.query('INSERT INTO vacation_audit (employee_id, period_id, entity_type, entity_id, action, before_data, after_data, actor_id, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [employeeId, periodId, type, entityId, action, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, actor, reason]);
 }
@@ -80,6 +89,7 @@ function summarize(period, absences, leaves, today = businessToday()) {
   const reviewed = Boolean(period.reviewed_at) && !period.special_case && pending === 0 && half === 0 && today > dateOnly(period.acquisition_end);
   const entitlement = reviewed ? article130Days(full) : null;
   const { taken, planned, balance, free_balance } = vacationBalances(entitlement, leaves);
+  const bonus = leaves.filter((leave) => leave.status !== 'cancelada').reduce((sum, leave) => sum + Number(leave.bonus_days || 0), 0);
   let status = today <= dateOnly(period.acquisition_end) && !period.special_case ? 'EM AQUISIÇÃO' : 'PENDENTE DE CONFERÊNCIA';
   if (reviewed) {
     if (balance <= 0) status = 'QUITADO';
@@ -90,7 +100,7 @@ function summarize(period, absences, leaves, today = businessToday()) {
     else status = 'DISPONÍVEL';
   }
   const months = monthsInPeriod(dateOnly(period.acquisition_start), dateOnly(period.acquisition_end)).map((month) => ({ ...month, absences: absences.filter((row) => dateOnly(row.occurrence_date).slice(0, 7) === month.month) }));
-  return { ...period, status, entitlement, planned, taken, balance, free_balance, full_unjustified: full, half_unjustified: half, justified, pending, months, absences, leaves: leaves.map((leave) => ({ ...leave, temporal_status: leave.status === 'cancelada' ? 'cancelada' : dateOnly(leave.start_date) > today ? 'futura' : dateOnly(leave.end_date) < today ? 'encerrada' : 'em andamento', compliance_warnings: [dateOnly(leave.end_date) > dateOnly(period.concession_end) ? 'Fora do prazo concessivo' : null, leave.status === 'historica' && !leave.notice_date ? 'Aviso não documentado' : null, leave.status === 'programada' && (!leave.notice_date || calendarDays(leave.notice_date, leave.start_date) - 1 < 30) ? 'Aviso inferior a 30 dias ou não registrado' : null].filter(Boolean) })) };
+  return { ...period, status, entitlement, planned, taken, bonus, balance, free_balance, full_unjustified: full, half_unjustified: half, justified, pending, months, absences, leaves: leaves.map((leave) => ({ ...leave, temporal_status: leave.status === 'cancelada' ? 'cancelada' : dateOnly(leave.start_date) > today ? 'futura' : dateOnly(leave.end_date) < today ? 'encerrada' : 'em andamento', compliance_warnings: [dateOnly(leave.end_date) > dateOnly(period.concession_end) ? 'Fora do prazo concessivo' : null, leave.status === 'historica' && !leave.notice_date ? 'Aviso não documentado' : null, leave.status === 'programada' && (!leave.notice_date || calendarDays(leave.notice_date, leave.start_date) - 1 < 30) ? 'Aviso inferior a 30 dias ou não registrado' : null, Number(leave.bonus_days || 0) > 0 && !leave.bonus_requested_at ? 'Pedido de abono pendente de conferência' : null].filter(Boolean) })) };
 }
 
 export async function listVacationAgenda(options = {}) {
@@ -251,11 +261,12 @@ export async function saveLeave(employeeId, periodId, payload, actor) {
     const existing = (await client.query("SELECT * FROM vacation_leaves WHERE employee_id=$1 AND status<>'cancelada' FOR UPDATE", [person.id])).rows;
     if (existing.some((row) => start <= dateOnly(row.end_date) && end >= dateOnly(row.start_date))) throw httpError(409, 'Há férias sobrepostas para o funcionário.');
     const same = existing.filter((row) => row.period_id === period.id);
-    validateFractions([...same.map((row) => row.days), days], entitlement);
+    const { bonus, requested } = bonusFields(payload, period, entitlement, same);
+    validateLeaveCollection([...same, { start_date: start, end_date: end, days, status: 'programada', bonus_days: bonus }], entitlement);
     const notice = payload.notice_date ? dateOnly(payload.notice_date) : null;
     if (notice && notice > businessToday()) throw httpError(400, 'A data de entrega do aviso não pode estar no futuro.');
-    const after = (await client.query(`INSERT INTO vacation_leaves (employee_id, period_id, start_date, end_date, days, status, employee_agreed, calendar_confirmed, calendar_review_note, calendar_reviewed_by, notice_date, payment_due_date, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,'programada',TRUE,TRUE,$6,$7,$8,$9,$10,$11) RETURNING *`, [person.id, period.id, start, end, days, calendarReview, actor, notice, addDays(start, -2), note(payload.notes), actor])).rows[0];
+    const after = (await client.query(`INSERT INTO vacation_leaves (employee_id, period_id, start_date, end_date, days, status, employee_agreed, calendar_confirmed, calendar_review_note, calendar_reviewed_by, notice_date, payment_due_date, notes, created_by, bonus_days, bonus_requested_at)
+      VALUES ($1,$2,$3,$4,$5,'programada',TRUE,TRUE,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, [person.id, period.id, start, end, days, calendarReview, actor, notice, addDays(start, -2), note(payload.notes), actor, bonus, requested])).rows[0];
     await audit(client, person.id, period.id, 'leave', after.id, 'schedule', null, after, actor);
     return after;
   });
@@ -279,8 +290,10 @@ export async function editScheduledLeave(employeeId, leaveId, payload, actor) {
     const absences = (await client.query('SELECT quantity, classification FROM vacation_absences WHERE period_id=$1 AND cancelled_at IS NULL', [period.id])).rows;
     if (absences.some((row) => row.classification === 'pendente' || (row.classification === 'injustificada' && Number(row.quantity) === 0.5))) throw httpError(409, 'Faltas pendentes impedem a edição.');
     const entitlement = article130Days(absences.filter((row) => row.classification === 'injustificada' && Number(row.quantity) === 1).length);
-    validateLeaveCollection([...existing.filter((row) => row.period_id === period.id), { ...before, start_date: start, end_date: end, days }], entitlement);
-    const after = (await client.query('UPDATE vacation_leaves SET start_date=$1,end_date=$2,days=$3,notes=$4,payment_due_date=$5,calendar_review_note=$6,calendar_reviewed_by=$7,updated_by=$7,updated_at=NOW(),version=version+1 WHERE id=$8 RETURNING *', [start, end, days, note(payload.notes), addDays(start, -2), calendarReview, actor, before.id])).rows[0];
+    const same = existing.filter((row) => row.period_id === period.id);
+    const { bonus, requested } = bonusFields(payload, period, entitlement, same);
+    validateLeaveCollection([...same, { ...before, start_date: start, end_date: end, days, bonus_days: bonus }], entitlement);
+    const after = (await client.query('UPDATE vacation_leaves SET start_date=$1,end_date=$2,days=$3,notes=$4,payment_due_date=$5,calendar_review_note=$6,calendar_reviewed_by=$7,updated_by=$7,updated_at=NOW(),version=version+1,bonus_days=$9,bonus_requested_at=$10 WHERE id=$8 RETURNING *', [start, end, days, note(payload.notes), addDays(start, -2), calendarReview, actor, before.id, bonus, requested])).rows[0];
     await audit(client, person.id, period.id, 'leave', before.id, 'edit_schedule', before, after, actor);
     return after;
   });
@@ -351,7 +364,7 @@ export async function correctConfirmedLeave(employeeId, leaveId, payload, actor)
       : (await client.query('UPDATE vacation_leaves SET start_date=$1, end_date=$2, days=$3, payment_due_date=$4, updated_by=$5, updated_at=NOW(), version=version+1 WHERE id=$6 RETURNING *', [start, end, corrected.days, addDays(start, -2), actor, before.id])).rows[0];
     if (before.status === 'historica') await client.query('UPDATE vacation_periods SET reviewed_at=NULL, reviewed_by=NULL WHERE id=$1', [period.id]);
     await audit(client, person.id, period.id, 'leave', before.id, payload.action === 'cancel' ? 'cancel_confirmed' : 'correct_confirmed', before, after, actor, reason);
-    return { leave: after, balance: clear && before.status !== 'historica' ? entitlement - (corrected ? [...periodLeaves, corrected] : periodLeaves).filter((row) => ['gozada', 'historica'].includes(row.status)).reduce((sum, row) => sum + Number(row.days), 0) : null };
+    return { leave: after, balance: clear && before.status !== 'historica' ? entitlement - (corrected ? [...periodLeaves, corrected] : periodLeaves).filter((row) => ['gozada', 'historica'].includes(row.status)).reduce((sum, row) => sum + Number(row.days), 0) - (corrected ? [...periodLeaves, corrected] : periodLeaves).reduce((sum, row) => sum + Number(row.bonus_days || 0), 0) : null };
   });
 }
 
