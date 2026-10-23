@@ -85,8 +85,11 @@
 .vacations__leave { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--color-border); }
 .vacations__leave p { margin: 5px 0 0; color: var(--color-text-muted); font-size: 13px; }
 .vacations__audit p { margin: 12px 0 0; overflow-wrap: anywhere; }
-.vacations__overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: #0008; }
-.vacations__dialog { display: grid; gap: 12px; width: min(520px, 100%); max-height: 90vh; overflow: auto; }
+.vacations__overlay { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); overflow-y: auto; background: #0008; }
+.vacations__dialog { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; box-sizing: border-box; width: min(100%, 520px); max-width: calc(100vw - 24px); min-width: 0; max-height: calc(100vh - 24px); margin-inline: auto; overflow-y: auto; }
+@supports (height: 100dvh) { .vacations__dialog { max-height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom))); } }
+.vacations__dialog > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.vacations__dialog :is(input, select, textarea) { min-width: 0; max-width: 100%; }
 .vacations__dialog h2 { margin: 0 0 4px; }
 .vacations__dialog label { display: grid; gap: 5px; min-width: 0; }
 .vacations__dialog label:has(input[type=checkbox]) { display: flex; align-items: flex-start; }
@@ -103,7 +106,7 @@
 @media (max-width: 600px) { .vacations__document { display: block; } .vacations__document .vacations__actions { margin-top: .5rem; flex-wrap: wrap; } }
 .vacations__pending-documents { display: grid; gap: 10px; min-width: 0; border-top: 1px solid var(--color-border); padding-top: 12px; }
 .vacations__pending-documents h3 { margin: 0; font-size: 16px; }
-.vacations__file-button { position: relative; width: fit-content; overflow: hidden; }
-.vacations__file-button input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.vacations__dialog .vacations__file-button { display: inline-flex; width: fit-content; cursor: pointer; }
+.vacations__native-file { position: absolute; width: 1px; height: 1px; padding: 0; clip-path: inset(50%); white-space: nowrap; }
 .vacations__pending-file { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
 .vacations__pending-file span { min-width: 0; }
