@@ -137,8 +137,8 @@ input:focus-visible {
   border-radius: 8px;
   background: var(--color-white);
   color: var(--color-text);
-  min-height: 42px;
-  padding: 11px 12px;
+  min-height: 40px;
+  padding: 8px 12px;
 }
 
 .field__input::placeholder {
@@ -287,10 +287,7 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .field__input {
-    font-size: 16px;
-    min-height: 44px;
-  }
+  .field__input { font-size: 16px; }
 
   .panel {
     padding: 14px;
@@ -312,3 +309,25 @@ input:focus-visible {
     margin-top: 2px;
   }
 }
+
+/* Controles de linha única compartilhados por todos os módulos. */
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]), select:not([multiple])) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-white);
+  color: var(--color-text);
+  font-size: 16px;
+  line-height: normal;
+}
+
+input[type="date"] { -webkit-appearance: auto; appearance: auto; }
+input[type="date"]::-webkit-date-and-time-value { min-height: 1em; text-align: left; }
+input[type="date"]::-webkit-datetime-edit { padding: 0; }
+input[type="date"]::-webkit-calendar-picker-indicator { margin: 0; opacity: 1; }

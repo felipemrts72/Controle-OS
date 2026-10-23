@@ -13,7 +13,7 @@
 .vacations__metric strong { font-size: clamp(24px, 2.6vw, 32px); line-height: 1; }
 .vacations__filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
 .vacations__filters label { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 700; color: var(--color-text-muted); }
-.vacations__filters input, .vacations__filters select { width: 100%; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-white); color: var(--color-text); }
+.vacations__filters input, .vacations__filters select { width: 100%; min-width: 0; height: 40px; min-height: 40px; padding: 8px 12px; font-size: 16px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-white); color: var(--color-text); }
 .vacations__list-heading, .vacations__section-title { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .vacations__list-heading h2, .vacations__section-title h2 { margin: 0; font-size: 19px; }
 .vacations__list-heading span, .vacations__section-title p { margin: 0; font-size: 13px; color: var(--color-text-muted); }
@@ -90,7 +90,7 @@
 .vacations__dialog h2 { margin: 0 0 4px; }
 .vacations__dialog label { display: grid; gap: 5px; min-width: 0; }
 .vacations__dialog label:has(input[type=checkbox]) { display: flex; align-items: flex-start; }
-.vacations__dialog input:not([type=checkbox]), .vacations__dialog select, .vacations__dialog textarea { width: 100%; min-width: 0; min-height: 40px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 7px; background: var(--color-white); color: var(--color-text); }
+.vacations__dialog textarea { width: 100%; min-width: 0; min-height: 80px; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-white); color: var(--color-text); }
 .vacations__error { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1100; width: max-content; max-width: 90vw; margin: 0; padding: 12px; border: 1px solid #b91c1c; border-radius: 8px; background: var(--color-white); color: #b91c1c; box-shadow: var(--shadow-soft); }
 @media (max-width: 850px) { .vacations__indicators { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vacations__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vacations__filters button { grid-column: 1 / -1; } }
 @media (max-width: 600px) { .vacations__indicators { gap: 9px; } .vacations__metric { min-height: 84px; padding: 13px; } .vacations__filters { grid-template-columns: minmax(0, 1fr); } .vacations__filters button { grid-column: auto; } .vacations__grid { grid-template-columns: minmax(0, 1fr); } .vacations__employee { min-height: 0; } .vacations__employee-summary { grid-template-columns: minmax(0, 1fr); } .vacations__employee-summary div { border-right: 0; border-bottom: 1px solid var(--color-border); padding: 0 0 9px; } .vacations__employee-summary div:last-child { border-bottom: 0; padding-bottom: 0; } .vacations__dates { grid-template-columns: minmax(0, 1fr); } .vacations__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vacations__leave { display: grid; } .vacations__actions .button { max-width: 100%; } }
@@ -101,35 +101,9 @@
 .vacations__document-form { display: grid; gap: .5rem; max-width: 38rem; margin-top: .75rem; }
 .vacations__document-form input, .vacations__document-form select { width: 100%; max-width: 100%; }
 @media (max-width: 600px) { .vacations__document { display: block; } .vacations__document .vacations__actions { margin-top: .5rem; flex-wrap: wrap; } }
-/* Uma dimensão para todos os campos editáveis de Férias no celular. */
-@media (max-width: 600px) {
-  .vacations__compact-fields :is(input:not([type="checkbox"]):not([type="file"]), select) {
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    height: 38px;
-    min-height: 38px;
-    padding: 5px 8px;
-    font-size: 16px;
-    line-height: 1.2;
-  }
-  .vacations__compact-fields textarea {
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    min-height: 64px;
-    padding: 7px 8px;
-    font-size: 16px;
-    line-height: 1.3;
-  }
-  .vacations__compact-fields input[type="file"] {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 100%;
-    min-height: 38px;
-    padding: 5px 8px;
-    font-size: 14px;
-  }
-}
+.vacations__pending-documents { display: grid; gap: 10px; min-width: 0; border-top: 1px solid var(--color-border); padding-top: 12px; }
+.vacations__pending-documents h3 { margin: 0; font-size: 16px; }
+.vacations__file-button { position: relative; width: fit-content; overflow: hidden; }
+.vacations__file-button input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.vacations__pending-file { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.vacations__pending-file span { min-width: 0; }

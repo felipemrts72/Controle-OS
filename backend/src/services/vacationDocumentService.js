@@ -12,7 +12,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.VACATION_DOCUMENT_DIR
 }
 const maxBytes = 10 * 1024 * 1024;
 const maxDocuments = 20;
-const types = new Set(['signed_receipt', 'notice', 'payment_proof', 'other']);
+const types = new Set(['signed_receipt', 'notice', 'bonus_request', 'payment_proof', 'other']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const validId = (value) => { if (!uuid.test(String(value))) throw httpError(400, 'Identificador inválido.'); return value; };
 
