@@ -19,11 +19,15 @@ function bonusFields(payload, period, entitlement, others = []) {
 export async function validateFutureDates(start, end, period, notice, today = businessToday(), holidayLookup = holidayOn) {
   if (start <= today || start < dateOnly(period.concession_start)) throw httpError(400, 'O gozo futuro deve começar após hoje e após a aquisição do direito.');
   // O prazo vencido é exibido como atraso, mas não impede a organização do gozo pendente.
+  const dsrMessage = 'Não é permitido iniciar férias nesta data devido ao descanso semanal remunerado de domingo.';
+  if (new Date(`${start}T00:00:00Z`).getUTCDay() === 0) throw httpError(400, dsrMessage);
   for (const offset of [1, 2]) {
     const target = addDays(start, offset);
     const rest = new Date(`${target}T00:00:00Z`).getUTCDay() === 0;
+    // Domingo tem prioridade mesmo quando coincide com feriado: uma única mensagem de DSR.
+    if (rest) throw httpError(400, dsrMessage);
     const holiday = (await holidayLookup(target)).find((item) => item.classification === 'feriado_legal' || item.no_work);
-    if (rest || holiday) throw httpError(400, `Início vedado em ${start}: ${target} é ${holiday?.name || 'repouso semanal remunerado'}. As férias não podem começar nos dois dias anteriores.`);
+    if (holiday) throw httpError(400, `Não é permitido iniciar férias nesta data devido ao feriado ${holiday.name} em ${target}.`);
   }
   if (!notice || calendarDays(notice, start) - 1 < 30) throw httpError(400, 'O aviso escrito deve anteceder o início das férias em pelo menos 30 dias.');
 }

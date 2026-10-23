@@ -19,8 +19,20 @@ test('ponto facultativo não bloqueia; feriado e repouso bloqueiam programação
   const optional = async (date) => date === '2026-11-03' ? [{ name: 'Ponto', classification: 'ponto_facultativo', no_work: false }] : [];
   await validateFutureDates('2026-11-02', '2026-11-06', period, '2026-09-01', '2026-10-01', optional);
   const legal = async (date) => date === '2026-11-03' ? [{ name: 'Feriado local', classification: 'feriado_legal', no_work: true }] : [];
-  await assert.rejects(validateFutureDates('2026-11-02', '2026-11-06', period, '2026-09-01', '2026-10-01', legal), /2026-11-03.*Feriado local/);
+  await assert.rejects(validateFutureDates('2026-11-02', '2026-11-06', period, '2026-09-01', '2026-10-01', legal), /Feriado local.*2026-11-03/);
   await assert.rejects(validateFutureDates('2026-11-06', '2026-11-10', period, '2026-09-01', '2026-10-01', optional), /repouso semanal/);
+});
+
+test('DSR domingo: quinta permitida; sexta, sábado e domingo bloqueados', async () => {
+  const period = { concession_start: '2026-01-01', concession_end: '2026-12-31' };
+  const args = [period, '2026-09-01', '2026-10-01'];
+  const holidays = async () => [];
+  await validateFutureDates('2026-11-05', '2026-11-09', ...args, holidays);
+  for (const start of ['2026-11-06', '2026-11-07', '2026-11-08']) {
+    await assert.rejects(validateFutureDates(start, '2026-11-12', ...args, holidays), (error) => error.message === 'Não é permitido iniciar férias nesta data devido ao descanso semanal remunerado de domingo.');
+  }
+  const sundayHoliday = async (date) => date === '2026-11-08' ? [{ name: 'Feriado no domingo', classification: 'feriado_legal', no_work: true }] : [];
+  await assert.rejects(validateFutureDates('2026-11-06', '2026-11-12', ...args, sundayHoliday), (error) => error.message === 'Não é permitido iniciar férias nesta data devido ao descanso semanal remunerado de domingo.');
 });
 
 test('segundo aquisitivo não oculta primeiro prazo de dezembro; atraso mantém prioridade', () => {
