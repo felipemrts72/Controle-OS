@@ -2,7 +2,7 @@ import { query, transaction } from '../database/pool.js';
 import { createHash } from 'node:crypto';
 import { httpError } from '../utils/httpError.js';
 import { addCalendarMonths, addDays, article130Days, businessToday, calendarDays, dateOnly, monthsInPeriod, periodsFromAdmission, validateLeaveCollection, vacationComplianceAlerts, vacationStatus } from './vacationRules.js';
-import { decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
+import { bonusDeadlineAlert, decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function id(value) { if (!uuid.test(String(value))) throw httpError(400, 'Identificador inválido.'); return value; }
@@ -13,7 +13,6 @@ function bonusFields(payload, period, entitlement, others = []) {
   const requested = payload.bonus_requested_at ? dateOnly(payload.bonus_requested_at) : null;
   if (requested && requested > businessToday()) throw httpError(400, 'Data do pedido de abono não pode estar no futuro.');
   if (bonus && others.some((row) => Number(row.bonus_days || 0) > 0)) throw httpError(409, 'Já existe abono neste período aquisitivo.');
-  if (bonus && requested && requested > addDays(period.acquisition_end, -15)) throw httpError(400, 'Pedido de abono fora do prazo do art. 143 da CLT.');
   return { bonus, requested: bonus ? requested : null };
 }
 function validateFutureDates(start, end, period, notice) {
@@ -97,7 +96,7 @@ async function periodForDate(client, person, occurrenceDate) {
   if (found.rows[0].special_case) throw httpError(409, 'Período com divergência cadastral; encaminhe para conferência de RH.');
   return found.rows[0];
 }
-function summarize(period, absences, leaves, today = businessToday()) {
+function summarize(period, absences, leaves, today = businessToday(), admin = false) {
   const full = absences.filter((row) => row.classification === 'injustificada' && Number(row.quantity) === 1).length;
   const half = absences.filter((row) => row.classification === 'injustificada' && Number(row.quantity) === 0.5).length;
   const justified = absences.filter((row) => row.classification === 'justificada').length;
@@ -106,7 +105,7 @@ function summarize(period, absences, leaves, today = businessToday()) {
   const { taken, planned, bonus, balance, free_balance, status } = vacationStatus(period, entitlement, leaves, today);
   const alerts = vacationComplianceAlerts(leaves, source, balance);
   const months = monthsInPeriod(dateOnly(period.acquisition_start), dateOnly(period.acquisition_end)).map((month) => ({ ...month, absences: absences.filter((row) => dateOnly(row.occurrence_date).slice(0, 7) === month.month) }));
-  return { ...period, status, entitlement, entitlement_source: source, planned, taken, bonus, balance, free_balance, alerts, full_unjustified: full, half_unjustified: half, justified, pending, months, absences, leaves: leaves.map((leave) => ({ ...leave, temporal_status: leave.status === 'cancelada' ? 'cancelada' : dateOnly(leave.start_date) > today ? 'futura' : dateOnly(leave.end_date) < today ? 'encerrada' : 'em andamento', compliance_warnings: [dateOnly(leave.end_date) > dateOnly(period.concession_end) ? 'Fora do prazo concessivo' : null, leave.status === 'historica' && Number(leave.days) < 5 ? 'Fracionamento histórico inferior a 5 dias' : null, leave.status === 'programada' && (!leave.notice_date || calendarDays(leave.notice_date, leave.start_date) - 1 < 30) ? 'Aviso inferior a 30 dias ou não registrado' : null, Number(leave.bonus_days || 0) > 0 && !leave.bonus_requested_at ? 'Pedido de abono pendente de conferência' : null].filter(Boolean) })) };
+  return { ...period, status, entitlement, entitlement_source: source, planned, taken, bonus, balance, free_balance, alerts, full_unjustified: full, half_unjustified: half, justified, pending, months, absences, leaves: leaves.map((leave) => ({ ...leave, temporal_status: leave.status === 'cancelada' ? 'cancelada' : dateOnly(leave.start_date) > today ? 'futura' : dateOnly(leave.end_date) < today ? 'encerrada' : 'em andamento', compliance_warnings: [dateOnly(leave.end_date) > dateOnly(period.concession_end) ? 'Fora do prazo concessivo' : null, leave.status === 'historica' && Number(leave.days) < 5 ? 'Fracionamento histórico inferior a 5 dias' : null, leave.status === 'programada' && (!leave.notice_date || calendarDays(leave.notice_date, leave.start_date) - 1 < 30) ? 'Aviso inferior a 30 dias ou não registrado' : null, Number(leave.bonus_days || 0) > 0 && !leave.bonus_requested_at ? 'Pedido de abono pendente de conferência' : null, admin && Number(leave.bonus_days || 0) > 0 && leave.bonus_requested_at && dateOnly(leave.bonus_requested_at) > addDays(period.acquisition_end, -15) ? 'Pedido de abono pecuniário fora do prazo previsto no art. 143, §1º, da CLT.' : null].filter(Boolean) })) };
 }
 
 export async function listVacationAgenda(options = {}) {
@@ -137,9 +136,10 @@ export async function listVacationAgenda(options = {}) {
     sector_overlap: row.sector_overlap,
   })) };
 }
-export async function listVacationEmployees(options = {}) {
+export async function listVacationEmployees(options = {}, admin = false) {
   const legacy = typeof options === 'string';
   const { search = '', filter = 'all', status = '', page = 1 } = legacy ? { search: options } : options;
+  if (filter === 'bonus_deadline' && !admin) throw httpError(403, 'Acesso negado.');
   if (!vacationFilters.includes(filter)) throw httpError(400, 'Filtro de férias inválido.');
   const pageNumber = Number(page);
   if (!Number.isInteger(pageNumber) || pageNumber < 1) throw httpError(400, 'Página inválida.');
@@ -160,9 +160,10 @@ export async function listVacationEmployees(options = {}) {
       const periods = visiblePeriods(person, existingByEmployee.get(person.id) || [], today).sort((a, b) => b.ordinal - a.ordinal);
       const absences = absencesByEmployee.get(person.id) || [];
       const leaves = leavesByEmployee.get(person.id) || [];
-      return { ...person, periods: decorateVacationPeriods(periods.map((period) => summarize(period, absences.filter((item) => item.period_id === period.id), leaves.filter((item) => item.period_id === period.id), today)), today) };
+      return { ...person, periods: decorateVacationPeriods(periods.map((period) => summarize(period, absences.filter((item) => item.period_id === period.id), leaves.filter((item) => item.period_id === period.id), today, admin)), today) };
     });
   });
+  if (admin) for (const item of items) for (const period of item.periods) Object.assign(period.alert, bonusDeadlineAlert(period, today));
   const inStatus = (period) => !status || period.status === status;
   const indicatorItems = status ? items.filter((item) => item.periods.some(inStatus)) : items;
   const indicators = {
@@ -175,7 +176,12 @@ export async function listVacationEmployees(options = {}) {
     on_leave: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.leaves.some((leave) => ['gozada', 'historica'].includes(leave.status) && dateOnly(leave.start_date) <= today && dateOnly(leave.end_date) >= today))).length,
     pending: indicatorItems.reduce((sum, item) => sum + item.periods.filter((period) => inStatus(period) && period.status === 'INFORMAÇÕES INSUFICIENTES').length, 0),
   };
+  if (admin) indicators.bonus_deadline = indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.bonus_deadline)).length;
   const filtered = items.filter((item) => item.periods.some((period) => matchesVacationFilter(period, filter) && (!status || period.status === status)) || (filter === 'all' && !status && item.periods.length === 0));
+  if (filter === 'bonus_deadline') filtered.sort((a, b) => {
+    const closest = (item) => item.periods.filter((period) => period.alert.bonus_deadline).map((period) => period.alert.bonus_deadline_date).sort()[0];
+    return closest(a).localeCompare(closest(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
+  });
   if (filter === 'due_soon') filtered.sort((a, b) => {
     const closest = (item) => item.periods.filter((period) => period.alert.due_soon).map((period) => dateOnly(period.concession_end)).sort()[0];
     return closest(a).localeCompare(closest(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
@@ -183,7 +189,7 @@ export async function listVacationEmployees(options = {}) {
   const pageSize = 20;
   return { indicators, employees: legacy ? filtered : filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize), total: filtered.length, page: pageNumber, page_size: pageSize };
 }
-export async function getEmployeeVacations(employeeId) {
+export async function getEmployeeVacations(employeeId, admin = false) {
   return transaction(async (client) => {
     await client.query('SET TRANSACTION READ ONLY');
     const person = await employee(client, employeeId);
@@ -194,7 +200,7 @@ export async function getEmployeeVacations(employeeId) {
     const documentCounts = (await client.query('SELECT leave_id,COUNT(*)::integer AS total FROM vacation_documents WHERE employee_id=$1 AND deleted_at IS NULL GROUP BY leave_id', [person.id])).rows;
     const counts = new Map(documentCounts.map((row) => [row.leave_id, row.total]));
     const auditRows = (await client.query('SELECT a.*, u.name AS actor_name FROM vacation_audit a LEFT JOIN users u ON u.id=a.actor_id WHERE a.employee_id=$1 ORDER BY a.created_at DESC LIMIT 100', [person.id])).rows;
-    return { employee: person, periods: periods.map((p) => summarize(p, absences.filter((a) => a.period_id === p.id), leaves.filter((l) => l.period_id === p.id).map((leave) => ({ ...leave, document_count: counts.get(leave.id) || 0 })))), audit: auditRows };
+    return { employee: person, periods: periods.map((p) => summarize(p, absences.filter((a) => a.period_id === p.id), leaves.filter((l) => l.period_id === p.id).map((leave) => ({ ...leave, document_count: counts.get(leave.id) || 0 })), businessToday(), admin)), audit: auditRows };
   });
 }
 export async function saveAbsence(employeeId, payload, actor, absenceId = null) {

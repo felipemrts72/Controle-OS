@@ -1,6 +1,13 @@
-import { addCalendarMonths, businessToday, dateOnly } from './vacationRules.js';
+import { addCalendarMonths, addDays, businessToday, dateOnly } from './vacationRules.js';
 
-export const vacationFilters = ['all', 'acquired', 'due_soon', 'overdue'];
+export const vacationFilters = ['all', 'acquired', 'due_soon', 'overdue', 'bonus_deadline'];
+
+export function bonusDeadlineAlert(period, today = businessToday()) {
+  const deadline = addDays(period.acquisition_end, -15);
+  const days = Math.round((Date.parse(`${deadline}T00:00:00Z`) - Date.parse(`${dateOnly(today)}T00:00:00Z`)) / 86400000);
+  const eligible = !period.special_case && days >= 0 && days <= 30 && !(period.leaves || []).some((leave) => leave.status !== 'cancelada' && Number(leave.bonus_days || 0) > 0);
+  return { bonus_deadline: eligible, ...(eligible ? { bonus_deadline_date: deadline, bonus_days_remaining: days } : {}) };
+}
 
 export function alertForPeriod(period, today = businessToday()) {
   const current = dateOnly(today);
