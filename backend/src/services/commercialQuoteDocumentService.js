@@ -4,9 +4,14 @@ import { pool } from '../database/pool.js';
 import { buildQuoteDocumentData, loadFrozenQuoteCatalogs } from './commercialQuoteDocumentDataService.js';
 import { buildOrcamentoPdf } from './pdf/orcamentoPdfService.js';
 import { sanitizePdfFilename } from './pdf/pdfDocument.js';
+import { getRepresentativeSignature } from './companySettingsService.js';
 
-function companyForPdf(quote) {
-  return { ...(quote.company_snapshot || {}), logo: quote.company_logo_snapshot || null };
+async function companyForPdf(quote, database) {
+  return {
+    ...(quote.company_snapshot || {}),
+    logo: quote.company_logo_snapshot || null,
+    signature: await getRepresentativeSignature(database),
+  };
 }
 
 function commercialFilename(quote) {
@@ -17,7 +22,7 @@ function commercialFilename(quote) {
 export async function buildQuotePreview(quote, database = pool) {
   const { catalogs, imageAssets } = await loadFrozenQuoteCatalogs(database, quote);
   const data = buildQuoteDocumentData(quote, { catalogs });
-  const pdf = await buildOrcamentoPdf(data, companyForPdf(quote), {
+  const pdf = await buildOrcamentoPdf(data, await companyForPdf(quote, database), {
     catalogImageAssets: imageAssets,
   });
   return { pdf, data, filename: commercialFilename(quote) };
@@ -35,7 +40,7 @@ export async function createOfficialQuoteDocument(client, quote, userId, { force
   const { catalogs, imageAssets } = await loadFrozenQuoteCatalogs(client, quote);
   const data = buildQuoteDocumentData(quote, { catalogs });
   const createdAt = new Date();
-  const pdf = await buildOrcamentoPdf(data, companyForPdf(quote), {
+  const pdf = await buildOrcamentoPdf(data, await companyForPdf(quote, client), {
     emittedAt: createdAt, catalogImageAssets: imageAssets,
   });
   const hash = createHash('sha256').update(pdf).digest('hex');

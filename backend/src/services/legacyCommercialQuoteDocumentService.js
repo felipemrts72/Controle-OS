@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { transaction } from '../database/pool.js';
 import { sanitizePdfFilename } from './pdf/pdfDocument.js';
 import { buildOrcamentoPdf } from './pdf/orcamentoPdfService.js';
-import { getCompanyPdfData } from './companySettingsService.js';
+import { getCompanyPdfData, getRepresentativeSignature } from './companySettingsService.js';
 import { buildLegacyQuoteDocumentData, loadFrozenQuoteCatalogs } from './commercialQuoteDocumentDataService.js';
 import { getLegacyCommercialQuote } from './legacyCommercialQuoteService.js';
 
@@ -37,7 +37,8 @@ export async function getOrCreateLegacyReconstructedDocumentWithClient(quoteId, 
     const { logo, logo_url: _logoUrl, ...companySnapshot } = company;
     const data = buildLegacyQuoteDocumentData(quote, { catalogs });
     const emittedAt = new Date();
-    const pdf = await buildOrcamentoPdf(data, { ...companySnapshot, logo: logo || null }, {
+    const signature = await getRepresentativeSignature(client);
+    const pdf = await buildOrcamentoPdf(data, { ...companySnapshot, logo: logo || null, signature }, {
       draft: false,
       emittedAt,
       catalogImageAssets: imageAssets,

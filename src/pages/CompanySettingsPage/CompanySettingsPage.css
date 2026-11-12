@@ -44,3 +44,17 @@
   .company-settings-page__grid { grid-template-columns: 1fr; }
   .company-settings-page__wide { grid-column: auto; }
 }
+
+.company-settings-page__signature {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.company-settings-page__signature h3 {
+  margin: 0;
+}
+
+.company-settings-page__signature .page__actions {
+  flex-wrap: wrap;
+}

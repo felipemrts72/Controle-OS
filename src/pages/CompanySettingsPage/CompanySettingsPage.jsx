@@ -49,6 +49,104 @@ function hydratedForm(data) {
   }));
 }
 
+const signatureEndpoint = '/company-settings/signature';
+
+function RepresentativeSignature({ canEdit }) {
+  const toast = useToast();
+  const input = useRef(null);
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get(signatureEndpoint, { responseType: 'blob', signal: controller.signal })
+      .then((response) => {
+        if (!controller.signal.aborted) setImage(response.status === 204 ? null : response.data);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLoadFailed(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBusy(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!image) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(image);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
+
+  async function changeSignature(file) {
+    setBusy(true);
+    try {
+      if (file) {
+        await api.put(signatureEndpoint, file, {
+          headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+        });
+      } else {
+        await api.delete(signatureEndpoint);
+      }
+      setImage(file);
+      setLoadFailed(false);
+      toast.success(file ? 'Assinatura cadastrada.' : 'Assinatura removida.');
+    } catch {
+      toast.error(file ? 'Não foi possível enviar a assinatura. Confira se o arquivo é um PNG ou JPEG válido de até 5 MB.' : 'Não foi possível remover a assinatura.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function upload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      toast.error('Selecione uma imagem PNG ou JPEG de até 5 MB.');
+      return;
+    }
+    changeSignature(file);
+  }
+
+  return (
+    <div className="company-settings-page__signature">
+      <h3>Assinatura do representante</h3>
+      <div className="company-settings-page__logo-panel">
+        <div className="company-settings-page__logo-preview">
+          {preview ? <img src={preview} alt="Assinatura do representante" /> : (
+            <span role="status">
+              {busy ? 'Carregando assinatura...' : loadFailed ? 'Não foi possível carregar a assinatura.' : 'Nenhuma assinatura cadastrada'}
+            </span>
+          )}
+        </div>
+        {canEdit && (
+          <div className="page__actions">
+            <input ref={input} type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" onChange={upload} hidden />
+            <button type="button" className="button button_primary" disabled={busy} onClick={() => input.current.click()}>
+              <Upload size={17} /> {image ? 'Substituir' : 'Enviar assinatura'}
+            </button>
+            {image && (
+              <button type="button" className="button" disabled={busy} onClick={() => {
+                if (window.confirm('Remover a assinatura do representante?')) changeSignature(null);
+              }}>
+                <Trash2 size={17} /> Remover
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <small>PNG ou JPEG, até 5 MB.</small>
+    </div>
+  );
+}
+
 export function CompanySettingsPage() {
   const toast = useToast();
   const user = getStoredUser();
@@ -222,6 +320,7 @@ export function CompanySettingsPage() {
             <label className="field"><span className="field__label">CPF</span><input className="field__input" name="cpf_representante" value={form.cpf_representante} onChange={changeField} inputMode="numeric" placeholder="000.000.000-00" disabled={!canEdit} /></label>
             <label className="field"><span className="field__label">Cargo</span><input className="field__input" name="cargo_representante" value={form.cargo_representante} onChange={changeField} disabled={!canEdit} /></label>
           </div>
+          <RepresentativeSignature canEdit={canEdit} />
         </div>
 
         <div className="panel">

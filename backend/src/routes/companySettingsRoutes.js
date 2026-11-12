@@ -1,5 +1,5 @@
 import express, { Router } from 'express';
-import { logoDestroy, logoShow, logoUpdate, show, update } from '../controllers/companySettingsController.js';
+import { logoDestroy, logoShow, logoUpdate, show, signatureDestroy, signatureShow, signatureUpdate, update } from '../controllers/companySettingsController.js';
 import { authenticate, requirePermission } from '../middlewares/authMiddleware.js';
 
 export const companySettingsRoutes = Router();
@@ -13,5 +13,13 @@ companySettingsRoutes.put(
   logoUpdate,
 );
 companySettingsRoutes.delete('/logo', requirePermission('company_settings.edit'), logoDestroy);
+companySettingsRoutes.get('/signature', requirePermission('company_settings.view'), signatureShow);
+companySettingsRoutes.put(
+  '/signature',
+  requirePermission('company_settings.edit'),
+  express.raw({ type: ['image/png', 'image/jpeg'], limit: '5mb' }),
+  signatureUpdate,
+);
+companySettingsRoutes.delete('/signature', requirePermission('company_settings.edit'), signatureDestroy);
 companySettingsRoutes.get('/', requirePermission('company_settings.view'), show);
 companySettingsRoutes.put('/', requirePermission('company_settings.edit'), update);

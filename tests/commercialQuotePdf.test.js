@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import sharp from 'sharp';
 import { buildLegacyQuoteDocumentData, buildQuoteDocumentData, loadFrozenQuoteCatalogs } from '../backend/src/services/commercialQuoteDocumentDataService.js';
+import { buildQuotePreview } from '../backend/src/services/commercialQuoteDocumentService.js';
 import { buildOrcamentoPdf } from '../backend/src/services/pdf/orcamentoPdfService.js';
 import { displayNumber } from '../backend/src/services/pdf/universal/renderQuote.js';
 
@@ -195,4 +196,30 @@ test('paginação preserva identidade do Orçamento e do Catálogo com conteúdo
   assert.deepEqual(layout.signaturePages, [quotePages.at(-1).index]);
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
   assert.equal((pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length, layout.pages.length);
+});
+
+test('prévia carrega assinatura atual e preserva logo e paginação', async () => {
+  const image = async (width, height) => sharp({
+    create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0.5 } },
+  }).png().toBuffer();
+  const signature = await image(41, 13);
+  const logo = await image(52, 23);
+  const quote = quoteFixture({
+    company_logo_snapshot: logo,
+    company_snapshot: { nome_representante: 'Representante', cargo_representante: 'Diretor' },
+  });
+  let storedSignature = signature;
+  const database = {
+    async query(sql) {
+      assert.match(sql, /SELECT representative_signature FROM company_settings/);
+      return { rows: [{ representative_signature: storedSignature }] };
+    },
+  };
+  const signed = (await buildQuotePreview(quote, database)).pdf.toString('latin1');
+  storedSignature = null;
+  const unsigned = (await buildQuotePreview(quote, database)).pdf.toString('latin1');
+  assert.match(signed, /\/Width 41\s+\/Height 13/);
+  assert.doesNotMatch(unsigned, /\/Width 41\s+\/Height 13/);
+  for (const pdf of [signed, unsigned]) assert.match(pdf, /\/Width 52\s+\/Height 23/);
+  assert.equal(signed.match(/\/Type \/Page\b/g).length, unsigned.match(/\/Type \/Page\b/g).length);
 });

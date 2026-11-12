@@ -269,6 +269,9 @@ export function drawCommercialSignatureFooters(doc, layout, company) {
     doc.restore();
     doc.font('Helvetica').fontSize(7.5).fillColor('#4b5563');
     doc.text(responsible || 'Responsável', layout.margin, lineY + 5, { width, height: 11, align: 'center', lineBreak: false, ellipsis: true });
+    if (company.cargo_representante) {
+      doc.text(company.cargo_representante, layout.margin, lineY + 16, { width, height: 11, align: 'center', lineBreak: false, ellipsis: true });
+    }
     doc.text('Assinatura do cliente', layout.margin + width + gap, lineY + 5, { width, height: 11, align: 'center', lineBreak: false });
   }
   return signaturePages;

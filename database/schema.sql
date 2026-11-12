@@ -493,6 +493,7 @@ CREATE TABLE IF NOT EXISTS company_settings (
   cpf_representante VARCHAR,
   cargo_representante VARCHAR,
   logo_path VARCHAR,
+  representative_signature BYTEA,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   CONSTRAINT company_settings_singleton_check CHECK (singleton_key = TRUE)

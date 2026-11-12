@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { query, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
@@ -99,10 +100,10 @@ function resolveStoredLogoPath(storedPath) {
   return fullPath;
 }
 
-function assertLogo(buffer, mimeType, originalName) {
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw httpError(400, 'Selecione uma imagem para a logo.');
-  if (buffer.length > maxLogoBytes) throw httpError(400, 'A logo está acima do limite permitido.');
-  if (!allowedLogoMimeTypes.has(mimeType)) throw httpError(400, 'Formato de logo não permitido. Use PNG ou JPEG.');
+function assertCompanyImage(buffer, mimeType, originalName, maxBytes, label) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw httpError(400, 'Selecione uma imagem para ' + label + '.');
+  if (buffer.length > maxBytes) throw httpError(400, 'O arquivo está acima do limite permitido.');
+  if (!allowedLogoMimeTypes.has(mimeType)) throw httpError(400, 'Formato de imagem não permitido. Use PNG ou JPEG.');
   const normalizedName = String(originalName || '').trim();
   if (!normalizedName || normalizedName !== path.basename(normalizedName) || /[\\/]/.test(normalizedName) || normalizedName.includes('..')) {
     throw httpError(400, 'Nome de arquivo inválido.');
@@ -114,8 +115,10 @@ function assertLogo(buffer, mimeType, originalName) {
   if (mimeType === 'image/jpeg' && !(buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff)) throw httpError(400, 'Arquivo JPEG inválido.');
 }
 
+const settingsColumns = 'id, logo_path, created_at, updated_at, ' + editableFields.join(', ');
+
 async function fetchRow(client = { query }) {
-  const result = await client.query('SELECT * FROM company_settings WHERE singleton_key = TRUE LIMIT 1');
+  const result = await client.query('SELECT ' + settingsColumns + ' FROM company_settings WHERE singleton_key = TRUE LIMIT 1');
   return result.rows[0] || null;
 }
 
@@ -132,14 +135,14 @@ export async function updateCompanySettings(body, user) {
       const columns = Object.keys(payload);
       const placeholders = columns.map((_, index) => `$${index + 1}`);
       const inserted = columns.length
-        ? await client.query(`INSERT INTO company_settings (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`, Object.values(payload))
-        : await client.query('INSERT INTO company_settings DEFAULT VALUES RETURNING *');
+        ? await client.query(`INSERT INTO company_settings (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING ${settingsColumns}`, Object.values(payload))
+        : await client.query(`INSERT INTO company_settings DEFAULT VALUES RETURNING ${settingsColumns}`);
       row = inserted.rows[0];
     } else if (Object.keys(payload).length) {
       const columns = Object.keys(payload);
       const assignments = columns.map((column, index) => `${column} = $${index + 1}`);
       const updated = await client.query(
-        `UPDATE company_settings SET ${assignments.join(', ')}, updated_at = NOW() WHERE id = $${columns.length + 1} RETURNING *`,
+        `UPDATE company_settings SET ${assignments.join(', ')}, updated_at = NOW() WHERE id = $${columns.length + 1} RETURNING ${settingsColumns}`,
         [...Object.values(payload), current.id],
       );
       row = updated.rows[0];
@@ -159,7 +162,7 @@ export async function updateCompanySettings(body, user) {
 }
 
 export async function uploadCompanyLogo({ originalName, mimeType }, buffer, user) {
-  assertLogo(buffer, mimeType, originalName);
+  assertCompanyImage(buffer, mimeType, originalName, maxLogoBytes, 'a logo');
   const extension = mimeType === 'image/png' ? '.png' : '.jpg';
   const storedName = `logo-${randomUUID()}${extension}`;
   await fs.mkdir(logoUploadRoot, { recursive: true });
@@ -172,8 +175,8 @@ export async function uploadCompanyLogo({ originalName, mimeType }, buffer, user
       const current = await fetchRow(client);
       previousPath = current?.logo_path || null;
       const saved = current
-        ? await client.query('UPDATE company_settings SET logo_path = $1, updated_at = NOW() WHERE id = $2 RETURNING *', [storedName, current.id])
-        : await client.query('INSERT INTO company_settings (logo_path) VALUES ($1) RETURNING *', [storedName]);
+        ? await client.query(`UPDATE company_settings SET logo_path = $1, updated_at = NOW() WHERE id = $2 RETURNING ${settingsColumns}`, [storedName, current.id])
+        : await client.query(`INSERT INTO company_settings (logo_path) VALUES ($1) RETURNING ${settingsColumns}`, [storedName]);
       await logAudit(client, {
         entityType: 'company_settings',
         entityId: saved.rows[0].id,
@@ -202,7 +205,7 @@ export async function removeCompanyLogo(user) {
     const current = await fetchRow(client);
     if (!current?.logo_path) return publicSettings(current);
     previousPath = current.logo_path;
-    const updated = await client.query('UPDATE company_settings SET logo_path = NULL, updated_at = NOW() WHERE id = $1 RETURNING *', [current.id]);
+    const updated = await client.query(`UPDATE company_settings SET logo_path = NULL, updated_at = NOW() WHERE id = $1 RETURNING ${settingsColumns}`, [current.id]);
     await logAudit(client, {
       entityType: 'company_settings', entityId: current.id, action: 'logo_remove',
       previousValue: { has_logo: true }, newValue: { has_logo: false }, userId: user.id,
@@ -241,4 +244,40 @@ export async function getCompanyPdfData(database = { query }) {
     }
   }
   return { ...publicSettings(row), logo };
+}
+
+export async function getRepresentativeSignature(database = { query }) {
+  const result = await database.query('SELECT representative_signature FROM company_settings WHERE singleton_key = TRUE');
+  return result.rows[0]?.representative_signature ?? null;
+}
+
+export async function saveRepresentativeSignature(image, buffer, user) {
+  if (image) {
+    assertCompanyImage(buffer, image.mimeType, image.originalName, 5 * 1024 * 1024, 'a assinatura');
+    try {
+      await sharp(buffer, { limitInputPixels: 16_000_000, failOn: 'warning' }).stats();
+    } catch {
+      throw httpError(400, 'Imagem inválida ou com resolução superior a 16 megapixels.');
+    }
+  }
+  await transaction(async (client) => {
+    if (image) {
+      await client.query('INSERT INTO company_settings DEFAULT VALUES ON CONFLICT (singleton_key) DO NOTHING');
+    }
+    const result = await client.query(
+      'SELECT id, representative_signature IS NOT NULL AS has_signature FROM company_settings WHERE singleton_key = TRUE FOR UPDATE',
+    );
+    const current = result.rows[0];
+    if (!current || (!image && !current.has_signature)) return;
+    await client.query(
+      'UPDATE company_settings SET representative_signature = $1, updated_at = NOW() WHERE id = $2',
+      [buffer, current.id],
+    );
+    await logAudit(client, {
+      entityType: 'company_settings', entityId: current.id,
+      action: image ? 'signature_update' : 'signature_remove',
+      previousValue: { has_signature: current.has_signature }, newValue: { has_signature: Boolean(image) },
+      userId: user.id,
+    });
+  });
 }
