@@ -147,9 +147,88 @@ function RepresentativeSignature({ canEdit }) {
   );
 }
 
+const securityEndpoint = '/company-settings/security';
+
+function MasterPasswordSettings() {
+  const [configured, setConfigured] = useState(null);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [entries, setEntries] = useState(null);
+  const [moreEntries, setMoreEntries] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get(securityEndpoint + '/master-password', { signal: controller.signal })
+      .then(({ data }) => setConfigured(data.configured))
+      .catch(() => { if (!controller.signal.aborted) setError('Não foi possível consultar a senha mestre.'); });
+    return () => controller.abort();
+  }, []);
+
+  async function save(deactivate) {
+    setBusy(true);
+    setError('');
+    try {
+      const { data } = await api.put(securityEndpoint + '/master-password', {
+        current_password: current, new_password: deactivate ? undefined : next, deactivate,
+      });
+      setConfigured(data.configured);
+      toast.success(data.configured ? 'Senha mestre salva.' : 'Senha mestre desativada.');
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Não foi possível salvar a senha mestre.');
+    } finally {
+      setCurrent('');
+      setNext('');
+      setBusy(false);
+    }
+  }
+
+  async function loadAudit(before) {
+    setBusy(true);
+    setError('');
+    try {
+      const { data } = await api.get(securityEndpoint + '/exceptions', { params: { before } });
+      setEntries(before ? [...entries, ...data] : data);
+      setMoreEntries(data.length === 50);
+    } catch {
+      setError('Não foi possível consultar a auditoria.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="panel company-settings-page__security">
+    <h2>Segurança</h2>
+    <h3>Senha mestre administrativa</h3>
+    {error && <p role="alert">{error}</p>}
+    {configured !== null && <form autoComplete="off" onSubmit={(event) => { event.preventDefault(); save(false); }}>
+      <p role="status">{configured ? 'Senha mestre configurada' : 'Senha mestre desativada'}</p>
+      {configured && <label className="field">Senha mestre atual<input className="field__input" type="password" autoComplete="off" required value={current} onChange={(event) => setCurrent(event.target.value)} /></label>}
+      <label className="field">Nova senha mestre<input className="field__input" type="password" autoComplete="off" required minLength={12} maxLength={72} value={next} onChange={(event) => setNext(event.target.value)} /></label>
+      <div className="page__actions">
+        <button className="button button_primary" disabled={busy}>{configured ? 'Alterar senha mestre' : 'Cadastrar senha mestre'}</button>
+        {configured && <button type="button" className="button" disabled={busy || !current} onClick={() => {
+          if (window.confirm('Desativar a senha mestre administrativa?')) save(true);
+        }}>Desativar senha mestre</button>}
+      </div>
+    </form>}
+    <button type="button" className="button" disabled={busy} onClick={() => loadAudit()}>Consultar auditoria de exceções</button>
+    {entries && (entries.length ? <ul>{entries.map((entry) => <li key={entry.id}>
+      <strong>{new Date(entry.created_at).toLocaleString('pt-BR')} · {entry.action}</strong>
+      <p>Módulo: {entry.new_value.module} · Operação: {entry.new_value.operation} · Resultado: salvo</p>
+      <p>Registro: {entry.entity_id} · Usuário: {entry.user_id}</p>
+      <p>{entry.new_value.reason}</p><p>Justificativa: {entry.new_value.justification}</p>
+    </li>)}</ul> : <p>Nenhuma exceção registrada.</p>)}
+    {moreEntries && <button type="button" className="button" disabled={busy} onClick={() => loadAudit(entries.at(-1).created_at)}>Ver registros anteriores</button>}
+  </section>;
+}
+
 export function CompanySettingsPage() {
   const toast = useToast();
   const user = getStoredUser();
+  const canManageSecurity = user?.is_super_admin || user?.username === 'admin' || (user?.role_slug === 'admin' && canAccessPermission(user, 'roles.manage'));
   const canEdit = canAccessPermission(user, 'company_settings.edit');
   const [form, setForm] = useState(emptyForm);
   const [logoUrl, setLogoUrl] = useState(null);
@@ -336,6 +415,7 @@ export function CompanySettingsPage() {
 
         {canEdit && <div className="page__actions"><button className="button button_primary" type="submit" disabled={saving}><Save size={17} /> {saving ? 'Salvando...' : 'Salvar configurações'}</button></div>}
       </form>
+      {canManageSecurity && <MasterPasswordSettings />}
     </section>
   );
 }

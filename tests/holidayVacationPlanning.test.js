@@ -20,7 +20,7 @@ test('ponto facultativo não bloqueia; feriado e repouso bloqueiam programação
   await validateFutureDates('2026-11-02', '2026-11-06', period, '2026-09-01', '2026-10-01', optional);
   const legal = async (date) => date === '2026-11-03' ? [{ name: 'Feriado local', classification: 'feriado_legal', no_work: true }] : [];
   await assert.rejects(validateFutureDates('2026-11-02', '2026-11-06', period, '2026-09-01', '2026-10-01', legal), /Feriado local.*2026-11-03/);
-  await assert.rejects(validateFutureDates('2026-11-06', '2026-11-10', period, '2026-09-01', '2026-10-01', optional), /repouso semanal/);
+  await assert.rejects(validateFutureDates('2026-11-06', '2026-11-10', period, '2026-09-01', '2026-10-01', optional), /descanso semanal remunerado/);
 });
 
 test('DSR domingo: quinta permitida; sexta, sábado e domingo bloqueados', async () => {

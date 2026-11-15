@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { httpError } from '../utils/httpError.js';
 import { addCalendarMonths, addDays, article130Days, businessToday, calendarDays, dateOnly, monthsInPeriod, periodsFromAdmission, validateLeaveCollection, vacationComplianceAlerts, vacationStatus } from './vacationRules.js';
 import { bonusDeadlineAlert, decemberPriority, decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
+import { auditException, authorizeException, exceptionRules } from './administrativeExceptionService.js';
 import { holidayOn } from './holidayService.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -16,19 +17,24 @@ function bonusFields(payload, period, entitlement, others = []) {
   if (bonus && others.some((row) => Number(row.bonus_days || 0) > 0)) throw httpError(409, 'Já existe abono neste período aquisitivo.');
   return { bonus, requested: bonus ? requested : null };
 }
-export async function validateFutureDates(start, end, period, notice, today = businessToday(), holidayLookup = holidayOn) {
-  if (start <= today || start < dateOnly(period.concession_start)) throw httpError(400, 'O gozo futuro deve começar após hoje e após a aquisição do direito.');
-  // O prazo vencido é exibido como atraso, mas não impede a organização do gozo pendente.
+export async function vacationStartRestriction(start, holidayLookup = holidayOn) {
   const dsrMessage = 'Não é permitido iniciar férias nesta data devido ao descanso semanal remunerado de domingo.';
-  if (new Date(`${start}T00:00:00Z`).getUTCDay() === 0) throw httpError(400, dsrMessage);
+  if (new Date(`${start}T00:00:00Z`).getUTCDay() === 0) return dsrMessage;
   for (const offset of [1, 2]) {
     const target = addDays(start, offset);
     const rest = new Date(`${target}T00:00:00Z`).getUTCDay() === 0;
     // Domingo tem prioridade mesmo quando coincide com feriado: uma única mensagem de DSR.
-    if (rest) throw httpError(400, dsrMessage);
+    if (rest) return dsrMessage;
     const holiday = (await holidayLookup(target)).find((item) => item.classification === 'feriado_legal' || item.no_work);
-    if (holiday) throw httpError(400, `Não é permitido iniciar férias nesta data devido ao feriado ${holiday.name} em ${target}.`);
+    if (holiday) return `Não é permitido iniciar férias nesta data devido ao feriado ${holiday.name} em ${target}.`;
   }
+  return null;
+}
+
+export async function validateFutureDates(start, end, period, notice, today = businessToday(), holidayLookup = holidayOn) {
+  if (start <= today || start < dateOnly(period.concession_start)) throw httpError(400, 'O gozo futuro deve começar após hoje e após a aquisição do direito.');
+  const restriction = await vacationStartRestriction(start, holidayLookup);
+  if (restriction) await authorizeException(null, exceptionRules.futureVacationStart, null, null, restriction);
   if (!notice || calendarDays(notice, start) - 1 < 30) throw httpError(400, 'O aviso escrito deve anteceder o início das férias em pelo menos 30 dias.');
 }
 export function entitlementForPeriod(period, absences, leaves, today = businessToday()) {
@@ -370,7 +376,7 @@ export async function changeLeave(employeeId, leaveId, action, actor) {
   });
 }
 
-export async function correctConfirmedLeave(employeeId, leaveId, payload, actor) {
+export async function correctConfirmedLeave(employeeId, leaveId, payload, actor, user) {
   return transaction(async (client) => {
     const person = await employee(client, employeeId, true);
     const before = (await client.query('SELECT * FROM vacation_leaves WHERE id=$1 AND employee_id=$2 FOR UPDATE', [id(leaveId), person.id])).rows[0];
@@ -410,15 +416,27 @@ export async function correctConfirmedLeave(employeeId, leaveId, payload, actor)
     if (corrected) bonusFields({ bonus_days: requestedBonus, bonus_requested_at: requestedAt }, period, entitlement ?? 30, periodLeaves);
     if (clear && before.status !== 'historica') validateLeaveCollection(corrected ? [...periodLeaves, corrected] : periodLeaves, entitlement);
     else if (corrected && periodLeaves.some((leave) => start <= dateOnly(leave.end_date) && end >= dateOnly(leave.start_date))) throw httpError(409, 'Há férias sobrepostas.');
+    const changedHistoricalStart = corrected && before.status === 'historica' && start !== dateOnly(before.start_date);
+    const restriction = changedHistoricalStart ? await vacationStartRestriction(start, (date) => holidayOn(date, client)) : before.historical_start_irregularity;
+    const rule = exceptionRules.historicalVacationCorrection;
+    const used = periodLeaves.reduce((total, leave) => total + Number(leave.days) + Number(leave.bonus_days || 0), 0);
+    if (changedHistoricalStart && restriction && used + corrected.days + requestedBonus > (entitlement ?? 30)) {
+      throw httpError(409, 'A correção excede o saldo do período aquisitivo.');
+    }
+    const justification = changedHistoricalStart && restriction
+      ? await authorizeException(client, rule, user, payload.administrative_exception, restriction, [before.id, before.version, start, end, requestedBonus, requestedAt, reason])
+      : null;
     const after = payload.action === 'cancel'
       ? (await client.query("UPDATE vacation_leaves SET status='cancelada', updated_by=$1, updated_at=NOW(), version=version+1 WHERE id=$2 RETURNING *", [actor, before.id])).rows[0]
-      : (await client.query('UPDATE vacation_leaves SET start_date=$1, end_date=$2, days=$3, payment_due_date=$4, updated_by=$5, updated_at=NOW(), version=version+1, bonus_days=$7, bonus_requested_at=$8 WHERE id=$6 RETURNING *', [start, end, corrected.days, addDays(start, -2), actor, before.id, requestedBonus, requestedAt || null])).rows[0];
+      : (await client.query('UPDATE vacation_leaves SET start_date=$1, end_date=$2, days=$3, payment_due_date=$4, updated_by=$5, updated_at=NOW(), version=version+1, bonus_days=$7, bonus_requested_at=$8, historical_start_irregularity=$9 WHERE id=$6 RETURNING *', [start, end, corrected.days, addDays(start, -2), actor, before.id, requestedBonus, requestedAt || null, restriction ?? null])).rows[0];
     await audit(client, person.id, period.id, 'leave', before.id, payload.action === 'cancel' ? 'cancel_confirmed' : 'correct_confirmed', before, after, actor, reason);
+    if (justification) await auditException(client, rule, user, after.id, justification, restriction);
     return { leave: after, balance: clear && before.status !== 'historica' ? entitlement - (corrected ? [...periodLeaves, corrected] : periodLeaves).filter((row) => ['gozada', 'historica'].includes(row.status)).reduce((sum, row) => sum + Number(row.days), 0) - (corrected ? [...periodLeaves, corrected] : periodLeaves).reduce((sum, row) => sum + Number(row.bonus_days || 0), 0) : null };
   });
 }
 
-export async function regularizeHistoricalLeave(employeeId, periodId, payload, actor) {
+export async function regularizeHistoricalLeave(employeeId, periodId, payload, user) {
+  const actor = user.id;
   return transaction(async (client) => {
     const person = await employee(client, employeeId, true);
     await ensurePeriods(client, person, id(periodId));
@@ -437,9 +455,19 @@ export async function regularizeHistoricalLeave(employeeId, periodId, payload, a
     const absences = (await client.query('SELECT * FROM vacation_absences WHERE period_id=$1 AND cancelled_at IS NULL', [period.id])).rows;
     const { entitlement } = entitlementForPeriod(period, absences, same);
     const { bonus, requested } = bonusFields(payload, period, entitlement ?? 30, same);
-    const after = (await client.query(`INSERT INTO vacation_leaves (employee_id, period_id, start_date, end_date, days, status, notes, created_by, confirmed_by, confirmed_at, bonus_days, bonus_requested_at)
-      VALUES ($1,$2,$3,$4,$5,'historica',$6,$7,$7,NOW(),$8,$9) RETURNING *`, [person.id, period.id, start, end, days, note(payload.notes), actor, bonus, requested])).rows[0];
+    const rule = exceptionRules.historicalVacationStart;
+    const restriction = await vacationStartRestriction(start, (date) => holidayOn(date, client));
+    const used = same.reduce((total, leave) => total + Number(leave.days) + Number(leave.bonus_days || 0), 0);
+    if (restriction && used + days + bonus > (entitlement ?? 30)) {
+      throw httpError(409, 'O lançamento excede o saldo do período aquisitivo.');
+    }
+    const justification = restriction
+      ? await authorizeException(client, rule, user, payload.administrative_exception, restriction, [person.id, period.id, start, end, note(payload.notes), bonus, requested])
+      : null;
+    const after = (await client.query(`INSERT INTO vacation_leaves (employee_id, period_id, start_date, end_date, days, status, notes, created_by, confirmed_by, confirmed_at, bonus_days, bonus_requested_at, historical_start_irregularity)
+      VALUES ($1,$2,$3,$4,$5,'historica',$6,$7,$7,NOW(),$8,$9,$10) RETURNING *`, [person.id, period.id, start, end, days, note(payload.notes), actor, bonus, requested, restriction])).rows[0];
     await audit(client, person.id, period.id, 'leave', after.id, 'historical_regularization', null, after, actor);
+    if (justification) await auditException(client, rule, user, after.id, justification, restriction);
     return after;
   });
 }

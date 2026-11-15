@@ -34,9 +34,9 @@ export async function listHolidayRules(year = new Date().getFullYear()) {
   return { year: value, rules, dates: holidaysForYear(rules, value) };
 }
 
-export async function holidayOn(date) {
+export async function holidayOn(date, database = { query }) {
   const target = dateOnly(date);
-  const rules = (await query('SELECT * FROM holiday_rules WHERE active=TRUE')).rows;
+  const rules = (await database.query('SELECT * FROM holiday_rules WHERE active=TRUE')).rows;
   return holidaysForYear(rules, Number(target.slice(0, 4))).filter((item) => item.date === target);
 }
 
