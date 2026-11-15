@@ -12,7 +12,8 @@ const attemptsPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, m
 export const exceptionRules = Object.freeze({
   historicalVacationStart: { id: 'VACATION_HISTORICAL_START', classification: 'authorizable', module: 'vacations', operation: 'register_historical' },
   historicalVacationCorrection: { id: 'VACATION_HISTORICAL_CORRECTION_START', classification: 'authorizable', module: 'vacations', operation: 'correct_historical' },
-  futureVacationStart: { id: 'VACATION_FUTURE_START', classification: 'mandatory' },
+  futureVacationStart: { id: 'VACATION_FUTURE_START', classification: 'authorizable', module: 'vacations', operation: 'schedule' },
+  futureVacationCorrection: { id: 'VACATION_FUTURE_CORRECTION_START', classification: 'authorizable', module: 'vacations', operation: 'edit_schedule' },
 });
 
 export function canManageMaster(user) {
@@ -70,7 +71,7 @@ export async function configureMaster(user, { current_password, new_password, de
   });
 }
 
-export async function authorizeException(client, rule, user, credentials, reason, operationData) {
+export async function authorizeException(client, rule, user, credentials, reason, operationData, displayDetails = {}) {
   if (rule.classification === 'warning') return null;
   if (rule.classification !== 'authorizable' || !Object.values(exceptionRules).includes(rule)) throw httpError(400, reason);
   assertManager(user);
@@ -80,7 +81,7 @@ export async function authorizeException(client, rule, user, credentials, reason
   const key = createHash('sha256').update('administrative-exception:').update(secret.password_hash).digest();
   if (!credentials) {
     const challenge = jwt.sign({ scope }, key, { jwtid: randomUUID(), expiresIn: '3m' });
-    throw httpError(409, reason, { code: 'ADMIN_EXCEPTION_REQUIRED', details: { rule: rule.id, challenge } });
+    throw httpError(409, reason, { code: 'ADMIN_EXCEPTION_REQUIRED', details: { ...displayDetails, rule: rule.id, challenge } });
   }
   let challenge;
   try {
@@ -100,10 +101,10 @@ export async function authorizeException(client, rule, user, credentials, reason
   return justification;
 }
 
-export function auditException(client, rule, user, recordId, justification, reason) {
+export function auditException(client, rule, user, recordId, justification, reason, context = {}) {
   return logAudit(client, {
     entityType: 'administrative_exception', entityId: recordId, action: rule.id, userId: user.id,
-    newValue: { module: rule.module, operation: rule.operation, justification, reason, result: 'saved' },
+    newValue: { module: rule.module, operation: rule.operation, justification, reason, ...context, result: 'saved' },
   });
 }
 

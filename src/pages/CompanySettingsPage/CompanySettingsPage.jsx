@@ -219,6 +219,7 @@ function MasterPasswordSettings() {
       <strong>{new Date(entry.created_at).toLocaleString('pt-BR')} · {entry.action}</strong>
       <p>Módulo: {entry.new_value.module} · Operação: {entry.new_value.operation} · Resultado: salvo</p>
       <p>Registro: {entry.entity_id} · Usuário: {entry.user_id}</p>
+      {entry.new_value.employee_id && <p>Funcionário: {entry.new_value.employee_id} · Período aquisitivo: {entry.new_value.period_id} · Início: {entry.new_value.start_date}</p>}
       <p>{entry.new_value.reason}</p><p>Justificativa: {entry.new_value.justification}</p>
     </li>)}</ul> : <p>Nenhuma exceção registrada.</p>)}
     {moreEntries && <button type="button" className="button" disabled={busy} onClick={() => loadAudit(entries.at(-1).created_at)}>Ver registros anteriores</button>}

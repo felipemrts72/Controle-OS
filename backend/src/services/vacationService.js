@@ -31,12 +31,32 @@ export async function vacationStartRestriction(start, holidayLookup = holidayOn)
   return null;
 }
 
-export async function validateFutureDates(start, end, period, notice, today = businessToday(), holidayLookup = holidayOn) {
+async function scheduledStartRestriction(start, holidayLookup) {
+  const reason = await vacationStartRestriction(start, holidayLookup);
+  if (reason) return reason;
+  const holiday = (await holidayLookup(start)).find((item) => item.classification === 'feriado_legal' || item.no_work);
+  return holiday ? `O início selecionado coincide com o feriado ${holiday.name} em ${start}.` : null;
+}
+
+function validateScheduleDates(start, period, notice, today) {
   if (start <= today || start < dateOnly(period.concession_start)) throw httpError(400, 'O gozo futuro deve começar após hoje e após a aquisição do direito.');
-  const restriction = await vacationStartRestriction(start, holidayLookup);
-  if (restriction) await authorizeException(null, exceptionRules.futureVacationStart, null, null, restriction);
   if (!notice || calendarDays(notice, start) - 1 < 30) throw httpError(400, 'O aviso escrito deve anteceder o início das férias em pelo menos 30 dias.');
 }
+
+export async function validateFutureDates(start, end, period, notice, today = businessToday(), holidayLookup = holidayOn) {
+  validateScheduleDates(start, period, notice, today);
+  const restriction = await scheduledStartRestriction(start, holidayLookup);
+  if (restriction) throw httpError(400, restriction);
+}
+
+async function authorizeScheduleStart(client, rule, user, payload, context, operationData) {
+  const restriction = await scheduledStartRestriction(context.start_date, (date) => holidayOn(date, client));
+  if (!restriction) return { restriction, justification: null };
+  const justification = await authorizeException(client, rule, user, payload.administrative_exception, restriction,
+    [context, operationData], { start_date: context.start_date, future_schedule: true });
+  return { restriction, justification };
+}
+
 export function entitlementForPeriod(period, absences, leaves, today = businessToday()) {
   if (period.special_case || dateOnly(period.acquisition_end) >= today) return { entitlement: null, source: 'incomplete' };
   if (period.historical_entitlement != null) return { entitlement: Number(period.historical_entitlement), source: 'declared' };
@@ -295,7 +315,7 @@ export async function declareHistoricalEntitlement(employeeId, periodId, payload
     return after;
   });
 }
-export async function saveLeave(employeeId, periodId, payload, actor) {
+export async function saveLeave(employeeId, periodId, payload, actor, user) {
   return transaction(async (client) => {
     const person = await employee(client, employeeId, true);
     if (person.employment_status !== 'ativo') throw httpError(409, 'Funcionário não está ativo; encaminhe para conferência de RH.');
@@ -306,7 +326,7 @@ export async function saveLeave(employeeId, periodId, payload, actor) {
     const start = dateOnly(payload.start_date); const end = dateOnly(payload.end_date);
     const days = calendarDays(start, end);
     const notice = payload.notice_date ? dateOnly(payload.notice_date) : null;
-    await validateFutureDates(start, end, period, notice);
+    validateScheduleDates(start, period, notice, businessToday());
     const calendarReview = note(payload.calendar_review_note);
     if (payload.employee_agreed !== true || payload.calendar_confirmed !== true || !calendarReview || calendarReview.length < 10) throw httpError(400, 'Registre a concordância e a conferência administrativa do calendário e da escala.');
     const absences = (await client.query('SELECT * FROM vacation_absences WHERE period_id=$1 AND cancelled_at IS NULL', [period.id])).rows;
@@ -319,13 +339,18 @@ export async function saveLeave(employeeId, periodId, payload, actor) {
     validateLeaveCollection([...same, { start_date: start, end_date: end, days, status: 'programada', bonus_days: bonus }], entitlement);
     if (notice && notice > businessToday()) throw httpError(400, 'A data de entrega do aviso não pode estar no futuro.');
     if (bonus > 0 && !requested) throw httpError(400, 'Informe a data do pedido de abono feito pelo empregado.');
-    const after = (await client.query(`INSERT INTO vacation_leaves (employee_id, period_id, start_date, end_date, days, status, employee_agreed, calendar_confirmed, calendar_review_note, calendar_reviewed_by, notice_date, payment_due_date, notes, created_by, bonus_days, bonus_requested_at)
-      VALUES ($1,$2,$3,$4,$5,'programada',TRUE,TRUE,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`, [person.id, period.id, start, end, days, calendarReview, actor, notice, addDays(start, -2), note(payload.notes), actor, bonus, requested])).rows[0];
+    const rule = exceptionRules.futureVacationStart;
+    const context = { employee_id: person.id, period_id: period.id, start_date: start };
+    const { restriction, justification } = await authorizeScheduleStart(client, rule, user, payload, context,
+      [end, notice, calendarReview, note(payload.notes), bonus, requested]);
+    const after = (await client.query(`INSERT INTO vacation_leaves (employee_id, period_id, start_date, end_date, days, status, employee_agreed, calendar_confirmed, calendar_review_note, calendar_reviewed_by, notice_date, payment_due_date, notes, created_by, bonus_days, bonus_requested_at, scheduled_start_irregularity)
+      VALUES ($1,$2,$3,$4,$5,'programada',TRUE,TRUE,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`, [person.id, period.id, start, end, days, calendarReview, actor, notice, addDays(start, -2), note(payload.notes), actor, bonus, requested, restriction])).rows[0];
     await audit(client, person.id, period.id, 'leave', after.id, 'schedule', null, after, actor);
+    if (justification) await auditException(client, rule, user, after.id, justification, restriction, context);
     return after;
   });
 }
-export async function editScheduledLeave(employeeId, leaveId, payload, actor) {
+export async function editScheduledLeave(employeeId, leaveId, payload, actor, user) {
   return transaction(async (client) => {
     const person = await employee(client, employeeId, true);
     const before = (await client.query('SELECT * FROM vacation_leaves WHERE id=$1 AND employee_id=$2 FOR UPDATE', [id(leaveId), person.id])).rows[0];
@@ -336,7 +361,7 @@ export async function editScheduledLeave(employeeId, leaveId, payload, actor) {
     if (!period || period.special_case) throw httpError(409, 'Período com divergência cadastral.');
     const start = dateOnly(payload.start_date); const end = dateOnly(payload.end_date);
     const days = calendarDays(start, end);
-    await validateFutureDates(start, end, period, before.notice_date ? dateOnly(before.notice_date) : null);
+    validateScheduleDates(start, period, before.notice_date ? dateOnly(before.notice_date) : null, businessToday());
     const calendarReview = note(payload.calendar_review_note);
     if (payload.calendar_confirmed !== true || !calendarReview || calendarReview.length < 10) throw httpError(400, 'Confirme a revisão do calendário e da escala para as novas datas.');
     const existing = (await client.query("SELECT * FROM vacation_leaves WHERE employee_id=$1 AND id<>$2 AND status<>'cancelada' FOR UPDATE", [person.id, before.id])).rows;
@@ -348,8 +373,13 @@ export async function editScheduledLeave(employeeId, leaveId, payload, actor) {
     const { bonus, requested } = bonusFields(payload, period, entitlement, same);
     if (bonus > 0 && !requested) throw httpError(400, 'Informe a data do pedido de abono feito pelo empregado.');
     validateLeaveCollection([...same, { ...before, start_date: start, end_date: end, days, bonus_days: bonus }], entitlement);
-    const after = (await client.query('UPDATE vacation_leaves SET start_date=$1,end_date=$2,days=$3,notes=$4,payment_due_date=$5,calendar_review_note=$6,calendar_reviewed_by=$7,updated_by=$7,updated_at=NOW(),version=version+1,bonus_days=$9,bonus_requested_at=$10 WHERE id=$8 RETURNING *', [start, end, days, note(payload.notes), addDays(start, -2), calendarReview, actor, before.id, bonus, requested])).rows[0];
+    const rule = exceptionRules.futureVacationCorrection;
+    const context = { employee_id: person.id, period_id: period.id, start_date: start };
+    const { restriction, justification } = await authorizeScheduleStart(client, rule, user, payload, context,
+      [before.id, before.version, end, calendarReview, note(payload.notes), bonus, requested]);
+    const after = (await client.query('UPDATE vacation_leaves SET start_date=$1,end_date=$2,days=$3,notes=$4,payment_due_date=$5,calendar_review_note=$6,calendar_reviewed_by=$7,updated_by=$7,updated_at=NOW(),version=version+1,bonus_days=$9,bonus_requested_at=$10,scheduled_start_irregularity=$11 WHERE id=$8 RETURNING *', [start, end, days, note(payload.notes), addDays(start, -2), calendarReview, actor, before.id, bonus, requested, restriction])).rows[0];
     await audit(client, person.id, period.id, 'leave', before.id, 'edit_schedule', before, after, actor);
+    if (justification) await auditException(client, rule, user, after.id, justification, restriction, context);
     return after;
   });
 }

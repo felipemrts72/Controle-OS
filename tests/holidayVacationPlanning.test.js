@@ -42,3 +42,10 @@ test('segundo aquisitivo não oculta primeiro prazo de dezembro; atraso mantém 
   assert.equal(decemberPriority({ ...periods[0], balance: 30 }, 2026, '2026-10-23'), 'Vencem até 31 de dezembro');
   assert.equal(decemberPriority({ ...periods[0], balance: 30 }, 2027, '2027-01-02'), 'Atrasadas');
 });
+
+test('feriado no proprio dia e aviso insuficiente continuam exigindo tratamento distinto', async () => {
+  const period = { concession_start: '2026-01-01' };
+  const holidays = async (date) => date === '2026-11-03' ? [{ name: 'Feriado local', classification: 'feriado_legal' }] : [];
+  await assert.rejects(validateFutureDates('2026-11-03', '2026-11-16', period, '2026-09-01', '2026-10-01', holidays), /coincide com o feriado/);
+  await assert.rejects(validateFutureDates('2026-11-03', '2026-11-16', period, '2026-10-15', '2026-10-20', holidays), /aviso escrito/);
+});
