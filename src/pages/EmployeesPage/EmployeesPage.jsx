@@ -8,6 +8,7 @@ import { canAccessPermission } from '../../utils/permissions.js';
 import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile.js';
 import { formatCpfPartial, formatDate, statusLabels } from './employeeUtils.js';
 import { PendingReportModal } from './PendingReportModal.jsx';
+import { CompensationModal } from './CompensationModal.jsx';
 import './EmployeesPage.css';
 
 export function EmployeesPage() {
@@ -16,6 +17,8 @@ export function EmployeesPage() {
   const canCreate = canAccessPermission(user, 'employees.create');
   const canEdit = canAccessPermission(user, 'employees.edit') || canAccessPermission(user, 'employees.manage');
   const canPrint = canAccessPermission(user, 'employees.profile.print');
+  const canUpdateCompensation = ['salary', 'meal_allowance'].some((key) => canAccessPermission(user, `employees.${key}.view`) && (canAccessPermission(user, `employees.${key}.manage`) || canAccessPermission(user, 'employees.manage')));
+  const [compensationOpen, setCompensationOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -145,9 +148,10 @@ export function EmployeesPage() {
 
   return (
     <section className="page employees-page">
-      <div className="page__header">
+      <div className="page__header employees-page__list-header">
         <h1 className="page__title">Funcionários</h1>
         <div className="page__actions">
+          {canUpdateCompensation && <button className="button" type="button" onClick={() => setCompensationOpen(true)}>Atualização cadastral</button>}
           {canPrint && (
             <button className="button" type="button" onClick={openPendingReport} disabled={loadingPendingReport || downloadingPendingReport}>
               <Download size={18} />
@@ -169,6 +173,7 @@ export function EmployeesPage() {
         </div>
       </div>
 
+      {compensationOpen && <CompensationModal onClose={() => setCompensationOpen(false)} />}
       <form className="panel employees-page__filters" onSubmit={submitFilters}>
         <label className="field">
           <span className="field__label">Buscar por nome</span>

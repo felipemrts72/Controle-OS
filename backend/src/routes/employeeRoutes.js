@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import * as compensation from '../controllers/employeeCompensationController.js';
 import {
   auditIndex,
   advancesProfile,
@@ -35,6 +36,10 @@ import { authenticate, requireAnyPermission, requirePermission } from '../middle
 export const employeeRoutes = Router();
 
 employeeRoutes.use(authenticate);
+employeeRoutes.get('/compensation/employees', compensation.employees);
+employeeRoutes.get('/compensation/report', compensation.report);
+employeeRoutes.get('/compensation/report-pdf', compensation.pdf);
+employeeRoutes.post('/:id/compensation', compensation.update);
 
 employeeRoutes.get('/', requirePermission('employees.view'), index);
 employeeRoutes.get('/report-pdf', requirePermission('employees.view'), requirePermission('employees.profile.print'), listReportPdf);

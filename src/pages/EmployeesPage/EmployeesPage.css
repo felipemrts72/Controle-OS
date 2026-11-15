@@ -413,3 +413,18 @@
 .employees-page__vacation h3 { margin: 0 0 6px; }
 .employees-page__vacation p { margin: 5px 0; }
 .employees-page__vacation-alert { color: #a16207; font-weight: 700; }
+.employees-page__list-header { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
+.employees-page__list-header .page__actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.employees-page__list-header .button { min-width: 0; white-space: normal; justify-content: center; text-align: center; }
+.confirm-modal__content.compensation-modal { max-width: 800px; }
+.compensation-fields { border: 0; padding: 0; margin: 0; display: grid; gap: 16px; min-width: 0; }
+.compensation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.compensation-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 16px; display: grid; align-content: start; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.compensation-card h3, .compensation-card p { margin: 0; }
+.compensation-modal .field__input { width: 100%; min-width: 0; box-sizing: border-box; }
+.compensation-modal .field { min-width: 0; }
+.compensation-new { border-color: var(--color-primary); }
+.compensation-error { color: #b91c1c; }
+.compensation-report { display: grid; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 16px; }
+@media (max-width: 1100px) { .employees-page__list-header .page__actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .employees-page__list-header .page__actions, .compensation-grid { grid-template-columns: minmax(0, 1fr); } }
