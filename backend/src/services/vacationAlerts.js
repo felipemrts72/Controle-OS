@@ -1,11 +1,19 @@
 import { addCalendarMonths, addDays, businessToday, dateOnly } from './vacationRules.js';
 
-export const vacationFilters = ['all', 'acquired', 'due_soon', 'overdue', 'bonus_deadline', 'december'];
+export const vacationFilters = ['all', 'acquired', 'due_soon', 'overdue', 'bonus_deadline', 'december', 'scheduled', 'concession_risk'];
+
+function planningBalance(period) {
+  return period.free_balance === undefined ? period.balance : period.free_balance;
+}
+
+export function activeVacationSchedules(leaves, today) {
+  return (leaves || []).filter((leave) => leave.status === 'programada' && dateOnly(leave.end_date) >= today);
+}
 
 export function decemberPriority(period, year, today = businessToday()) {
   const current = dateOnly(today);
   const yearEnd = `${year}-12-31`;
-  if (dateOnly(period.acquisition_end) >= current || Number(period.balance || 0) <= 0) return null;
+  if (dateOnly(period.acquisition_end) >= current || Number(planningBalance(period) || 0) <= 0) return null;
   const due = dateOnly(period.concession_end);
   if (due < current) return 'Atrasadas';
   if (due <= yearEnd) return 'Vencem até 31 de dezembro';
@@ -26,10 +34,15 @@ export function alertForPeriod(period, today = businessToday()) {
   const pending = acquired && (unconfirmed || Number(period.balance) > 0);
   const due = dateOnly(period.concession_end);
   const daysRemaining = Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${current}T00:00:00Z`)) / 86400000);
-  const plannedBeforeDue = (period.leaves || []).filter((leave) => leave.status === 'programada' && dateOnly(leave.start_date) >= current && dateOnly(leave.end_date) <= due).reduce((sum, leave) => sum + Number(leave.days), 0);
+  const freeBalance = planningBalance(period);
+  const planningPending = pending && (freeBalance == null || freeBalance > 0);
+  const withinFourMonths = daysRemaining >= 0 && due <= addCalendarMonths(current, 4);
+  const plannedBeforeDue = activeVacationSchedules(period.leaves, current).filter((leave) => dateOnly(leave.end_date) <= due).reduce((sum, leave) => sum + Number(leave.days), 0);
   return {
     acquired: pending,
-    due_soon: pending && daysRemaining >= 0 && due <= addCalendarMonths(current, 4),
+    due_soon: planningPending && withinFourMonths,
+    concession_risk: pending && withinFourMonths && !planningPending && plannedBeforeDue < Number(period.balance),
+    scheduled: activeVacationSchedules(period.leaves, current).length > 0,
     overdue: pending && daysRemaining < 0,
     needs_review: pending && unconfirmed,
     days_remaining: daysRemaining,

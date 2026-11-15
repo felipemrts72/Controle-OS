@@ -251,3 +251,8 @@
 @media (max-width: 600px) { .vacations__skeleton { grid-template-columns: minmax(0, 1fr); } .vacations__skeleton span { height: 64px; } }
 .vacations__empty { display: grid; justify-items: start; gap: 8px; padding: 24px; }
 .vacations__empty p { margin: 0 0 4px; }
+
+.vacations__indicators > .vacations__metric {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

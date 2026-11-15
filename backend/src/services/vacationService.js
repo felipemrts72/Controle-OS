@@ -2,7 +2,7 @@ import { query, transaction } from '../database/pool.js';
 import { createHash } from 'node:crypto';
 import { httpError } from '../utils/httpError.js';
 import { addCalendarMonths, addDays, article130Days, businessToday, calendarDays, dateOnly, monthsInPeriod, periodsFromAdmission, validateLeaveCollection, vacationComplianceAlerts, vacationStatus } from './vacationRules.js';
-import { bonusDeadlineAlert, decemberPriority, decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
+import { activeVacationSchedules, bonusDeadlineAlert, decemberPriority, decorateVacationPeriods, matchesVacationFilter, vacationFilters } from './vacationAlerts.js';
 import { auditException, authorizeException, exceptionRules } from './administrativeExceptionService.js';
 import { holidayOn } from './holidayService.js';
 
@@ -183,7 +183,7 @@ export async function listVacationEmployees(options = {}, admin = false) {
   if (!Number.isInteger(pageNumber) || pageNumber < 1) throw httpError(400, 'Página inválida.');
   const today = businessToday();
   const items = await transaction(async (client) => {
-    await client.query('SET TRANSACTION READ ONLY');
+    await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
     const people = (await client.query(`SELECT id, full_name, job_title, admission_date, employment_status FROM employees WHERE deleted_at IS NULL AND employment_status='ativo' AND full_name ILIKE $1 ORDER BY full_name`, [`%${String(search).slice(0, 100)}%`])).rows;
     if (!people.length) return [];
     const employeeIds = people.map((person) => person.id);
@@ -213,24 +213,32 @@ export async function listVacationEmployees(options = {}, admin = false) {
     near_due: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.due_soon)).length,
     on_leave: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.leaves.some((leave) => ['gozada', 'historica'].includes(leave.status) && dateOnly(leave.start_date) <= today && dateOnly(leave.end_date) >= today))).length,
     pending: indicatorItems.reduce((sum, item) => sum + item.periods.filter((period) => inStatus(period) && period.status === 'INFORMAÇÕES INSUFICIENTES').length, 0),
-    december: indicatorItems.reduce((sum, item) => sum + item.periods.filter((period) => inStatus(period) && period.alert.december).length, 0),
+    december: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.december)).length,
+    scheduled: indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.scheduled)).length,
   };
   if (admin) indicators.bonus_deadline = indicatorItems.filter((item) => item.periods.some((period) => inStatus(period) && period.alert.bonus_deadline)).length;
   const filtered = items.filter((item) => item.periods.some((period) => matchesVacationFilter(period, filter) && (!status || period.status === status)) || (filter === 'all' && !status && item.periods.length === 0));
   if (filter === 'bonus_deadline') filtered.sort((a, b) => {
-    const closest = (item) => item.periods.filter((period) => period.alert.bonus_deadline).map((period) => period.alert.bonus_deadline_date).sort()[0];
+    const closest = (item) => item.periods.filter((period) => inStatus(period) && period.alert.bonus_deadline).map((period) => period.alert.bonus_deadline_date).sort()[0];
     return closest(a).localeCompare(closest(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
   });
-  if (filter === 'due_soon') filtered.sort((a, b) => {
-    const closest = (item) => item.periods.filter((period) => period.alert.due_soon).map((period) => dateOnly(period.concession_end)).sort()[0];
+  if (filter === 'scheduled') {
+    const nextStart = (item) => item.periods.filter(inStatus)
+      .flatMap((period) => activeVacationSchedules(period.leaves, today))
+      .map((leave) => dateOnly(leave.start_date)).sort()[0];
+    const starts = new Map(filtered.map((item) => [item.id, nextStart(item)]));
+    filtered.sort((a, b) => starts.get(a.id).localeCompare(starts.get(b.id)) || a.full_name.localeCompare(b.full_name, 'pt-BR'));
+  }
+  if (filter === 'due_soon' || filter === 'concession_risk') filtered.sort((a, b) => {
+    const closest = (item) => item.periods.filter((period) => inStatus(period) && period.alert[filter]).map((period) => dateOnly(period.concession_end)).sort()[0];
     return closest(a).localeCompare(closest(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
   });
   if (filter === 'december') filtered.sort((a,b) => {
-    const priority = (item) => item.periods.filter((period) => period.alert.december).map((period) => `${period.alert.december === 'Atrasadas' ? '0' : period.alert.december === 'Vencem até 31 de dezembro' ? '1' : '2'}-${dateOnly(period.concession_end)}`).sort()[0];
+    const priority = (item) => item.periods.filter((period) => inStatus(period) && period.alert.december).map((period) => `${period.alert.december === 'Atrasadas' ? '0' : period.alert.december === 'Vencem até 31 de dezembro' ? '1' : '2'}-${dateOnly(period.concession_end)}`).sort()[0];
     return priority(a).localeCompare(priority(b)) || a.full_name.localeCompare(b.full_name, 'pt-BR');
   });
   const pageSize = 20;
-  return { indicators, employees: legacy ? filtered : filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize), total: filtered.length, page: pageNumber, page_size: pageSize };
+  return { today, indicators, employees: legacy ? filtered : filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize), total: filtered.length, page: pageNumber, page_size: pageSize };
 }
 export async function getEmployeeVacations(employeeId, admin = false) {
   return transaction(async (client) => {

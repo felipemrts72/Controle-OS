@@ -149,6 +149,31 @@ function ExceptionModal({ reason, startDate, futureSchedule, busy, error, close,
   </VacationModal>;
 }
 
+function ScheduledEmployee({ employee, status, today }) {
+  const entries = employee.periods
+    .filter((period) => period.alert?.scheduled && (!status || period.status === status))
+    .flatMap((period) => period.leaves
+      .filter((leave) => leave.status === 'programada' && String(leave.end_date).slice(0, 10) >= today)
+      .map((leave) => ({ period, leave })))
+    .sort((a, b) => String(a.leave.start_date).localeCompare(String(b.leave.start_date)));
+  return <article className="panel vacations__employee">
+    <h3>{employee.full_name}</h3>
+    {entries.map(({ period, leave }) => <div className="vacations__alert-period" key={leave.id}>
+      <strong>Aquisitivo: {format(period.acquisition_start)} a {format(period.acquisition_end)}</strong>
+      <span>Gozo: {format(leave.start_date)} a {format(leave.end_date)} · {leave.days} dias</span>
+      <span>{leave.temporal_status === 'em andamento' ? 'Em andamento · gozo a confirmar' : 'Futura'}</span>
+      {leave.scheduled_start_irregularity && <span className="vacations__pending">Exceção administrativa — divergência legal</span>}
+      <strong>{period.planned} dias programados no período · {period.free_balance == null
+        ? 'Saldo a conferir'
+        : period.free_balance < 0 ? 'Divergência de saldo'
+        : period.free_balance === 0 ? 'Integralmente programado'
+        : period.free_balance + ' dias ainda pendentes'}</strong>
+      {period.alert.overdue && <span className="vacations__pending">Prazo concessivo vencido</span>}
+      <Link to={'/ferias/' + employee.id + '?period=' + period.id + '&leave=' + leave.id}>Abrir programação →</Link>
+    </div>)}
+  </article>;
+}
+
 function VacationContent({ employeeId, initialPeriodId, initialLeaveId, initialLaunch }) {
   const routeKey = employeeId || 'list';
   const requestId = useRef(0);
@@ -312,15 +337,16 @@ function VacationContent({ employeeId, initialPeriodId, initialLeaveId, initialL
     const data = view.data;
     const rows = data.employees;
     const selectFilter = (value) => { setFilter(value); setPage(1); };
-    const cards = [['overdue', 'Férias vencidas', data.indicators.overdue], ['due_soon', 'Prazo concessivo — próximos 4 meses', data.indicators.due_soon], ['december', 'Prioridade para dezembro', data.indicators.december], ['acquired', 'Período adquirido', data.indicators.acquired], ...(isAdmin ? [['bonus_deadline', 'Prazo para pedir abono', data.indicators.bonus_deadline]] : [])];
+    const cards = [['overdue', 'Férias vencidas', data.indicators.overdue], ['due_soon', 'Prazo concessivo — próximos 4 meses', data.indicators.due_soon], ['december', 'Prioridade para dezembro', data.indicators.december], ['scheduled', 'Funcionários com férias programadas', data.indicators.scheduled], ['acquired', 'Período adquirido', data.indicators.acquired], ...(isAdmin ? [['bonus_deadline', 'Prazo para pedir abono', data.indicators.bonus_deadline]] : [])];
     return <section className="page vacations vacations__compact-fields"><header className="page__header"><div><h1 className="page__title">Férias</h1><p className="vacations__muted">Acompanhe períodos, faltas e programações por funcionário.</p></div><a className="button" href="#agenda-ferias">Agenda de férias ↓</a></header>
       <div className="vacations__indicators">{cards.map(([key, label, value]) => <button type="button" className={`panel vacations__metric vacations__metric-button ${key === 'due_soon' ? 'vacations__metric-urgent' : ''} ${filter === key ? 'vacations__metric-active' : ''}`} aria-pressed={filter === key} key={key} onClick={() => selectFilter(key)}><span>{label}</span>{key === 'bonus_deadline' && <small>Vencimento nos próximos 30 dias</small>}<strong>{value ?? 0}</strong></button>)}</div>
       <form className="panel vacations__filters" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedSearch(search); }}><label><span>Funcionário</span><input aria-label="Pesquisar funcionário" placeholder="Pesquisar por nome" value={search} onChange={(event) => setSearch(event.target.value)} /></label><label><span>Situação</span><select aria-label="Filtrar situação" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">Todas as situações</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><button className="button button_primary" type="submit">Pesquisar</button></form>
       {can('vacations.view') && <div className="panel vacations__report"><div><strong>Relatório para contabilidade</strong><p className="vacations__muted">Todas as férias programadas. Informe um intervalo apenas se quiser limitar pelas datas de gozo.</p></div><div className="vacations__report-controls"><label>De<input type="date" value={reportRange.start_date} onChange={(event) => setReportRange((current) => ({ ...current, start_date: event.target.value }))} /></label><label>Até<input type="date" value={reportRange.end_date} onChange={(event) => setReportRange((current) => ({ ...current, end_date: event.target.value }))} /></label><button type="button" className="button button_primary" disabled={reportBusy} onClick={downloadProgrammedReport}>{reportBusy ? 'Gerando relatório...' : 'Gerar relatório de férias programadas'}</button></div></div>}
-      <div className="vacations__tabs" role="group" aria-label="Filtrar períodos de férias">{[['all', 'Todos'], ['acquired', 'Período adquirido'], ['due_soon', 'Prazo concessivo — próximos 4 meses'], ['december', 'Prioridade para dezembro'], ['overdue', 'Vencidas'], ...(isAdmin ? [['bonus_deadline', 'Prazo para pedir abono']] : [])].map(([key, label]) => <button type="button" className={`button ${filter === key ? 'button_primary' : ''}`} aria-pressed={filter === key} key={key} onClick={() => selectFilter(key)}>{label}</button>)}</div>
+      <div className="vacations__tabs" role="group" aria-label="Filtrar períodos de férias">{[['all', 'Todos'], ['acquired', 'Período adquirido'], ['due_soon', 'Prazo concessivo — próximos 4 meses'], ['december', 'Prioridade para dezembro'], ['scheduled', 'Programadas'], ['concession_risk', 'Risco no prazo concessivo'], ['overdue', 'Vencidas'], ...(isAdmin ? [['bonus_deadline', 'Prazo para pedir abono']] : [])].map(([key, label]) => <button type="button" className={`button ${filter === key ? 'button_primary' : ''}`} aria-pressed={filter === key} key={key} onClick={() => selectFilter(key)}>{label}</button>)}</div>
       <label className="vacations__year">Ano do planejamento <input type="number" min="1900" max="2200" value={planningYear} onChange={(event) => { setPlanningYear(Number(event.target.value)); setPage(1); }} /></label>
-      <div className="vacations__list-heading"><h2>Funcionários</h2><span>{data.total} encontrado(s)</span></div>
+      <div className="vacations__list-heading"><h2>{filter === 'scheduled' ? 'Funcionários com férias programadas' : 'Funcionários'}</h2><span>{data.total} encontrado(s)</span></div>
       {rows.length === 0 ? <div className="panel vacations__empty"><strong>Nenhum funcionário encontrado</strong><p>Revise a busca ou os filtros para ver outros períodos.</p><button type="button" className="button" onClick={() => { setSearch(''); setAppliedSearch(''); setStatus(''); setFilter('all'); setPage(1); }}>Limpar filtros</button></div> : <div className="vacations__grid">{rows.map((item) => {
+        if (filter === 'scheduled') return <ScheduledEmployee key={item.id} employee={item} status={status} today={data.today} />;
         const periods = item.periods || [];
         const current = periods[0];
         const relevant = periods.filter((period) => filter === 'all' ? period.alert?.acquired : period.alert?.[filter]).filter((period) => !status || period.status === status).sort((a, b) => String(filter === 'bonus_deadline' ? a.alert.bonus_deadline_date : a.concession_end).localeCompare(String(filter === 'bonus_deadline' ? b.alert.bonus_deadline_date : b.concession_end)));
@@ -329,17 +355,20 @@ function VacationContent({ employeeId, initialPeriodId, initialLeaveId, initialL
         return <article className="panel vacations__employee" key={item.id}>
           <div className="vacations__employee-top"><h3>{item.full_name}</h3><span className="vacations__badge">{relevant[0]?.status || current?.status || 'INFORMAÇÕES INSUFICIENTES'}</span></div>
           <p className="vacations__muted">{item.job_title || 'Cargo não informado'}</p>
-          <dl><div><dt>Períodos pendentes</dt><dd>{duePeriods.length}</dd></div><div><dt>Saldo não gozado</dt><dd>{periods.some((period) => period.alert?.acquired && period.balance == null) ? 'A conferir' : `${duePeriods.reduce((sum, period) => sum + Number(period.balance || 0), 0)} dias`}</dd></div><div><dt>Próximo prazo concessivo</dt><dd>{format(duePeriods.map((period) => period.concession_end).filter(Boolean).sort()[0])}</dd></div></dl>
-          {relevant.slice(0, 2).map((period) => <div className={`vacations__alert-period ${period.alert.overdue ? 'vacations__alert-period-overdue' : ''}`} key={period.id}>
+          <dl><div><dt>Períodos com saldo não gozado</dt><dd>{duePeriods.length}</dd></div><div><dt>Saldo não gozado</dt><dd>{periods.some((period) => period.alert?.acquired && period.balance == null) ? 'A conferir' : `${duePeriods.reduce((sum, period) => sum + Number(period.balance || 0), 0)} dias`}</dd></div><div><dt>Próximo prazo concessivo</dt><dd>{format(duePeriods.map((period) => period.concession_end).filter(Boolean).sort()[0])}</dd></div></dl>
+          {relevant.map((period) => <div className={`vacations__alert-period ${period.alert.overdue ? 'vacations__alert-period-overdue' : ''}`} key={period.id}>
             <strong>Período {period.ordinal}: {format(period.acquisition_start)} a {format(period.acquisition_end)}</strong>
             {filter === 'bonus_deadline' ? <><span>Término do aquisitivo: {format(period.acquisition_end)}</span><span>Data-limite para solicitar abono: {format(period.alert.bonus_deadline_date)} · {period.alert.bonus_days_remaining} dia(s) restante(s)</span><span>Situação do pedido: não registrado</span></> : <span>Conclusão: {format(period.acquisition_end)} · Prazo: {format(period.concession_end)}</span>}
             {(filter === 'due_soon' || filter === 'overdue') && <span>{period.alert.days_remaining < 0 ? `${Math.abs(period.alert.days_remaining)} dia(s) em atraso` : `${period.alert.days_remaining} dia(s) restantes`}</span>}
             <span>Saldo: {period.alert.needs_review ? 'Conferência necessária' : `${period.balance} dias`}</span>
-            {(filter === 'december' || filter === 'due_soon') && <><span>Concessivo: {format(period.concession_start)} a {format(period.concession_end)} · Situação: {period.alert.overdue ? 'vencido' : period.alert.due_soon ? 'próximo do vencimento' : 'dentro do prazo'}</span><span>Gozados: {period.taken} · Programados: {period.planned} · Abono: {period.bonus} · Saldo não gozado: {period.balance} dias</span></>}
+            {(filter === 'december' || filter === 'due_soon' || filter === 'concession_risk') && <><span>Concessivo: {format(period.concession_start)} a {format(period.concession_end)} · Situação: {period.alert.overdue ? 'vencido' : (period.alert.due_soon || period.alert.concession_risk) ? 'próximo do vencimento' : 'dentro do prazo'}</span><span>Gozados: {period.taken} · Programados: {period.planned} · Abono: {period.bonus} · Saldo não gozado: {period.balance ?? 'a conferir'}</span>
+              <strong>{period.free_balance == null ? 'Saldo a conferir' : period.free_balance <= 0
+                ? 'Sem dias pendentes de programação' : (period.planned > 0 ? 'Parcialmente programado · ' : 'Sem programação · ') + period.free_balance + ' dias pendentes'}</strong>
+              {period.alert.concession_risk && <span className="vacations__pending">A programação não cobre todo o saldo dentro do prazo concessivo.</span>}</>}
             {filter === 'december' && <strong>{period.alert.december} · O gozo deve terminar até {format(period.concession_end)} para cumprir o prazo original.</strong>}
             {period.alert.planned_before_due > 0 && <span>{period.alert.planned_before_due} dia(s) programados antes do prazo{period.alert.planned_may_clear ? ' — podem quitar o saldo' : ''}</span>}
             <Link to={`/ferias/${item.id}?period=${period.id}${filter === 'december' ? '&launch=scheduled' : ''}`}>{filter === 'december' ? 'Abrir e programar férias →' : 'Abrir período →'}</Link>
-          </div>)}{relevant.length > 2 && <span className="vacations__muted">Mais {relevant.length - 2} período(s) no histórico deste funcionário.</span>}
+          </div>)}
           <div className="vacations__employee-foot">{pending && <span className="vacations__pending">Histórico pendente</span>}{(can('vacations.review') || can('vacations.schedule')) && <Link to={`/ferias/${item.id}?launch=1`}>Lançar férias</Link>}<Link to={`/ferias/${item.id}`}>Ver férias →</Link></div>
         </article>;
       })}</div>}

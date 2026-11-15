@@ -11,7 +11,7 @@ vacationRoutes.use(authenticate);
 const handle = (operation, status = 200) => async (req, res, next) => {
   try { res.status(status).json(await operation(req)); } catch (error) { next(error); }
 };
-vacationRoutes.get('/', requirePermission('vacations.view'), handle((req) => listVacationEmployees(req.query, (req.user.role_slug || req.user.role) === 'admin')));
+vacationRoutes.get('/', requirePermission('vacations.view'), (_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); }, handle((req) => listVacationEmployees(req.query, (req.user.role_slug || req.user.role) === 'admin')));
 vacationRoutes.get('/programmed-report.pdf', requirePermission('vacations.view'), async (req, res, next) => { try { const { pdf, filename } = await vacationProgrammedReport(req.query); sendPdfResponse(res, pdf, filename); } catch (error) { next(error); } });
 vacationRoutes.get('/agenda', requirePermission('vacations.view'), handle((req) => listVacationAgenda(req.query)));
 vacationRoutes.get('/employees/:employeeId', requirePermission('vacations.view'), handle((req) => getEmployeeVacations(req.params.employeeId, (req.user.role_slug || req.user.role) === 'admin')));
