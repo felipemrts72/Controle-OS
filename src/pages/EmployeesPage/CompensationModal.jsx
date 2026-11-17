@@ -7,6 +7,7 @@ import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile
 const money = (value) => value == null ? 'Não cadastrado' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const labels = { current_salary: 'salário', meal_allowance: 'vale-alimentação' };
+const reportDate = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Cuiaba' });
 const number = (value) => /^\d+(?:\.\d{3})*(?:,\d{1,2})?$/.test(value.trim()) ? Number(value.replaceAll('.', '').replace(',', '.')) : NaN;
 
 export function CompensationModal({ onClose }) {
@@ -84,20 +85,26 @@ export function CompensationModal({ onClose }) {
       setEmployees((rows) => rows.map((row) => row.id === data.employee.id ? data.employee : row));
       setChecked({}); setValues({}); setConfirmation(null); setReport(null); setMessage(data.message);
     } catch (error) {
-      setErrors({ general: error.response?.data?.message || 'Falha ao salvar. Confira os valores antes de tentar novamente.' });
+      const { field, message: errorMessage } = error.response?.data || {};
+      const key = field === 'effective_from' || confirmation.some((change) => change.field === field) ? field : 'general';
+      setErrors({ [key]: errorMessage || 'Falha ao salvar. Confira os valores antes de tentar novamente.' });
       setConfirmation(null);
     } finally { saving.current = false; setBusy(false); }
   }
 
   async function loadReport(pdf = false) {
     if (saving.current) return;
-    saving.current = true; setBusy(true); setErrors({});
+    saving.current = true; setBusy(true); clearError('general');
     try {
       const params = { month, year };
       if (pdf) await downloadAuthenticatedFile('/employees/compensation/report-pdf', 'modificacoes-mensais.pdf', { params });
       else setReport((await api.get('/employees/compensation/report', { params })).data);
-    } catch (error) { setErrors({ general: error.response?.data?.message || 'Não foi possível gerar o relatório. Confira mês, ano e permissões.' }); }
+    } catch (error) { setErrors((current) => ({ ...current, general: error.response?.data?.message || 'Não foi possível gerar o relatório. Confira mês, ano e permissões.' })); }
     finally { saving.current = false; setBusy(false); }
+  }
+
+  function clearError(field) {
+    setErrors((current) => ({ ...current, [field]: '' }));
   }
 
   const normalize = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -121,13 +128,14 @@ export function CompensationModal({ onClose }) {
               <label className="field">{label === 'salário' ? 'Salário atual' : 'Valor atual'}<input className="field__input" readOnly value={money(employee[field])} /></label>
               {employee[field] == null && <small>Complete este valor na ficha individual.</small>}
               {checked[field] && <>
-                <label className="field">Novo {label}<input className="field__input compensation-new" inputMode="decimal" placeholder="0,00" value={values[field] || ''} aria-invalid={!!errors[field]} onChange={(event) => { setValues({ ...values, [field]: event.target.value }); setErrors({ ...errors, [field]: '' }); }} onBlur={() => { if (Number.isFinite(value)) setValues({ ...values, [field]: value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }); }} /></label>
-                {errors[field] && <small role="alert" className="compensation-error">{errors[field]}</small>}
+                <label className="field">Novo {label}<input className="field__input compensation-new" inputMode="decimal" placeholder="0,00" value={values[field] || ''} aria-invalid={!!errors[field]} aria-describedby={errors[field] ? `compensation-error-${field}` : undefined} onChange={(event) => { setValues({ ...values, [field]: event.target.value }); clearError(field); }} onBlur={() => { if (Number.isFinite(value)) setValues({ ...values, [field]: value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }); }} /></label>
+                {errors[field] && <small id={`compensation-error-${field}`} role="alert" className="compensation-error">{errors[field]}</small>}
                 {Number.isFinite(value) && <small>Diferença: {money(difference)}{field === 'current_salary' && Number(employee[field]) > 0 ? ` (${(difference / Number(employee[field]) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)` : ''}</small>}
               </>}
             </div>;
           })}</div>
-          <label className="field">Data de vigência<input className="field__input" type="date" value={effective} aria-invalid={!!errors.effective_from} onChange={(event) => setEffective(event.target.value)} />{errors.effective_from && <small role="alert" className="compensation-error">{errors.effective_from}</small>}</label>
+          <label className="field">Data de vigência<input className="field__input" type="date" value={effective} aria-invalid={!!errors.effective_from} aria-describedby={errors.effective_from ? 'compensation-error-effective-from' : undefined} onChange={(event) => { setEffective(event.target.value); clearError('effective_from'); }} /></label>
+          {errors.effective_from && <small id="compensation-error-effective-from" role="alert" className="compensation-error">{errors.effective_from}</small>}
           <p className="employees-page__subtitle">O cadastro será atualizado agora. A vigência será registrada no histórico e no relatório; não agenda alterações nem recalcula folhas anteriores.</p>
           <button className="button button_primary" type="button" onClick={review}>Salvar alterações</button>
         </>}
@@ -146,6 +154,12 @@ export function CompensationModal({ onClose }) {
           <label className="field">Ano<input className="field__input" type="number" min="1900" max="9998" value={year} disabled={busy} onChange={(event) => { setYear(event.target.value); setReport(null); }} /></label>
         </div>
         <div className="employees-page__actions"><button type="button" className="button" disabled={busy} onClick={() => loadReport()}>Consultar alterações</button><button type="button" className="button" disabled={busy} onClick={() => loadReport(true)}>Gerar PDF</button></div>
+        {report && <header className="compensation-card">
+          <strong>{report.company?.name || 'Empresa não informada'}</strong>
+          <div>CNPJ: {report.company?.cnpj || 'Não informado'}</div>
+          <div>Referência: {String(report.month).padStart(2, '0')}/{report.year}</div>
+          {report.emitted_at && <div>Emissão: {reportDate.format(new Date(report.emitted_at))}</div>}
+        </header>}
         {report && <div aria-live="polite">{!report.rows.length ? <p>Nenhuma alteração registrada no mês.</p> : report.rows.map((row, index) => <div className="compensation-card" key={index}><strong>{row.full_name} — {row.type === 'salary' ? 'Salário' : 'Vale-alimentação'}</strong><p>{money(row.previous_value)} → {money(row.new_value)}<br />Diferença: {money(row.difference)}{row.percentage != null ? ` (${Number(row.percentage).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)` : ''}<br />Registro: {row.created_at.slice(0, 10).split('-').reverse().join('/')} · Vigência: {row.effective_from?.split('-').reverse().join('/') || 'Não informada'}</p></div>)}</div>}
       </section>}
     </div>
