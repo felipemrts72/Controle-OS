@@ -9,6 +9,7 @@ import { downloadAuthenticatedFile } from '../../utils/downloadAuthenticatedFile
 import { formatCpfPartial, formatDate, statusLabels } from './employeeUtils.js';
 import { PendingReportModal } from './PendingReportModal.jsx';
 import { CompensationModal } from './CompensationModal.jsx';
+import { EmployeePaymentsModal } from './EmployeePaymentsModal.jsx';
 import './EmployeesPage.css';
 
 export function EmployeesPage() {
@@ -18,6 +19,9 @@ export function EmployeesPage() {
   const canEdit = canAccessPermission(user, 'employees.edit') || canAccessPermission(user, 'employees.manage');
   const canPrint = canAccessPermission(user, 'employees.profile.print');
   const canUpdateCompensation = ['salary', 'meal_allowance'].some((key) => canAccessPermission(user, `employees.${key}.view`) && (canAccessPermission(user, `employees.${key}.manage`) || canAccessPermission(user, 'employees.manage')));
+  const canViewPayments = canAccessPermission(user, 'employees.salary.view');
+  const canManagePayments = canAccessPermission(user, 'employees.salary.manage') || canAccessPermission(user, 'employees.manage');
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [compensationOpen, setCompensationOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
@@ -151,6 +155,7 @@ export function EmployeesPage() {
       <div className="page__header employees-page__list-header">
         <h1 className="page__title">Funcionários</h1>
         <div className="page__actions">
+          {canViewPayments && <button className="button" type="button" onClick={() => setPaymentsOpen(true)}>Pagamentos</button>}
           {canUpdateCompensation && <button className="button" type="button" onClick={() => setCompensationOpen(true)}>Atualização cadastral</button>}
           {canPrint && (
             <button className="button" type="button" onClick={openPendingReport} disabled={loadingPendingReport || downloadingPendingReport}>
@@ -173,6 +178,7 @@ export function EmployeesPage() {
         </div>
       </div>
 
+      {paymentsOpen && <EmployeePaymentsModal canManage={canManagePayments} canPrint={canPrint} onClose={() => setPaymentsOpen(false)} />}
       {compensationOpen && <CompensationModal onClose={() => setCompensationOpen(false)} />}
       <form className="panel employees-page__filters" onSubmit={submitFilters}>
         <label className="field">

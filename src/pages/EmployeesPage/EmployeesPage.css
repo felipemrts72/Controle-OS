@@ -428,3 +428,69 @@
 .compensation-report { display: grid; gap: 12px; border-top: 1px solid var(--color-border); padding-top: 16px; }
 @media (max-width: 1100px) { .employees-page__list-header .page__actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 540px) { .employees-page__list-header .page__actions, .compensation-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.confirm-modal__content.employee-payments {
+  max-width: 840px;
+}
+
+.employee-payments h3,
+.employee-payments p {
+  margin: 0;
+}
+
+.employee-payments__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.employee-payments__fields {
+  align-items: end;
+  border: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.employee-payments__row {
+  align-items: center;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) auto;
+  overflow-wrap: anywhere;
+  padding: 10px;
+}
+
+.employee-payments__history {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.employee-payments .field__input {
+  font-size: 16px;
+  min-width: 0;
+  width: 100%;
+}
+
+.employee-payments__warning {
+  color: #a12a1b;
+}
+
+.employee-payments__total {
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .employee-payments__fields,
+  .employee-payments__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-payments__actions .button {
+    width: 100%;
+  }
+}

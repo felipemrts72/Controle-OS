@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import * as payments from '../controllers/employeePaymentController.js';
 import * as compensation from '../controllers/employeeCompensationController.js';
 import {
   auditIndex,
@@ -36,6 +37,16 @@ import { authenticate, requireAnyPermission, requirePermission } from '../middle
 export const employeeRoutes = Router();
 
 employeeRoutes.use(authenticate);
+const paymentRoutes = Router();
+paymentRoutes.use(requirePermission('employees.view'), requirePermission('employees.salary.view'));
+paymentRoutes.get('/', payments.list);
+paymentRoutes.get('/employees', requireAnyPermission('employees.salary.manage', 'employees.manage'), payments.employees);
+paymentRoutes.get('/:id/pdf', requirePermission('employees.profile.print'), payments.pdf);
+paymentRoutes.get('/:id', payments.show);
+paymentRoutes.post('/', requireAnyPermission('employees.salary.manage', 'employees.manage'), payments.save);
+paymentRoutes.put('/:id', requireAnyPermission('employees.salary.manage', 'employees.manage'), payments.save);
+paymentRoutes.post('/:id/finalize', requireAnyPermission('employees.salary.manage', 'employees.manage'), payments.finalize);
+employeeRoutes.use('/payments', paymentRoutes);
 employeeRoutes.get('/compensation/employees', compensation.employees);
 employeeRoutes.get('/compensation/report', compensation.report);
 employeeRoutes.get('/compensation/report-pdf', compensation.pdf);
