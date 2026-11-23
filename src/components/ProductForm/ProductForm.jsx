@@ -91,7 +91,7 @@ export function ProductForm({ initialProduct, onSubmit, onPhotoUploaded }) {
           <small className="product-form__hint">Informação operacional sensível; não é preço de venda.</small>
         </label>}
       </div>
-      {form.review_status === 'pending_review' && <div className="panel"><strong>Produto pendente de revisão</strong><p>Complete o cadastro e confirme abaixo para aprová-lo. Esta aprovação não cria saldo nem movimentação.</p><label><input type="checkbox" checked={form.review_status==='approved'} onChange={(event)=>setForm((current)=>({...current,review_status:event.target.checked?'approved':'pending_review'}))}/> Marcar cadastro como revisado</label></div>}
+      {initialProduct?.review_status === 'pending_review' && <details><summary>Complementação do cadastro</summary><p>A revisão completa é independente da árvore. Esta aprovação não cria saldo nem movimentação.</p><label><input type="checkbox" checked={form.review_status==='approved'} onChange={(event)=>setForm((current)=>({...current,review_status:event.target.checked?'approved':'pending_review'}))}/> Marcar cadastro como revisado</label></details>}
       <ProductComponentsEditor
         components={form.components || []}
         productId={form.id || null}

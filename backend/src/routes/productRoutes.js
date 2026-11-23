@@ -1,10 +1,14 @@
 import express, { Router } from 'express';
+import * as tree from '../controllers/productTreeController.js';
 import { deleteProduct, getProduct, listProducts, listProductTypes, saveProduct, saveProductType, searchProducts } from '../controllers/basicControllers.js';
 import { authenticate, requireAnyPermission, requirePermission } from '../middlewares/authMiddleware.js';
 import { remove as removeProductImage, show as showProductImage, upload as uploadProductImage } from '../controllers/productImageController.js';
 
 export const productRoutes = Router();
 productRoutes.use(authenticate);
+productRoutes.post('/tree', requirePermission('products.create'), tree.save);
+productRoutes.get('/:id/tree', requireAnyPermission('products.view', 'products.edit', 'products.create'), tree.show);
+productRoutes.put('/:id/tree', requirePermission('products.edit'), tree.save);
 productRoutes.get('/types', requireAnyPermission('products.view', 'products.create', 'products.edit', 'products.types.manage'), listProductTypes);
 productRoutes.post('/types', requirePermission('products.types.manage'), saveProductType);
 productRoutes.put('/types/:id', requirePermission('products.types.manage'), saveProductType);

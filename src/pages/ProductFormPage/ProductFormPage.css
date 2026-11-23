@@ -1,6 +1,10 @@
 .product-form-page {
-  max-width: 1120px;
+  max-width: 1600px;
+  min-width: 0;
 }
+
+.product-form-page__details { margin-top: 20px; }
+.product-form-page__details > summary { cursor: pointer; padding: 16px 0; font-weight: 600; }
 
 .product-form-page__top-actions {
   display: flex;

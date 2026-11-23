@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ProductForm } from '../../components/ProductForm/ProductForm.jsx';
 import { api } from '../../services/api.js';
 import { useToast } from '../../components/ToastProvider/ToastProvider.jsx';
-import { useEscapeKey } from '../../hooks/useEscapeKey.js';
+import { ProductTreeEditor } from '../../components/ProductTreeEditor/ProductTreeEditor.jsx';
 import './ProductFormPage.css';
 
 export function ProductFormPage() {
@@ -11,9 +11,7 @@ export function ProductFormPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const [product, setProduct] = useState(null);
-  const goBack = useCallback(() => navigate('/produtos'), [navigate]);
-
-  useEscapeKey(true, goBack);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (id) api.get(`/products/${id}`).then((response) => setProduct(response.data));
@@ -65,11 +63,12 @@ export function ProductFormPage() {
       <div className="page__header">
         <h1 className="page__title">{id ? 'Editar produto' : 'Novo produto'}</h1>
       </div>
-      <ProductForm
+      <ProductTreeEditor key={id || 'new'} productId={id} />
+      {product && <details className="product-form-page__details" onToggle={(event) => setDetailsOpen(event.currentTarget.open)}><summary>Dados completos do cadastro</summary>{detailsOpen && <ProductForm
         initialProduct={product || undefined}
         onSubmit={submit}
         onPhotoUploaded={() => navigate('/produtos')}
-      />
+      />}</details>}
     </section>
   );
 }

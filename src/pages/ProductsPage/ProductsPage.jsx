@@ -145,7 +145,6 @@ export function ProductsPage() {
         <div className="products-page__product-name">
           {canEdit ? <Link to={`/produtos/${row.id}`}>{row.name}</Link> : <span>{row.name}</span>}
           {row.internal_code && <small>Código: {row.internal_code}</small>}
-          {row.review_status === 'pending_review' && <span className="products-page__review-badge">Pendente de revisão</span>}
         </div>
       ),
     },
