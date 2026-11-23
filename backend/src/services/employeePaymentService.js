@@ -2,7 +2,7 @@ import { query, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
 
-const summary = `id, version, created_at, finalized_at, finalized_by,
+const summary = `id, version, created_at, created_by, updated_at, updated_by, finalized_at, finalized_by,
   jsonb_array_length(items) AS employee_count, total_cents`;
 const uuid = /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i;
 
@@ -28,7 +28,7 @@ export async function listPayments() {
 }
 
 export async function paymentEmployees() {
-  return (await query(`SELECT id, full_name, NULLIF(BTRIM(pix_key), '') AS pix_key FROM employees
+  return (await query(`SELECT id, full_name, pix_key FROM employees
     WHERE deleted_at IS NULL AND employment_status = 'ativo' ORDER BY full_name, id`)).rows;
 }
 
@@ -41,7 +41,7 @@ async function loadPayment(client, id, lock = false) {
 }
 
 async function snapshot(client, items, { lock = false, allowInactive = false } = {}) {
-  const { rows } = await client.query(`SELECT id, full_name, NULLIF(BTRIM(pix_key), '') AS pix_key
+  const { rows } = await client.query(`SELECT id, full_name, pix_key
     FROM employees WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL AND employment_status = 'ativo'
     ORDER BY id ${lock ? 'FOR SHARE' : ''}`, [items.map(({ employee_id }) => employee_id)]);
   const employees = new Map(rows.map((row) => [row.id, row]));
@@ -59,7 +59,6 @@ async function snapshot(client, items, { lock = false, allowInactive = false } =
 export async function getPayment(id) {
   return transaction(async (client) => {
     const payment = await loadPayment(client, id);
-    if (!payment.finalized_at) payment.items = await snapshot(client, payment.items, { allowInactive: true });
     return payment;
   });
 }
@@ -86,8 +85,9 @@ export async function savePayment(id, body, userId) {
     }
     const values = [JSON.stringify(await snapshot(client, input, { lock: true })), total];
     const { rows: [payment] } = id
-      ? await client.query(`UPDATE employee_payments SET items = $1, total_cents = $2, version = version + 1
-          WHERE id = $3 RETURNING ${summary}, items, audit_id`, [...values, id])
+      ? await client.query(`UPDATE employee_payments SET items = $1, total_cents = $2, version = version + 1,
+          updated_at = NOW(), updated_by = $4
+          WHERE id = $3 RETURNING ${summary}, items, audit_id`, [...values, id, userId])
       : await client.query(`INSERT INTO employee_payments (items, total_cents, created_by)
           VALUES ($1, $2, $3) RETURNING ${summary}, items, audit_id`, [...values, userId]);
     await audit(client, payment, id ? 'update_draft' : 'create_draft', userId);
@@ -103,7 +103,7 @@ export async function finalizePayment(id, version, userId) {
     if (current.finalized_at) throw httpError(409, 'A relação já foi finalizada.');
     checkVersion(current, version);
     const items = await snapshot(client, current.items, { lock: true });
-    if (items.some((row) => !row.pix_key)) throw httpError(409, 'Cadastre as chaves Pix pendentes antes de finalizar.');
+    if (items.some((row) => !row.pix_key?.trim())) throw httpError(409, 'Cadastre as chaves Pix pendentes antes de finalizar.');
     if (items.some((row, index) => row.pix_key !== current.items[index].pix_key || row.full_name !== current.items[index].full_name)) {
       throw httpError(409, 'O cadastro de um funcionário mudou. Salve o rascunho e confira a relação novamente.');
     }

@@ -38,14 +38,14 @@ function addProgramCard(context, row) {
   const halfWidth = width / 2 - 20;
   const line = (label, value, textX, textY) => doc.fillColor('#1f2937').font('Helvetica').fontSize(9)
     .text(`${label}: ${value}`, textX, textY, { width: halfWidth, lineBreak: false });
-  const firstY = metaY + 19;
+  doc.fillColor('#1f3a5f').font('Helvetica-Bold').fontSize(9.5)
+    .text(`PERÍODO AQUISITIVO: ${date(row.acquisition_start)} a ${date(row.acquisition_end)}`, left, metaY + 18, { width: width - 26 });
+  const firstY = metaY + 39;
   line('Início', date(row.start_date), left, firstY);
   line('Término', date(row.end_date), right, firstY);
   line('Dias de gozo', String(row.days), left, firstY + 17);
   line('Abono pecuniário', `${Number(row.bonus_days || 0)} dias`, right, firstY + 17);
   line('Retorno previsto', date(addDays(row.end_date, 1)), left, firstY + 34);
-  doc.fillColor('#475569').font('Helvetica').fontSize(8.3)
-    .text(`Período aquisitivo: ${date(row.acquisition_start)} a ${date(row.acquisition_end)}`, left, firstY + 57, { width: width - 26, lineBreak: false });
   doc.restore();
   doc.y = y + cardHeight + 10;
 }

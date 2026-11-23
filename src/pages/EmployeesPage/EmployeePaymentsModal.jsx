@@ -29,6 +29,19 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
   const pending = useRef(false);
 
   useEffect(() => {
+    if (!dirty) return;
+    const unload = (event) => { event.preventDefault(); event.returnValue = ''; };
+    const navigate = (event) => {
+      if (event.target.closest('a[href]') && !window.confirm('Descartar as alterações que ainda não foram salvas?')) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', unload);
+    document.addEventListener('click', navigate, true);
+    return () => { window.removeEventListener('beforeunload', unload); document.removeEventListener('click', navigate, true); };
+  }, [dirty]);
+
+  useEffect(() => {
     let active = true;
     Promise.all([api.get(path), canManage ? api.get(`${path}/employees`) : null])
       .then(([list, candidates]) => {
@@ -80,7 +93,8 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
   const candidates = employees.filter((employee) => !rows.some((row) => row.employee_id === employee.id)
     && normalizedName(employee.full_name).includes(normalizedName(search.trim())));
   const total = rows.reduce((sum, row) => sum + parsePaymentCents(row.amount), 0);
-  const pixPending = rows.some((row) => !row.pix_key);
+  const pixPending = rows.some((row) => !row.pix_key?.trim());
+  const selected = employees.find((employee) => employee.id === employeeId);
 
   function addEmployee(event) {
     event.preventDefault();
@@ -118,7 +132,7 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
       const { data } = await api.post(`${path}/${payment.id}/finalize`, { version: payment.version });
       show(data);
       remember(data);
-      setNotice('Pagamento registrado no ERP.');
+      setNotice('Relação preparada e confirmada. Nenhuma transferência Pix ou quitação financeira foi realizada.');
     });
   }
 
@@ -135,7 +149,7 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
       {loading && <p>Carregando pagamentos…</p>}
       {!loading && !payment && <>
         {canManage && <div className="employee-payments__actions">
-          <button type="button" className="button button--primary" disabled={busy} onClick={() => { show({}); setError(''); setNotice(''); }}>Nova relação</button>
+          <button type="button" className="button button--primary" disabled={busy} onClick={() => { show({}); setError(''); setNotice(''); }}>Novo pagamento</button>
         </div>}
         {!history.length && !error && <p>Nenhuma relação registrada.</p>}
         {history.map((entry) => <article className="employee-payments__row employee-payments__history" key={entry.id}>
@@ -148,7 +162,7 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
       {payment && <>
         <div className="employee-payments__actions">
           <button type="button" className="button" disabled={busy} onClick={() => leave(() => { show(null); setError(''); setNotice(''); })}>Voltar ao histórico</button>
-          {canPrint && payment.id && !dirty && <button type="button" className="button" disabled={busy} onClick={() =>
+          {canPrint && payment.finalized_at && !dirty && <button type="button" className="button" disabled={busy} onClick={() =>
             run(() => downloadAuthenticatedFile(`${path}/${payment.id}/pdf`, `pagamento-${payment.id}.pdf`))}>Gerar PDF</button>}
         </div>
         <h3>{payment.id ? `Pagamento nº ${payment.id} · ${status(payment)}` : 'Nova relação'}</h3>
@@ -166,8 +180,9 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
             <button className="button" type="submit">Adicionar funcionário</button>
           </fieldset>
         </form>}
+        {editable && selected && <p>{selected.full_name} · Pix: {selected.pix_key?.trim() ? selected.pix_key : 'Chave Pix pendente'}</p>}
         {review && <div role="status"><strong>Confira a relação completa antes de confirmar.</strong>
-          <p>A confirmação registra a relação no ERP para pagamento no banco.</p></div>}
+          <p>A confirmação registra somente a lista preparada. Não transfere Pix nem registra quitação financeira.</p></div>}
         {rows.map((row) => <article className="employee-payments__row" key={row.employee_id}>
           <div><strong>{row.full_name}</strong><br />
             {row.pix_key ? <>Pix {row.pix_key}</> : <span className="employee-payments__warning">Chave Pix pendente</span>}</div>
@@ -183,15 +198,15 @@ export function EmployeePaymentsModal({ onClose, canManage, canPrint }) {
             }}>Remover</button>
           </> : <strong>{money(row.amount_cents)}</strong>}
         </article>)}
-        <strong className="employee-payments__total">Total {money(total)}</strong>
+        <strong className="employee-payments__total">{rows.length} funcionário(s) · Total {money(total)}</strong>
         {pixPending && <p className="employee-payments__warning">Cadastre as chaves Pix pendentes antes de finalizar.</p>}
         {editable && <div className="employee-payments__actions">
           <button type="button" className="button" disabled={busy || !rows.length} onClick={() => save(false)}>Salvar rascunho</button>
-          <button type="button" className="button button--primary" disabled={busy || !rows.length} onClick={() => save(true)}>Revisar pagamento</button>
+          <button type="button" className="button button--primary" disabled={busy || !rows.length} onClick={() => save(true)}>Finalizar pagamento</button>
         </div>}
         {review && <div className="employee-payments__actions">
           <button type="button" className="button" disabled={busy} onClick={() => setReview(false)}>Voltar à edição</button>
-          <button type="button" className="button button--primary" disabled={busy || pixPending} onClick={finalize}>Finalizar pagamento</button>
+          <button type="button" className="button button--primary" disabled={busy || pixPending} onClick={finalize}>Confirmar finalização</button>
         </div>}
       </>}
     </section>

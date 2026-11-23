@@ -1,4 +1,5 @@
 import * as payments from '../services/employeePaymentService.js';
+import { httpError } from '../utils/httpError.js';
 import { getCompanyPdfData } from '../services/companySettingsService.js';
 import { addTable, addTotalLine, createPdfDocument, finalizePdf, formatCurrencyBR, formatDateTimeBR, sendPdfResponse } from '../services/pdf/pdfDocument.js';
 
@@ -32,20 +33,21 @@ export async function buildPaymentPdf(payment, company) {
   });
   addTable(context, {
     columns: [
-      { key: 'full_name', label: 'Nome do funcionário', width: 0.37 },
+      { key: 'full_name', label: 'FUNCIONÁRIO', width: 0.37 },
       { key: 'pix_key', label: 'Chave Pix', width: 0.43, format: (key) => key || 'Pendente' },
       { key: 'amount_cents', label: 'Valor', width: 0.20, align: 'right', format: (cents) => formatCurrencyBR(cents / 100) },
     ],
     rows: payment.items,
     keepWithNextHeight: 38,
   });
-  addTotalLine(context, 'Total', formatCurrencyBR(payment.total_cents / 100));
+  addTotalLine(context, 'TOTAL GERAL', formatCurrencyBR(payment.total_cents / 100));
   return finalizePdf(context);
 }
 
 export const pdf = async (req, res, next) => {
   try {
     const payment = await payments.getPayment(req.params.id);
+    if (!payment.finalized_at) throw httpError(409, 'Finalize e confirme a relação antes de gerar o PDF.');
     sendPdfResponse(res, await buildPaymentPdf(payment, await getCompanyPdfData()), `pagamento-${payment.id}.pdf`);
   } catch (error) { next(error); }
 };
