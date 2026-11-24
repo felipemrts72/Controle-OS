@@ -21,6 +21,7 @@ export function ProductTreeEditor({ productId }) {
   const [dirty, setDirty] = useState(false);
   const [types, setTypes] = useState([]);
   const [units, setUnits] = useState([]);
+  const [sectors, setSectors] = useState([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,11 +38,11 @@ export function ProductTreeEditor({ productId }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([productId ? api.get(`/products/${productId}/tree`) : Promise.resolve({ data: fresh() }), api.get('/products/types'), api.get('/measurement-units')])
-      .then(([saved, availableTypes, availableUnits]) => {
+    Promise.all([productId ? api.get(`/products/${productId}/tree`) : Promise.resolve({ data: fresh() }), api.get('/products/types'), api.get('/measurement-units'), api.get('/products/tree/sectors')])
+      .then(([saved, availableTypes, availableUnits, availableSectors]) => {
         if (!active) return;
         setTree({ ...saved.data, request_id: key() });
-        setTypes(availableTypes.data.filter((t) => t.is_active)); setUnits(availableUnits.data);
+        setTypes(availableTypes.data.filter((t) => t.is_active)); setUnits(availableUnits.data); setSectors(availableSectors.data);
         try {
           const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
           if (stored?.nodes?.length && stored.request_id && Number.isInteger(stored.version)) setDraft(stored);
@@ -93,7 +94,7 @@ export function ProductTreeEditor({ productId }) {
       let children = [];
       const node = { key: key(), parent_key: adding, product_id: product?.id || null,
         name: product?.name, type: product?.type, new_product: product ? undefined : { name: search.trim(), type: '' },
-        unit_code: product?.measurement_unit_code || '', quantity: '1', note: '' };
+        sector_id: product?.sector_id || null, sector_name: product?.sector_name || null, unit_code: product?.measurement_unit_code || '', quantity: '1', note: '' };
       if (product) {
         const { data } = await api.get(`/products/${product.id}/tree`);
         const root = data.nodes.find((n) => !n.parent_key);
@@ -158,15 +159,17 @@ export function ProductTreeEditor({ productId }) {
         <strong>{nameOf(node)}</strong>
         <small>{node.new_product ? 'Novo · rascunho' : 'Produto do estoque'}</small>
         {node.parent_key && <span>{node.quantity} {node.unit_code}</span>}
+        {node.sector_id ? <small>Setor: {sectors.find((s) => s.id === node.sector_id)?.name || node.sector_name || 'Setor cadastrado (inativo)'}</small>
+          : (node.new_product?.type || node.type) === 'manufactured' && <small>Setor não definido</small>}
         {node.note && <small>{node.note}</small>}
         <div className="product-tree__node-actions">
           {canSave && <button type="button" className="button" aria-label={`Adicionar componente a ${nameOf(node)}`} onClick={() => begin(node.key)}>+</button>}
-          {canSave && node.parent_key && <>
+          {canSave && <>
             <button type="button" className="button" onClick={() => { setDetail({ node: structuredClone(node), edit: true, children: [] }); setDetailError(''); }}>Editar</button>
-            <button type="button" className="button" onClick={() => {
+            {node.parent_key && <button type="button" className="button" onClick={() => {
               if (!window.confirm(`Remover ${nameOf(node)} e seus componentes desta árvore? Os produtos do estoque serão preservados.`)) return;
               const removed = descendants(node.key); change(tree.nodes.filter((n) => !removed.has(n.key)));
-            }}>Remover</button>
+            }}>Remover</button>}
           </>}
           {children.length > 0 && <button type="button" className="button" aria-expanded={!collapsed.has(node.key)} onClick={() => setCollapsed((current) => {
             const next = new Set(current); next.has(node.key) ? next.delete(node.key) : next.add(node.key); return next;
@@ -224,10 +227,16 @@ export function ProductTreeEditor({ productId }) {
         {detailError && <p role="alert" className="product-tree__error">{detailError}</p>}
         <label className="field">Nome do produto<input className="field__input" required maxLength={220} disabled={!detail.node.new_product} value={detail.node.new_product ? detail.node.new_product.name : detail.node.name} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, new_product: { ...detail.node.new_product, name: e.target.value } } })} /></label>
         <label className="field">Tipo<select className="field__input" required disabled={!detail.node.new_product} value={detail.node.new_product?.type || detail.node.type || ''} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, new_product: { ...detail.node.new_product, type: e.target.value } } })}><option value="">Selecione</option>{types.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}</select></label>
+        <label className="field">Setor responsável<select aria-label="Setor responsável" className="field__input" value={detail.node.sector_id || ''} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, sector_id: e.target.value || null, sector_name: sectors.find((s) => s.id === e.target.value)?.name || null } })}>
+          <option value="">Não definido</option>
+          {detail.node.sector_id && !sectors.some((s) => s.id === detail.node.sector_id) && <option value={detail.node.sector_id}>{detail.node.sector_name || 'Setor cadastrado'} (inativo)</option>}
+          {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select></label>
+        {detail.node.product_id && <small>O setor selecionado vale para esta posição na árvore. O cadastro global do produto permanece preservado.</small>}
         <label className="field">Unidade de medida<select className="field__input" required value={detail.node.unit_code} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, unit_code: e.target.value } })}><option value="">Selecione</option>{units.map((u) => <option key={u.code} value={u.code}>{u.code} — {u.name}</option>)}</select></label>
-        <label className="field">Quantidade necessária<input className="field__input" required inputMode="decimal" value={detail.node.quantity} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, quantity: e.target.value } })} /></label>
+        <label className="field">Quantidade necessária<input className="field__input" required disabled={!detail.node.parent_key} inputMode="decimal" value={detail.node.quantity} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, quantity: e.target.value } })} /></label>
         <label className="field">Observação<textarea className="field__input" maxLength={1000} value={detail.node.note} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, note: e.target.value } })} /></label>
-        {detail.edit && <label className="field">Componente pai<select className="field__input" value={detail.node.parent_key} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, parent_key: e.target.value } })}>{tree.nodes.filter((n) => !descendants(detail.node.key).has(n.key)).map((n) => <option key={n.key} value={n.key}>{nameOf(n)}</option>)}</select></label>}
+        {detail.edit && detail.node.parent_key && <label className="field">Componente pai<select className="field__input" value={detail.node.parent_key} onChange={(e) => setDetail({ ...detail, node: { ...detail.node, parent_key: e.target.value } })}>{tree.nodes.filter((n) => !descendants(detail.node.key).has(n.key)).map((n) => <option key={n.key} value={n.key}>{nameOf(n)}</option>)}</select></label>}
         {detail.children.length > 0 && <small>A composição cadastrada será incluída neste rascunho. Alterações aqui não alteram a árvore original do componente.</small>}
         <div className="product-tree__toolbar"><button className="button" type="button" onClick={() => setDetail(null)}>Cancelar</button><button className="button button_primary" type="submit">{detail.edit ? 'Aplicar ao rascunho' : 'Adicionar à árvore'}</button></div>
       </form>

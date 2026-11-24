@@ -1,0 +1,162 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import pg from 'pg';
+import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
+import express from 'express';
+
+const source = new URL(dotenv.parse(fs.readFileSync('.env')).DATABASE_URL);
+assert.ok(['localhost', '127.0.0.1'].includes(source.hostname), 'Use PostgreSQL local para este teste.');
+const databaseName = `qa_tree_sectors_${randomBytes(5).toString('hex')}`;
+const adminUrl = new URL(source); adminUrl.hostname = '127.0.0.1'; adminUrl.pathname = '/postgres';
+const testUrl = new URL(adminUrl); testUrl.pathname = `/${databaseName}`;
+const admin = new pg.Client({ connectionString: adminUrl.toString() });
+let db, appPool, server, browser;
+const node = (parent, name, extra = {}) => ({ key: randomUUID(), parent_key: parent, new_product: { name, type: 'manufactured' }, quantity: '1', unit_code: 'UN', ...extra });
+const request = (nodes, version = 0) => ({ request_id: randomUUID(), version, nodes });
+const tables = ['roles','permissions','role_permissions','users','sectors','products','product_components','product_types','measurement_units','product_images','product_manufacturing_steps','product_step_dependencies','audit_logs','products_internal_code_seq'];
+
+try {
+  await admin.connect(); await admin.query(`CREATE DATABASE ${databaseName}`);
+  db = new pg.Pool({ connectionString: testUrl.toString() });
+  assert.equal((await db.query('SELECT current_database() AS name')).rows[0].name, databaseName);
+  const bin = process.env.PG_BIN || 'C:/Program Files/PostgreSQL/18/bin';
+  const args = ['-h','127.0.0.1','-p',source.port || '5432','-U',decodeURIComponent(source.username),'-d',decodeURIComponent(source.pathname.slice(1)),'--schema-only','--no-owner','--no-privileges',...tables.flatMap((t) => ['--table', t])];
+  const schema = execFileSync(`${bin}/pg_dump.exe`, args, { env: { ...process.env, PGPASSWORD: decodeURIComponent(source.password) }, encoding: 'utf8', maxBuffer: 8e6 }).replace(/^\\.*$/gm, '');
+  await db.query(schema);
+  await db.query('SET search_path TO public');
+  await db.query(fs.readFileSync('database/migrations/20261123_product_trees.sql', 'utf8'));
+  await db.query("INSERT INTO product_types(code,name,is_active) VALUES('manufactured','Fabricado',true),('resale','Peça comprada',true),('material_prima','Matéria-prima',true)");
+  await db.query("INSERT INTO measurement_units(code,name,symbol,is_active) VALUES('UN','Unidade','un',true),('KG','Quilograma','kg',true)");
+  const user = (await db.query("INSERT INTO users(name,username,password_hash,role) VALUES('Administrador fictício','admin','unused','admin') RETURNING *")).rows[0];
+  const viewer = (await db.query("INSERT INTO users(name,username,password_hash,role) VALUES('Sem permissão','qa_viewer','unused','viewer') RETURNING *")).rows[0];
+  const existing = (await db.query("INSERT INTO products(name,type,measurement_unit_code,is_active,internal_code) VALUES('Motor fictício','resale','UN',true,'QA-1') RETURNING *")).rows[0];
+  const sectorA=(await db.query("INSERT INTO sectors(name,slug) VALUES('Usinagem QA','usinagem-qa') RETURNING id")).rows[0].id;
+  const sectorB=(await db.query("INSERT INTO sectors(name,slug) VALUES('Montagem QA','montagem-qa') RETURNING id")).rows[0].id;
+  const inactive=(await db.query("INSERT INTO sectors(name,slug,is_active) VALUES('Inativo QA','inativo-qa',false) RETURNING id")).rows[0].id;
+  await db.query('UPDATE products SET sector_id=$1 WHERE id=$2',[sectorA,existing.id]);
+  existing.sector_id=sectorA;
+  const baseline = structuredClone(existing);
+  process.env.DATABASE_URL = testUrl.toString(); process.env.JWT_SECRET = randomBytes(24).toString('hex');
+  const { pool } = await import('../backend/src/database/pool.js'); appPool = pool;
+  const { saveProductTree, getProductTree } = await import('../backend/src/services/productTreeService.js');
+  const { buildAuthUser } = await import('../backend/src/services/permissionService.js');
+  const actor = await buildAuthUser(user);
+  const count = async () => (await db.query('SELECT count(*)::int AS n FROM products')).rows[0].n;
+
+  // Simula árvore já existente antes da migration; nenhum registro operacional é usado.
+  await db.query('INSERT INTO product_trees(product_id,updated_by) VALUES($1,$2)',[existing.id,user.id]);
+  await db.query("INSERT INTO product_tree_nodes(tree_id,id,product_id,quantity,unit_code,position) VALUES($1,$2,$1,1,'UN',0)",[existing.id,randomUUID()]);
+  await db.query(fs.readFileSync('database/migrations/20261124_product_tree_sectors.sql','utf8'));
+  const prior=await getProductTree(existing.id,actor);
+  assert.equal(prior.nodes[0].sector_id,sectorA);
+  const missingField=prior.nodes.map(({sector_id,...n})=>n);
+  const kept=await saveProductTree(existing.id,request(missingField,prior.version),actor);
+  assert.equal(kept.nodes[0].sector_id,sectorA);
+  const root=node(null,'Equipamento setores QA',{sector_id:sectorB});
+  const child={key:randomUUID(),parent_key:root.key,product_id:existing.id,quantity:'1',unit_code:'UN',sector_id:sectorB};
+  const optional=node(root.key,'Fabricado sem setor QA',{sector_id:null});
+  const body=request([root,child,optional]);
+  const countBefore=await count();
+  for(const sector_id of [randomUUID(),inactive,'texto livre']) await assert.rejects(saveProductTree(null,request([root,{...child,sector_id}]),actor),{status:400});
+  assert.equal(await count(),countBefore);
+  const saved=await saveProductTree(null,body,actor);
+  assert.equal(saved.nodes[0].sector_id,sectorB); assert.equal(saved.nodes[1].sector_id,sectorB);assert.equal(saved.nodes[2].sector_id,null);
+  assert.equal((await db.query('SELECT sector_id FROM products WHERE id=$1',[saved.product_id])).rows[0].sector_id,sectorB);
+  assert.deepEqual((await db.query('SELECT * FROM products WHERE id=$1',[existing.id])).rows[0],baseline);
+  assert.deepEqual(await getProductTree(existing.id,actor),kept);
+  assert.deepEqual(await saveProductTree(null,body,actor),saved);
+  const cleared=await saveProductTree(saved.product_id,request(saved.nodes.map(n=>({...n,sector_id:null})),saved.version),actor);
+  assert.ok(cleared.nodes.every(n=>n.sector_id===null));
+  assert.deepEqual(await getProductTree(saved.product_id,actor),cleared);
+  console.log('PASS: migration preserva árvores, setores válidos/opcionais, validação, rascunho antigo, idempotência, rollback, produto novo e cadastro global existente preservado');
+  const { app } = await import('../backend/src/app.js');
+  const outer = express();
+  outer.get('/__qa/login', (_req,res) => {
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET);
+    res.type('html').send(`<script>localStorage.setItem('token',${JSON.stringify(token)});localStorage.setItem('user',${JSON.stringify(JSON.stringify(actor))});location.replace('/produtos/novo')</script>`);
+  });
+  outer.use(app); outer.use(express.static('tmp/tree-sector-build')); outer.get('*',(_req,res)=>res.sendFile('index.html',{root:`${process.cwd()}/tmp/tree-sector-build`}));
+  await new Promise((resolve) => { server=outer.listen(0,'127.0.0.1',resolve); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  for (const [token, expected] of [[null,401],[jwt.sign({ id:viewer.id }, process.env.JWT_SECRET),403]]) {
+    const res = await fetch(base+'/api/products/tree', { method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body) });
+    assert.equal(res.status,expected);
+  }
+  const { chromium } = await import(pathToFileURL('C:/Users/Win 10/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href);
+  browser = await chromium.launch({channel:'msedge',headless:true});
+  fs.mkdirSync('tmp/product-tree',{recursive:true});
+
+  const auth={Authorization:'Bearer '+jwt.sign({id:user.id},process.env.JWT_SECRET)};
+  const choices=await (await fetch(base+'/api/products/tree/sectors',{headers:auth})).json();
+  assert.deepEqual(new Set(choices.map(s=>s.id)),new Set([sectorA,sectorB]));
+  for(const width of [390,768,1365]) {
+    const context=await browser.newContext({viewport:{width,height:1024}});const page=await context.newPage();
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(base+'/__qa/login');
+    const name='Árvore com setores '+width;
+    await page.getByLabel('Nome do produto principal').fill(name);
+    await page.locator('.product-tree__identity select').nth(0).selectOption('manufactured');
+    await page.locator('.product-tree__identity select').nth(1).selectOption('UN');
+    await page.locator('.product-tree__root').getByRole('button',{name:'Editar',exact:true}).click();
+    await page.getByLabel('Setor responsável',{exact:true}).selectOption(sectorA);
+    await page.getByRole('button',{name:'Aplicar ao rascunho',exact:true}).click();
+    await page.locator('.product-tree__root').getByText('Setor: Usinagem QA',{exact:true}).waitFor();
+    assert.equal(await page.locator('.product-tree__root').getByRole('button',{name:'Remover',exact:true}).count(),0);
+    await page.getByRole('button',{name:'Adicionar componente a '+name,exact:true}).click();
+    await page.getByRole('combobox',{name:'Pesquisar ou criar produto'}).fill('Motor');
+    await page.getByRole('option',{name:/Motor fictício/}).click();
+    assert.equal(await page.getByLabel('Setor responsável',{exact:true}).inputValue(),sectorA);
+    await page.getByLabel('Setor responsável',{exact:true}).selectOption(sectorB);
+    await page.screenshot({path:'tmp/product-tree/sector-modal-'+width+'.png',fullPage:true});
+    assert.ok(await page.locator('.product-tree__modal').evaluate(e=>e.scrollWidth<=e.clientWidth));
+    await page.getByRole('button',{name:'Adicionar à árvore',exact:true}).click();
+    await page.getByRole('button',{name:'Adicionar componente a '+name,exact:true}).click();
+    await page.getByRole('combobox',{name:'Pesquisar ou criar produto'}).fill('Peça setores '+width);
+    await page.getByRole('button',{name:'Criar novo produto: Peça setores '+width,exact:true}).click();
+    await page.locator('.product-tree__modal select').nth(0).selectOption('manufactured');
+    await page.locator('.product-tree__modal select').nth(2).selectOption('KG');
+    await page.getByRole('button',{name:'Adicionar à árvore',exact:true}).click();
+    await page.getByText('Setor não definido',{exact:true}).waitFor();
+    const part=page.locator('.product-tree__node').filter({has:page.locator('strong',{hasText:'Peça setores '+width})});
+    await part.getByRole('button',{name:'Editar',exact:true}).click();
+    await page.getByLabel('Setor responsável',{exact:true}).selectOption(sectorB);
+    await page.getByRole('button',{name:'Aplicar ao rascunho',exact:true}).click();
+    assert.deepEqual((await db.query('SELECT * FROM products WHERE id=$1',[existing.id])).rows[0],baseline);
+    await page.reload();await page.getByRole('button',{name:'Continuar rascunho',exact:true}).click();
+    assert.equal(await page.getByText('Setor: Montagem QA',{exact:true}).count(),2);
+    await page.screenshot({path:'tmp/product-tree/sector-tree-'+width+'.png',fullPage:true});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.getByRole('button',{name:'Salvar árvore do produto',exact:true}).click();
+    await page.waitForURL(/\/produtos\/[0-9a-f-]{36}$/);
+    await page.getByText('Composição salva · versão 1',{exact:true}).waitFor();
+    const rootId=page.url().split('/').at(-1);
+    assert.equal((await db.query('SELECT sector_id FROM products WHERE id=$1',[rootId])).rows[0].sector_id,sectorA);
+    await page.reload();await page.getByText('Composição salva · versão 1',{exact:true}).waitFor();
+    assert.equal(await page.getByText('Setor: Montagem QA',{exact:true}).count(),2);
+    await page.locator('.product-tree__root').getByRole('button',{name:'Editar',exact:true}).click();
+    await page.getByLabel('Setor responsável',{exact:true}).selectOption(sectorB);
+    await page.getByRole('button',{name:'Aplicar ao rascunho',exact:true}).click();
+    const motor=page.locator('.product-tree__node').filter({has:page.locator('strong',{hasText:'Motor fictício'})});
+    await motor.getByRole('button',{name:'Editar',exact:true}).click();
+    await page.getByLabel('Setor responsável',{exact:true}).selectOption('');
+    await page.getByRole('button',{name:'Aplicar ao rascunho',exact:true}).click();
+    assert.equal(await motor.getByText('Setor não definido',{exact:true}).count(),0);
+    await page.getByRole('button',{name:'Salvar árvore do produto',exact:true}).click();
+    await page.getByText('Composição salva · versão 2',{exact:true}).waitFor();
+    const persisted=await getProductTree(rootId,actor);
+    assert.equal(persisted.nodes[0].sector_id,sectorB);assert.equal(persisted.nodes[1].sector_id,null);
+    assert.equal((await db.query('SELECT sector_id FROM products WHERE id=$1',[rootId])).rows[0].sector_id,sectorA);
+    assert.deepEqual((await db.query('SELECT * FROM products WHERE id=$1',[existing.id])).rows[0],baseline);
+    assert.deepEqual(errors,[]);await context.close();
+    console.log('PASS UI '+width+': raiz, novo/existente, cartões, setor opcional, rascunho, reabertura e layout');
+  }
+} finally {
+  if(browser) await browser.close();
+  if(server) { server.closeAllConnections(); await new Promise(resolve=>server.close(resolve)); }
+  if(appPool) await appPool.end(); if(db) await db.end();
+  if(admin._connected) { await admin.query(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`); await admin.end(); }
+}

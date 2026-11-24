@@ -18,6 +18,7 @@ export function validateTree(body, productId) {
     requireId(raw?.key);
     if (raw.parent_key !== null) requireId(raw.parent_key);
     if (raw.product_id) requireId(raw.product_id);
+    if (raw.sector_id !== undefined && raw.sector_id !== null) requireId(raw.sector_id);
     if (Boolean(raw.product_id) === Boolean(raw.new_product)) throw httpError(400, 'Selecione um produto existente ou informe um novo.');
     const quantity = String(raw.quantity ?? '').replace(',', '.');
     if (!/^\d{1,12}(?:\.\d{1,6})?$/.test(quantity) || Number(quantity) <= 0) throw httpError(400, 'Quantidade deve ser positiva, com até seis casas decimais.');
@@ -30,7 +31,8 @@ export function validateTree(body, productId) {
       newProduct = { name: name.trim(), type };
     }
     return { key: raw.key.toLowerCase(), parent_key: raw.parent_key?.toLowerCase() || null,
-      product_id: raw.product_id?.toLowerCase() || null, new_product: newProduct, quantity, unit_code: raw.unit_code, note: raw.note || '' };
+      product_id: raw.product_id?.toLowerCase() || null, new_product: newProduct, quantity, unit_code: raw.unit_code, note: raw.note || '',
+      ...(raw.sector_id !== undefined ? { sector_id: raw.sector_id?.toLowerCase() || null } : {}) };
   });
   const byKey = new Map(nodes.map((n) => [n.key, n]));
   const roots = nodes.filter((n) => !n.parent_key);
@@ -60,12 +62,13 @@ export function validateTree(body, productId) {
 }
 
 async function loadTree(client, productId) {
-  const product = (await client.query('SELECT id,name,type,measurement_unit_code,is_active FROM products WHERE id=$1', [productId])).rows[0];
+  const product = (await client.query('SELECT id,name,type,measurement_unit_code,is_active,sector_id FROM products WHERE id=$1', [productId])).rows[0];
   if (!product) throw httpError(404, 'Produto não encontrado.');
   const header = (await client.query('SELECT * FROM product_trees WHERE product_id=$1', [productId])).rows[0];
   if (header) {
     const nodes = (await client.query(`SELECT n.id AS key,n.parent_id AS parent_key,n.product_id,n.quantity,n.unit_code,n.note,
-      p.name,p.type,p.is_active FROM product_tree_nodes n JOIN products p ON p.id=n.product_id
+      n.sector_id,s.name AS sector_name,p.name,p.type,p.is_active FROM product_tree_nodes n JOIN products p ON p.id=n.product_id
+      LEFT JOIN sectors s ON s.id=n.sector_id
       WHERE n.tree_id=$1 ORDER BY n.position`, [productId])).rows;
     return { product_id: productId, version: header.version, nodes };
   }
@@ -75,15 +78,15 @@ async function loadTree(client, productId) {
     if (nodes.length >= 2000 || ancestors.has(item.id)) throw httpError(409, 'A composição legada contém ciclo ou excede 2.000 itens.');
     const key = randomUUID();
     nodes.push({ key, parent_key: parent, product_id: item.id, name: item.name, type: item.type,
-      unit_code: item.measurement_unit_code || '', quantity: String(quantity), note: '', is_active: item.is_active });
+      unit_code: item.measurement_unit_code || '', quantity: String(quantity), note: '', is_active: item.is_active, sector_id: item.sector_id || null });
     const path = new Set([...ancestors, item.id]);
-    const children = (await client.query(`SELECT p.id,p.name,p.type,p.measurement_unit_code,p.is_active,c.quantity,c.component_name
+    const children = (await client.query(`SELECT p.id,p.name,p.type,p.measurement_unit_code,p.is_active,COALESCE(p.sector_id,c.sector_id) AS sector_id,c.quantity,c.component_name
       FROM product_components c LEFT JOIN products p ON p.id=c.material_product_id WHERE c.product_id=$1 ORDER BY c.created_at,c.id`, [item.id])).rows;
     for (const child of children) {
       if (child.id) await visit(child, key, child.quantity, path);
       else nodes.push({ key: randomUUID(), parent_key: key, product_id: null,
         new_product: { name: child.component_name, type: '' }, name: child.component_name,
-        quantity: String(child.quantity), unit_code: '', note: 'Componente legado: confirme tipo e unidade antes de salvar.' });
+        quantity: String(child.quantity), unit_code: '', sector_id: child.sector_id || null, note: 'Componente legado: confirme tipo e unidade antes de salvar.' });
     }
   }
   await visit(product, null, 1, new Set());
@@ -115,8 +118,17 @@ export async function saveProductTree(productId, body, user) {
     if ((previous?.version || 0) !== body.version) throw httpError(409, 'A árvore foi alterada por outro usuário. Seu rascunho foi preservado; reabra a versão salva antes de tentar novamente.');
     const types = new Set((await client.query('SELECT code FROM product_types WHERE is_active=TRUE')).rows.map((r) => r.code));
     const units = new Set((await client.query('SELECT code FROM measurement_units WHERE is_active=TRUE')).rows.map((r) => r.code));
-    const existing = new Map((await client.query('SELECT id,name,type,is_active FROM products WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE', [nodes.map((n) => n.product_id).filter(Boolean)])).rows.map((p) => [p.id, p]));
+    const existing = new Map((await client.query('SELECT id,name,type,is_active,sector_id FROM products WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE', [nodes.map((n) => n.product_id).filter(Boolean)])).rows.map((p) => [p.id, p]));
+    const previousNodes = new Map(productId ? (await client.query('SELECT id,product_id,sector_id FROM product_tree_nodes WHERE tree_id=$1', [productId])).rows.map((n) => [n.id, n]) : []);
+    const sectors = new Map((await client.query('SELECT id,is_active FROM sectors ORDER BY id FOR SHARE')).rows.map((s) => [s.id, s]));
     for (const node of nodes) {
+      const oldNode = previousNodes.get(node.key);
+      const priorSector = oldNode?.product_id === node.product_id ? oldNode.sector_id : existing.get(node.product_id)?.sector_id || null;
+      // Rascunhos anteriores ao campo preservam o setor salvo ou cadastrado.
+      if (node.sector_id === undefined) node.sector_id = priorSector;
+      if (node.sector_id && (!sectors.has(node.sector_id) || (!sectors.get(node.sector_id).is_active && node.sector_id !== priorSector))) {
+        throw httpError(400, 'Selecione um setor operacional ativo.');
+      }
       if (!units.has(node.unit_code)) throw httpError(400, 'Unidade inválida ou inativa.');
       if (node.product_id) {
         const product = existing.get(node.product_id);
@@ -128,9 +140,9 @@ export async function saveProductTree(productId, body, user) {
         let created;
         for (let attempt = 0; attempt < 1000 && !created; attempt++) {
           created = (await client.query(`INSERT INTO products(name,type,measurement_unit_code,internal_code,
-            default_volume_quantity,default_total_weight_kg,review_status,creation_origin,preliminary_created_by,preliminary_created_at)
-            VALUES($1,$2,$3,nextval('products_internal_code_seq')::text,NULL,NULL,'pending_review','manual',$4,NOW())
-            ON CONFLICT DO NOTHING RETURNING id`, [node.new_product.name, node.new_product.type, node.unit_code, user.id])).rows[0];
+            default_volume_quantity,default_total_weight_kg,review_status,creation_origin,preliminary_created_by,preliminary_created_at,sector_id)
+            VALUES($1,$2,$3,nextval('products_internal_code_seq')::text,NULL,NULL,'pending_review','manual',$4,NOW(),$5)
+            ON CONFLICT DO NOTHING RETURNING id`, [node.new_product.name, node.new_product.type, node.unit_code, user.id, node.sector_id])).rows[0];
         }
         if (!created) throw httpError(409, 'Não foi possível reservar o código do produto.');
         node.product_id = created.id;
@@ -158,8 +170,8 @@ export async function saveProductTree(productId, body, user) {
       ON CONFLICT(product_id) DO UPDATE SET version=product_trees.version+1,updated_by=$2,updated_at=NOW()`, [rootId, user.id]);
     await client.query('DELETE FROM product_tree_nodes WHERE tree_id=$1', [rootId]);
     for (const [position, node] of nodes.entries()) await client.query(`INSERT INTO product_tree_nodes
-      (tree_id,id,parent_id,product_id,quantity,unit_code,note,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [rootId, node.key, node.parent_key, node.product_id, node.quantity, node.unit_code, node.note, position]);
+      (tree_id,id,parent_id,product_id,quantity,unit_code,note,position,sector_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [rootId, node.key, node.parent_key, node.product_id, node.quantity, node.unit_code, node.note, position, node.sector_id]);
     const result = await loadTree(client, rootId);
     await logAudit(client, { entityType: 'product', entityId: rootId, action: 'save_tree',
       newValue: { version: result.version, nodes: result.nodes }, userId: user.id });

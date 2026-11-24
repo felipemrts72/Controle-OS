@@ -29,6 +29,7 @@ try {
   await db.query(schema);
   await db.query('SET search_path TO public');
   await db.query(fs.readFileSync('database/migrations/20261123_product_trees.sql', 'utf8'));
+  await db.query(fs.readFileSync('database/migrations/20261124_product_tree_sectors.sql', 'utf8'));
   await db.query("INSERT INTO product_types(code,name,is_active) VALUES('manufactured','Fabricado',true),('resale','Peça comprada',true),('material_prima','Matéria-prima',true)");
   await db.query("INSERT INTO measurement_units(code,name,symbol,is_active) VALUES('UN','Unidade','un',true),('KG','Quilograma','kg',true)");
   const user = (await db.query("INSERT INTO users(name,username,password_hash,role) VALUES('Administrador fictício','admin','unused','admin') RETURNING *")).rows[0];
@@ -113,14 +114,14 @@ try {
     await page.getByRole('combobox',{name:'Pesquisar ou criar produto'}).fill(`Estrutura visual ${width}`);
     await page.getByRole('button',{name:`Criar novo produto: Estrutura visual ${width}`,exact:true}).click();
     await page.locator('.product-tree__modal select').nth(0).selectOption('manufactured');
-    await page.locator('.product-tree__modal select').nth(1).selectOption('KG');
+    await page.locator('.product-tree__modal select').nth(2).selectOption('KG');
     await page.getByLabel('Quantidade necessária').fill('2.5');
     await page.getByRole('button',{name:'Adicionar à árvore',exact:true}).click();
     await page.getByRole('button',{name:`Adicionar componente a Estrutura visual ${width}`,exact:true}).click();
     await page.getByRole('combobox',{name:'Pesquisar ou criar produto'}).fill(`Base visual ${width}`);
     await page.getByRole('button',{name:`Criar novo produto: Base visual ${width}`,exact:true}).click();
     await page.locator('.product-tree__modal select').nth(0).selectOption('material_prima');
-    await page.locator('.product-tree__modal select').nth(1).selectOption('KG');
+    await page.locator('.product-tree__modal select').nth(2).selectOption('KG');
     await page.getByRole('button',{name:'Adicionar à árvore',exact:true}).click();
     assert.equal(await count(),initialCount,'Adicionar na interface não pode criar produtos reais');
     await page.reload();

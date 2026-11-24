@@ -6,6 +6,7 @@ import { remove as removeProductImage, show as showProductImage, upload as uploa
 
 export const productRoutes = Router();
 productRoutes.use(authenticate);
+productRoutes.get('/tree/sectors', requireAnyPermission('products.view', 'products.edit', 'products.create'), tree.sectors);
 productRoutes.post('/tree', requirePermission('products.create'), tree.save);
 productRoutes.get('/:id/tree', requireAnyPermission('products.view', 'products.edit', 'products.create'), tree.show);
 productRoutes.put('/:id/tree', requirePermission('products.edit'), tree.save);
