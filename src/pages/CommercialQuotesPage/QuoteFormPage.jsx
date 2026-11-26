@@ -1,3 +1,4 @@
+import { QuoteManufacturingPlanner } from './QuoteManufacturingPlanner.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, PackagePlus, Plus, Save, Trash2 } from 'lucide-react';
@@ -52,6 +53,9 @@ export function QuoteFormPage({ mode }) {
   const [payments, setPayments] = useState([emptyPayment()]);
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
+  const [planningOpen,setPlanningOpen]=useState(false);
+  const [manufacturingEnabled,setManufacturingEnabled]=useState(false);
+  const savingRef=useRef(false);
 
   useEffect(() => {
     if (!editing) return;
@@ -63,10 +67,11 @@ export function QuoteFormPage({ mode }) {
           navigate(`/comercial/orcamentos/${id}`, { replace: true });
           return;
         }
-        setForm({ customer_id: quote.customer_id || '', quote_date: String(quote.quote_date).slice(0, 10), valid_until: quote.valid_until ? String(quote.valid_until).slice(0, 10) : '', discount_amount: editableNumber(quote.discount_amount), freight_amount: editableNumber(quote.freight_amount), notes: quote.notes || '', internal_notes: quote.internal_notes || '' });
+        setForm({ expected_updated_at:quote.updated_at, customer_id: quote.customer_id || '', quote_date: String(quote.quote_date).slice(0, 10), valid_until: quote.valid_until ? String(quote.valid_until).slice(0, 10) : '', discount_amount: editableNumber(quote.discount_amount), freight_amount: editableNumber(quote.freight_amount), notes: quote.notes || '', internal_notes: quote.internal_notes || '' });
         setCustomer(quote.customer_id ? { id: quote.customer_id, name: quote.customer_name_snapshot, trade_name: quote.customer_snapshot?.trade_name } : null);
         setCustomerQuery(quote.customer_name_snapshot === 'Cliente não identificado' ? '' : quote.customer_name_snapshot || '');
-        setItems(quote.items.map((item) => ({ item_type: item.item_type, product_id: item.product_id, commercial_product_id: item.commercial_product_id, code: item.commercial_product_code_snapshot || item.product_code_snapshot || '', name: item.commercial_product_name_snapshot || item.product_name_snapshot, unit: item.measurement_unit_snapshot || '', description: item.commercial_description_snapshot || item.description_snapshot || '', quantity: editableNumber(item.quantity), unit_price: editableNumber(item.unit_price), discount_amount: unitDiscountForEditing(item), reference_price: item.reference_price_snapshot, sop_discount_type: item.sop_discount_type_snapshot, sop_discount_value: item.sop_discount_value_snapshot, sop_minimum_price: item.sop_minimum_price_snapshot, catalog_configured: Boolean(item.product_catalog_id), save_product: item.save_product_requested !== false })));
+        setManufacturingEnabled(quote.manufacturing_enabled);
+        setItems(quote.items.map((item) => ({ id:item.id, manufacturing_plan:item.manufacturing_plan ? {...item.manufacturing_plan,save_tree:false}:null, item_type: item.item_type, product_id: item.product_id, commercial_product_id: item.commercial_product_id, code: item.commercial_product_code_snapshot || item.product_code_snapshot || '', name: item.commercial_product_name_snapshot || item.product_name_snapshot, unit: item.measurement_unit_snapshot || '', description: item.commercial_description_snapshot || item.description_snapshot || '', quantity: editableNumber(item.quantity), unit_price: editableNumber(item.unit_price), discount_amount: unitDiscountForEditing(item), reference_price: item.reference_price_snapshot, sop_discount_type: item.sop_discount_type_snapshot, sop_discount_value: item.sop_discount_value_snapshot, sop_minimum_price: item.sop_minimum_price_snapshot, catalog_configured: Boolean(item.product_catalog_id), save_product: item.save_product_requested !== false })));
         setPayments(quote.payment_methods.length ? quote.payment_methods.map((method) => ({ method_type: method.method_type, description: method.description, calculation_type: method.calculation_type, percentage: editableNumber(method.percentage), amount: editableNumber(method.amount), installment_count: editableNumber(method.installment_count), first_due_date: method.first_due_date ? String(method.first_due_date).slice(0, 10) : '', notes: method.notes || '' })) : [emptyPayment()]);
       } catch (requestError) { toast.error(requestError.response?.data?.message || 'Não foi possível carregar o orçamento.'); }
       finally { setLoading(false); }
@@ -155,6 +160,7 @@ export function QuoteFormPage({ mode }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (savingRef.current) return;
     if (!items.length) return toast.error('Adicione pelo menos um item.');
     const monetaryValues = [form.discount_amount, form.freight_amount, ...items.flatMap((item) => [item.unit_price, item.discount_amount]), ...activePayments.filter((payment) => payment.calculation_type === 'amount').map((payment) => payment.amount)];
     if (monetaryValues.some((value) => decimalToUnits(value, 2) === null)) return toast.error('Revise os valores monetários. Use no máximo duas casas decimais.');
@@ -166,14 +172,28 @@ export function QuoteFormPage({ mode }) {
           ? { product_id: item.product_id, description: item.description, quantity: item.quantity, unit_price: item.unit_price, discount_amount: item.discount_amount }
           : { name: item.name, code: item.code, unit: item.unit, description: item.description, quantity: item.quantity, unit_price: item.unit_price, discount_amount: item.discount_amount, save_product: item.save_product }),
       payment_methods: activePayments.map((payment) => ({ ...payment, amount: payment.calculation_type === 'amount' ? payment.amount : undefined, percentage: payment.calculation_type === 'percentage' ? payment.percentage : undefined })) };
+    for(const item of items) if(item.manufacturing_plan?.save_tree && item.manufacturing_plan.version>0) {
+      if(!window.confirm('Substituir a composição definitiva de '+item.name+' pela estrutura por unidade deste planejamento?')) return;
+      item.manufacturing_plan.confirm_replace=true;
+    }
+    payload.manufacturing_enabled=manufacturingEnabled;
+    payload.items=payload.items.map((item,i)=>({...item,id:items[i].id,manufacturing_plan:items[i].manufacturing_plan || null}));
     try {
-      setSaving(true);
+      savingRef.current=true; setSaving(true);
       const response = editing ? await api.put(`/commercial/quotes/${id}`, payload) : await api.post('/commercial/quotes', payload);
+      if(items.some(item=>item.manufacturing_plan?.save_tree)) toast.success('Árvore cadastrada ou atualizada no estoque.');
       toast.success(editing ? 'Orçamento atualizado.' : `${quoteCommercialLabel(response.data)} criado.`); navigate(`/comercial/orcamentos/${response.data.id}`);
     } catch (requestError) { toast.error(requestError.response?.data?.message || 'Não foi possível salvar o orçamento.'); }
-    finally { setSaving(false); }
+    finally { savingRef.current=false;setSaving(false); }
   }
 
+  async function openPlanning() {
+    try {
+      const next=await Promise.all(items.map(async item=>item.manufacturing_plan?item:{...item,manufacturing_plan:(await api.post('/commercial/quotes/manufacturing/template',{product_id:item.product_id,commercial_product_id:item.commercial_product_id,name:item.name,unit:item.unit})).data}));
+      setItems(next);setPlanningOpen(true);
+    } catch(e) {toast.error(e.response?.data?.message || 'Não foi possível carregar o planejamento.');}
+  }
+  if(planningOpen) return <QuoteManufacturingPlanner items={items} setItems={setItems} enabled={manufacturingEnabled} setEnabled={setManufacturingEnabled} onClose={()=>setPlanningOpen(false)} onSave={()=>submit({preventDefault(){}})} saving={saving} />;
   if (loading) return <section className="page"><div className="panel">Carregando orçamento...</div></section>;
   return (
     <form ref={formRef} className="page commercial-quote-form" onSubmit={submit} onKeyDown={keyboardNavigate}>
@@ -196,7 +216,7 @@ export function QuoteFormPage({ mode }) {
       <section className="panel commercial-quote-form__section"><div className="commercial-quote-form__heading"><span>5</span><h2>Observações</h2></div><div className="commercial-quote-form__notes"><label className="field"><span className="field__label">Observações comerciais</span><textarea className="field__input commercial-quote-form__textarea" rows="2" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} /></label><label className="field"><span className="field__label">Observações internas <small>nunca aparecem no PDF</small></span><textarea className="field__input commercial-quote-form__textarea" rows="2" value={form.internal_notes} onChange={(event) => setForm((current) => ({ ...current, internal_notes: event.target.value }))} /></label></div></section>
 
       <section className="panel commercial-quote-form__summary"><div><span>Bruto</span><strong>{formatMoney(preview.gross)}</strong></div><div><span>Descontos dos itens</span><strong>- {formatMoney(preview.itemDiscount)}</strong></div><div><span>Subtotal</span><strong>{formatMoney(preview.subtotal)}</strong></div><div><span>Desconto geral</span><strong>- {formatMoney(preview.generalDiscount)}</strong></div><div><span>Frete</span><strong>{formatMoney(preview.freight)}</strong></div><div className="commercial-quote-form__summary-total"><span>Total</span><strong>{formatMoney(preview.total)}</strong></div></section>
-      <footer className="commercial-quote-form__footer"><Link className="button" to={editing ? `/comercial/orcamentos/${id}` : '/comercial/orcamentos'}>Cancelar</Link><button className="button button_primary" type="submit" disabled={saving}><Save size={18} /> {saving ? 'Salvando...' : 'Salvar orçamento'}</button></footer>
+      <footer className="commercial-quote-form__footer"><button className="button" type="button" disabled={saving || !items.length} onClick={openPlanning}>Lançar processo de fabricação</button><Link className="button" to={editing ? `/comercial/orcamentos/${id}` : '/comercial/orcamentos'}>Cancelar</Link><button className="button button_primary" type="submit" disabled={saving}><Save size={18} /> {saving ? 'Salvando...' : 'Salvar orçamento'}</button></footer>
     </form>
   );
 }

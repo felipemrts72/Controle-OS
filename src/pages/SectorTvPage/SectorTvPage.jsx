@@ -11,7 +11,7 @@ function formatDate(date) {
 }
 
 function formatTaskTitle(task) {
-  return `${task.quantity} - ${task.task_name}`.toUpperCase();
+  return `${Number(task.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 6 })}${task.measurement_unit_code ? ` ${task.measurement_unit_code}` : ''} - ${task.task_name}`.toUpperCase();
 }
 
 export function SectorTvPage() {

@@ -22,7 +22,7 @@ export async function tvPanel(_req, res, next) {
     const tasksResult = await query(
       `SELECT it.id AS task_id,
         it.task_name,
-        it.quantity,
+        it.quantity,it.measurement_unit_code,
         it.is_pinned,
         it.pinned_at,
         s.name AS sector_name,
@@ -44,7 +44,7 @@ export async function tvPanel(_req, res, next) {
          AND it.is_released = TRUE
          AND COALESCE(io.status, '') <> 'deleted'
          AND (
-           s.slug <> 'pintura'
+           it.manufacturing_node_key IS NOT NULL OR s.slug <> 'pintura'
            OR NOT EXISTS (
              SELECT 1
              FROM internal_tasks dependency
@@ -67,7 +67,7 @@ export async function tvBySector(req, res, next) {
     const result = await query(
       `SELECT it.id AS task_id,
         it.task_name,
-        it.quantity,
+        it.quantity,it.measurement_unit_code,
         it.is_pinned,
         it.pinned_at,
         s.name AS sector_name,
@@ -90,7 +90,7 @@ export async function tvBySector(req, res, next) {
          AND it.is_released = TRUE
          AND COALESCE(io.status, '') <> 'deleted'
          AND (
-           s.slug <> 'pintura'
+           it.manufacturing_node_key IS NOT NULL OR s.slug <> 'pintura'
            OR NOT EXISTS (
              SELECT 1
              FROM internal_tasks dependency

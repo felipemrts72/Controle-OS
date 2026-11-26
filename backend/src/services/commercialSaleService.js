@@ -144,11 +144,7 @@ export async function createSaleForApprovedQuote(client, quote, userId) {
   if (existing) return existing;
 
   const quoteItems = await loadQuoteItems(client, quote.id);
-  const products = await getOperationalProducts(client, quoteItems);
-  const decisions = quoteItems.map((item) => productionDecision(
-    products.get(String(item.operational_product_id || '')),
-    item.quantity,
-  ));
+  const decisions = quoteItems.map(() => ({status:'not_requested',reason:'Aguardando confirmação expressa da emissão definitiva.'}));
   const paymentSnapshot = await loadPaymentSnapshot(client, quote.id);
   const sale = (await client.query(
     `INSERT INTO commercial_sales (
@@ -184,7 +180,7 @@ export async function createSaleForApprovedQuote(client, quote, userId) {
     )).rows[0];
     saleItems.push(created);
   }
-  const order = await createProductionOrder(client, sale, quote, saleItems, products, userId);
+  const order = null; // Fabricação somente pelo fluxo definitivo confirmado do orçamento.
   await logAudit(client, {
     entityType: 'commercial_sale', entityId: sale.id, action: 'create_from_quote',
     newValue: {

@@ -1,3 +1,4 @@
+import { prepareQuoteManufacturing } from './quoteManufacturingService.js';
 import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { pool, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
@@ -452,15 +453,15 @@ async function insertItems(client, quoteId, items) {
         quantity, unit_price, gross_subtotal, unit_discount_amount, discount_amount, subtotal,
         product_catalog_id,product_catalog_version_id,reference_price_snapshot,
         sop_discount_type_snapshot,sop_discount_value_snapshot,sop_minimum_price_snapshot,
-        effective_unit_price,is_outside_sop,save_product_requested
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+        effective_unit_price,is_outside_sop,save_product_requested,manufacturing_plan
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
       [quoteId, index + 1, item.item_type, item.product_id, item.commercial_product_id, item.product_code_snapshot,
         item.product_name_snapshot, item.measurement_unit_snapshot, item.description_snapshot,
         item.commercial_product_code_snapshot,item.commercial_product_name_snapshot,item.commercial_description_snapshot,
         item.quantity, item.unit_price, item.gross_subtotal, item.unit_discount_amount, item.discount_amount, item.subtotal,
         item.product_catalog_id,item.product_catalog_version_id,item.reference_price_snapshot,
         item.sop_discount_type_snapshot,item.sop_discount_value_snapshot,item.sop_minimum_price_snapshot,
-        item.effective_unit_price,item.is_outside_sop,item.save_product_requested !== false],
+        item.effective_unit_price,item.is_outside_sop,item.save_product_requested !== false,JSON.stringify(item.manufacturing_plan || null)],
     );
   }
 }
@@ -515,6 +516,7 @@ export async function createCommercialQuote(body, user) {
     const rawItems = await buildItems(client, body.items, user.id);
     const calculation = calculateQuoteTotals(rawItems, body.discount_amount, body.freight_amount);
     const paymentMethods = buildPaymentMethods(body.payment_methods, calculation.totals.total);
+    await prepareQuoteManufacturing(client, calculation.items, user);
     const quoteNumber = await nextQuoteNumber(client, header.quote_date);
     const commercialNumber = await nextCommercialNumber(client);
     const result = await client.query(
@@ -533,6 +535,7 @@ export async function createCommercialQuote(body, user) {
         calculation.totals.freight_amount, calculation.totals.total],
     );
     const quote = result.rows[0];
+    await client.query('UPDATE commercial_quotes SET manufacturing_enabled=$1 WHERE id=$2', [body.manufacturing_enabled === true, quote.id]);
     await insertItems(client, quote.id, calculation.items);
     await insertPaymentMethods(client, quote.id, paymentMethods);
     await insertHistory(client, quote.id, 'created', user.id, null, 'draft', { quote_number: quoteNumber, commercial_number: commercialNumber, outside_sop_items: calculation.items.filter((item) => item.is_outside_sop).length });
@@ -661,12 +664,16 @@ export async function updateCommercialQuote(id, body, user) {
     const currentResult = await client.query('SELECT * FROM commercial_quotes WHERE id = $1 FOR UPDATE', [id]);
     const current = currentResult.rows[0];
     if (!current) throw httpError(404, 'Orçamento não encontrado.');
+    if (body.expected_updated_at && new Date(body.expected_updated_at).getTime() !== new Date(current.updated_at).getTime()) throw httpError(409, 'O orçamento foi alterado em outra sessão. Seu planejamento foi preservado; confira a versão atual.');
     if (!['draft', 'sent'].includes(current.status)) throw httpError(409, 'Somente orçamentos abertos podem ser editados.', { code: 'QUOTE_NOT_EDITABLE' });
     const header = buildHeaderPayload(body);
     const customer = await resolveCustomer(client, body);
-    const rawItems = await buildItems(client, body.items, user.id);
+    const oldItems = (await client.query('SELECT id,manufacturing_plan FROM commercial_quote_items WHERE commercial_quote_id=$1',[id])).rows;
+    const incoming = body.items?.map(item => ({...item, manufacturing_plan: item.manufacturing_plan === undefined ? oldItems.find(old=>old.id===item.id)?.manufacturing_plan || null : item.manufacturing_plan}));
+    const rawItems = await buildItems(client, incoming, user.id);
     const calculation = calculateQuoteTotals(rawItems, body.discount_amount, body.freight_amount);
     const paymentMethods = buildPaymentMethods(body.payment_methods, calculation.totals.total);
+    await prepareQuoteManufacturing(client, calculation.items, user);
     const result = await client.query(
       `UPDATE commercial_quotes SET
         customer_id=$1, customer_name_snapshot=$2, customer_snapshot=$3,
@@ -682,6 +689,7 @@ export async function updateCommercialQuote(id, body, user) {
         calculation.totals.discount_amount, calculation.totals.freight_amount,
         calculation.totals.total, user.id, id],
     );
+    await client.query('UPDATE commercial_quotes SET manufacturing_enabled=$1 WHERE id=$2', [body.manufacturing_enabled === undefined ? current.manufacturing_enabled : body.manufacturing_enabled === true, id]);
     await client.query('DELETE FROM commercial_quote_items WHERE commercial_quote_id = $1', [id]);
     await client.query('DELETE FROM commercial_quote_payment_methods WHERE commercial_quote_id = $1', [id]);
     await insertItems(client, id, calculation.items);
@@ -833,14 +841,14 @@ export async function duplicateCommercialQuote(id, user) {
         quantity, unit_price, gross_subtotal, unit_discount_amount, discount_amount, subtotal,
         product_catalog_id,product_catalog_version_id,reference_price_snapshot,sop_discount_type_snapshot,
         sop_discount_value_snapshot,sop_minimum_price_snapshot,effective_unit_price,is_outside_sop,
-        save_product_requested
+        save_product_requested,manufacturing_plan
        ) SELECT $1, line_order, item_type, product_id, commercial_product_id, product_code_snapshot,
         product_name_snapshot, measurement_unit_snapshot, description_snapshot,
         commercial_product_code_snapshot,commercial_product_name_snapshot,commercial_description_snapshot,
         quantity, unit_price, gross_subtotal, unit_discount_amount, discount_amount, subtotal,
         product_catalog_id,product_catalog_version_id,reference_price_snapshot,sop_discount_type_snapshot,
         sop_discount_value_snapshot,sop_minimum_price_snapshot,effective_unit_price,is_outside_sop,
-        save_product_requested
+        save_product_requested,manufacturing_plan
        FROM commercial_quote_items WHERE commercial_quote_id = $2`, [duplicated.id, id],
     );
     for (const method of source.payment_methods) {

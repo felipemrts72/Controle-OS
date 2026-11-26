@@ -61,7 +61,7 @@ export function validateTree(body, productId) {
   return { nodes, root: roots[0] };
 }
 
-async function loadTree(client, productId) {
+export async function loadTree(client, productId) {
   const product = (await client.query('SELECT id,name,type,measurement_unit_code,is_active,sector_id FROM products WHERE id=$1', [productId])).rows[0];
   if (!product) throw httpError(404, 'Produto não encontrado.');
   const header = (await client.query('SELECT * FROM product_trees WHERE product_id=$1', [productId])).rows[0];
@@ -102,12 +102,12 @@ export async function getProductTree(id, user) {
   });
 }
 
-export async function saveProductTree(productId, body, user) {
+export async function saveProductTree(productId, body, user, connection = null) {
   permit(user, productId ? 'products.edit' : 'products.create');
   const { nodes, root } = validateTree(body, productId);
   if (nodes.some((n) => n.new_product)) permit(user, 'products.create');
   const fingerprint = createHash('sha256').update(JSON.stringify({ productId, version: body.version, nodes })).digest('hex');
-  return transaction(async (client) => {
+  const execute = async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('product_components_graph'))");
     const previousRequest = (await client.query('SELECT * FROM product_tree_requests WHERE user_id=$1 AND request_id=$2', [user.id, body.request_id])).rows[0];
     if (previousRequest) {
@@ -177,5 +177,6 @@ export async function saveProductTree(productId, body, user) {
       newValue: { version: result.version, nodes: result.nodes }, userId: user.id });
     await client.query('INSERT INTO product_tree_requests(user_id,request_id,fingerprint,result) VALUES($1,$2,$3,$4)', [user.id, body.request_id, fingerprint, JSON.stringify(result)]);
     return result;
-  });
+  };
+  return connection ? execute(connection) : transaction(execute);
 }

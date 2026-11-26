@@ -1,10 +1,21 @@
 import { Router } from 'express';
 import * as controller from '../controllers/commercialQuoteController.js';
+import * as manufacturing from '../controllers/quoteManufacturingController.js';
 import { authenticate, requireAnyPermission, requirePermission } from '../middlewares/authMiddleware.js';
 
 export const commercialQuoteRoutes = Router();
 
 commercialQuoteRoutes.use(authenticate);
+const planPermission = requireAnyPermission('commercial.quotes.create','commercial.quotes.edit');
+commercialQuoteRoutes.post('/manufacturing/template', planPermission, manufacturing.template);
+commercialQuoteRoutes.get('/manufacturing/types', planPermission, manufacturing.types);
+commercialQuoteRoutes.get('/manufacturing/units', planPermission, manufacturing.units);
+commercialQuoteRoutes.get('/manufacturing/sectors', planPermission, manufacturing.sectors);
+commercialQuoteRoutes.get('/manufacturing/products', planPermission, manufacturing.products);
+commercialQuoteRoutes.get('/manufacturing/products/:productId/tree', planPermission, manufacturing.tree);
+commercialQuoteRoutes.put('/:id/manufacturing', requirePermission('commercial.quotes.edit'), manufacturing.saveApproved);
+commercialQuoteRoutes.get('/:id/manufacturing', requirePermission('commercial.quotes.view'), manufacturing.review);
+commercialQuoteRoutes.post('/:id/manufacturing/issue', requirePermission('commercial.quotes.approve'), manufacturing.issue);
 commercialQuoteRoutes.get('/products', requireAnyPermission('commercial.quotes.create', 'commercial.quotes.edit'), controller.products);
 commercialQuoteRoutes.get('/customers', requireAnyPermission('commercial.quotes.create', 'commercial.quotes.edit'), controller.customers);
 commercialQuoteRoutes.get('/', requirePermission('commercial.quotes.view'), controller.index);

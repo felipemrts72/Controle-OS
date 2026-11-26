@@ -1,3 +1,5 @@
+import { QuoteManufacturingPlanner } from './QuoteManufacturingPlanner.jsx';
+import { QuoteManufacturingIssue } from './QuoteManufacturingIssue.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Copy, Download, Eye, Pencil, Printer, Send, XCircle } from 'lucide-react';
@@ -10,7 +12,7 @@ import { formatDate, formatMoney, PAYMENT_TYPES, quoteCommercialLabel, QUOTE_STA
 import { downloadAuthenticatedFile, printAuthenticatedPdf, viewAuthenticatedPdf } from '../../utils/downloadAuthenticatedFile.js';
 import './CommercialQuotes.css';
 
-const historyLabels = { created: 'Orçamento criado', edited: 'Orçamento editado', emitted: 'PDF emitido', sent: 'PDF emitido', reopened: 'Reaberto', approved: 'Aprovado comercialmente', rejected: 'Recusado', cancelled: 'Cancelado', duplicated: 'Duplicado de outro orçamento' };
+const historyLabels = { manufacturing_plan_edited: 'Planejamento de fabricação revisado', issued_with_manufacturing: 'Emissão definitiva com fabricação', issued_without_manufacturing: 'Emissão definitiva sem fabricação', created: 'Orçamento criado', edited: 'Orçamento editado', emitted: 'PDF emitido', sent: 'PDF emitido', reopened: 'Reaberto', approved: 'Aprovado comercialmente', rejected: 'Recusado', cancelled: 'Cancelado', duplicated: 'Duplicado de outro orçamento' };
 
 export function QuoteDetailPage({ legacy = false }) {
   const { id } = useParams();
@@ -26,6 +28,9 @@ export function QuoteDetailPage({ legacy = false }) {
   const [action, setAction] = useState(null);
   const [saving, setSaving] = useState(false);
   const [pdfAction, setPdfAction] = useState('');
+  const [manufacturingAction,setManufacturingAction]=useState(null);
+  const [planningItems,setPlanningItems]=useState(null);
+  const [planningEnabled,setPlanningEnabled]=useState(false);
 
   const load = useCallback(async () => {
     try { setLoading(true); setQuote((await api.get(legacy ? `/commercial/quotes/legacy/${id}` : `/commercial/quotes/${id}`)).data); }
@@ -81,6 +86,35 @@ export function QuoteDetailPage({ legacy = false }) {
     } finally { setPdfAction(''); }
   }
 
+  async function openPlanning() {
+    try {
+      const items=await Promise.all(quote.items.map(async item=>({
+        id:item.id,name:item.product_name_snapshot,unit:item.measurement_unit_snapshot,quantity:item.quantity,
+        manufacturing_plan:{...(item.manufacturing_plan || (await api.post('/commercial/quotes/manufacturing/template',{
+          product_id:item.product_id,commercial_product_id:item.commercial_product_id,name:item.product_name_snapshot,unit:item.measurement_unit_snapshot
+        })).data),save_tree:false}
+      })));
+      setPlanningEnabled(quote.manufacturing_enabled);setPlanningItems(items);setManufacturingAction(null);
+    } catch(e){toast.error(e.response?.data?.message || 'Não foi possível abrir o planejamento.');}
+  }
+  async function savePlanning() {
+    if(saving)return;
+    const items=structuredClone(planningItems);
+    for(const item of items) if(item.manufacturing_plan.save_tree && item.manufacturing_plan.version>0) {
+      if(!window.confirm('Substituir a composição definitiva de '+item.name+' pela estrutura por unidade deste planejamento?'))return;
+      item.manufacturing_plan.confirm_replace=true;
+    }
+    try {
+      setSaving(true);
+      const {data}=await api.put('/commercial/quotes/'+id+'/manufacturing',{
+        expected_updated_at:quote.updated_at,manufacturing_enabled:planningEnabled,items
+      });
+      toast.success(data.trees_saved?'Planejamento salvo e árvore atualizada no estoque.':'Planejamento salvo. Valores comerciais preservados.');
+      setPlanningItems(null);await load();
+    } catch(e){toast.error(e.response?.data?.message || 'Não foi possível salvar o planejamento.');}
+    finally{setSaving(false);}
+  }
+  if(planningItems) return <QuoteManufacturingPlanner items={planningItems} setItems={setPlanningItems} enabled={planningEnabled} setEnabled={setPlanningEnabled} onClose={()=>setPlanningItems(null)} onSave={savePlanning} saving={saving} approved />;
   if (loading) return <section className="page"><div className="panel">Carregando orçamento...</div></section>;
   if (!quote) return <section className="page"><div className="panel">Orçamento não encontrado.</div></section>;
   const status = legacy ? { label: 'ERP antigo', tone: 'muted' } : QUOTE_STATUS[quote.status] || { label: quote.status, tone: 'neutral' };
@@ -102,11 +136,14 @@ export function QuoteDetailPage({ legacy = false }) {
       </header>
 
       <div className="commercial-quote-detail__actions">
+        {!legacy && canEdit && quote.status==='approved' && !quote.manufacturing_issued_at && !quote.sale?.production_order_id && <button className="button" type="button" disabled={saving} onClick={openPlanning}>Revisar planejamento de fabricação</button>}
+        {!legacy && quote.status==='approved' && canApprove && !quote.manufacturing_issued_at && !quote.sale?.production_order_id && <button className="button button_primary" onClick={()=>setManufacturingAction('issue')}>Emitir orçamento aprovado</button>}
+        {!legacy && (quote.manufacturing_issued_at || quote.sale?.production_order_id) && <button className="button" onClick={()=>setManufacturingAction('consult')}>Consultar fabricação vinculada</button>}
         {!legacy && canEdit && ['draft', 'sent'].includes(quote.status) && <button className="button button_primary commercial-quote-detail__pdf-primary" type="button" disabled={Boolean(pdfAction)} onClick={emitPdf}><Send size={17} /> {pdfAction === 'emit' ? 'Emitindo...' : quote.documents?.length ? 'Emitir nova versão' : 'Emitir orçamento'}</button>}
         <button aria-label={legacy ? 'Visualizar PDF histórico reconstruído' : 'Visualizar PDF atual'} className={`button ${legacy ? 'button_primary ' : ''}commercial-quote-detail__pdf-secondary`} type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('view')}><Eye size={17} /> Visualizar PDF</button>
         <button className="button commercial-quote-detail__pdf-secondary" type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('download')}><Download size={17} /> Baixar PDF</button>
         <button className="button commercial-quote-detail__pdf-secondary" type="button" disabled={Boolean(pdfAction)} onClick={() => handlePdf('print')}><Printer size={17} /> Imprimir</button>
-        {!legacy && canApprove && quote.status === 'sent' && <button className="button button_primary commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'approved', title: 'Aprovar orçamento', message: 'A aprovação criará uma Venda. Somente Produtos internos fabricados, revisados e configurados serão enviados à Produção.', success: 'Orçamento aprovado e Venda criada.' })}><CheckCircle2 size={17} /> Aprovar orçamento</button>}
+        {!legacy && canApprove && quote.status === 'sent' && <button className="button button_primary commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'approved', title: 'Aprovar orçamento', message: 'A aprovação criará uma Venda. A fabricação dependerá de confirmação na emissão definitiva do orçamento aprovado.', success: 'Orçamento aprovado e Venda criada.' })}><CheckCircle2 size={17} /> Aprovar orçamento</button>}
         {!legacy && canEdit && quote.status === 'sent' && <button className="button button_danger commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'rejected', title: 'Recusar orçamento', message: 'O orçamento será preservado como recusado e não poderá ser editado.', success: 'Orçamento recusado.' })}><XCircle size={17} /> Recusar</button>}
         {!legacy && canCancel && ['draft', 'sent'].includes(quote.status) && <button className="button button_danger commercial-quote-detail__status-action" type="button" onClick={() => setAction({ status: 'cancelled', title: 'Cancelar orçamento', message: 'O orçamento será preservado no histórico como cancelado.', success: 'Orçamento cancelado.' })}><XCircle size={17} /> Cancelar</button>}
       </div>
@@ -131,6 +168,7 @@ export function QuoteDetailPage({ legacy = false }) {
       {legacy && <section className="panel commercial-quote-detail__section"><h2>Rastreabilidade</h2><dl><div><dt>Origem</dt><dd>ERP Universal</dd></div><div><dt>Número original</dt><dd>#{quote.source_legacy_number}</dd></div>{quote.aliases?.length > 1 && <div><dt>Duplicados integrais descartados</dt><dd>{quote.aliases.filter((item) => !item.is_primary).map((item) => `ERP #${item.source_legacy_number}`).join(', ')}</dd></div>}<div><dt>Total</dt><dd>Reconstruído das linhas pela fórmula ERP_UNIVERSAL_V1</dd></div></dl></section>}
       {!legacy && <section className="panel commercial-quote-detail__section"><h2>Histórico</h2><ol className="commercial-quote-detail__history">{quote.history.map((event) => <li key={event.id}><div><strong>{historyLabels[event.action] || event.action}</strong><span>{event.user_name || 'Sistema'}</span></div><time>{new Date(event.created_at).toLocaleString('pt-BR')}</time></li>)}</ol></section>}
 
+      {manufacturingAction && <QuoteManufacturingIssue onEdit={canEdit ? openPlanning : undefined} quoteId={id} consultOnly={manufacturingAction==='consult'} onClose={()=>setManufacturingAction(null)} onIssued={load} />}
       <ConfirmModal open={Boolean(action)} title={action?.title || ''} onCancel={() => setAction(null)} actions={<button className={`button ${action?.status === 'sent' || action?.status === 'approved' ? 'button_primary' : 'button_danger'}`} type="button" disabled={saving} onClick={changeStatus}>{saving ? 'Salvando...' : 'Confirmar'}</button>}><p>{action?.message}</p></ConfirmModal>
     </section>
   );
