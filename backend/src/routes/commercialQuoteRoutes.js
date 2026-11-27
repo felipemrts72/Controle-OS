@@ -13,6 +13,7 @@ commercialQuoteRoutes.get('/manufacturing/units', planPermission, manufacturing.
 commercialQuoteRoutes.get('/manufacturing/sectors', planPermission, manufacturing.sectors);
 commercialQuoteRoutes.get('/manufacturing/products', planPermission, manufacturing.products);
 commercialQuoteRoutes.get('/manufacturing/products/:productId/tree', planPermission, manufacturing.tree);
+commercialQuoteRoutes.post('/:id/manufacturing/correct-names', requirePermission('commercial.quotes.edit'), requirePermission('orders.edit'), manufacturing.correctNames);
 commercialQuoteRoutes.put('/:id/manufacturing', requirePermission('commercial.quotes.edit'), manufacturing.saveApproved);
 commercialQuoteRoutes.get('/:id/manufacturing', requirePermission('commercial.quotes.view'), manufacturing.review);
 commercialQuoteRoutes.post('/:id/manufacturing/issue', requirePermission('commercial.quotes.approve'), manufacturing.issue);

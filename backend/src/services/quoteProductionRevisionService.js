@@ -1,9 +1,10 @@
+import { quoteProductionTaskName, isLegacyQuoteRootName } from './quoteProductionTaskNameService.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
 import { refreshSoldItemStatus, refreshInternalOrderStatus } from './statusService.js';
 
 const identity=d=>`${d.item_id}:${d.node_key}`;
-const taskValues=d=>[`${d.name} — ${d.root_name}`,String(Number(d.quantity)),d.sector_id,d.unit_code,d.product_id || null,d.note || '',d.parent_key || null];
+const taskValues=d=>[quoteProductionTaskName(d),String(Number(d.quantity)),d.sector_id,d.unit_code,d.product_id || null,d.note || '',d.parent_key || null];
 const dependencyValues=d=>(d.dependencies || []).map(x=>`${x.node_key}:${Number(x.quantity)}`).sort();
 
 // Only unused tasks can change. Execution records and their already-used dependency edges remain intact.
@@ -19,7 +20,7 @@ export async function syncQuoteProduction(client, order, demands, body, user) {
   const used=t=>t.status!=='pending' || Number(t.completed_quantity)>0 || t.completed_by || t.completed_at || t.is_pinned || t.pinned_at || t.has_execution_history;
   for(const task of tasks) {
     const old=task.manufacturing_snapshot, demand=desired.get(identity(old));
-    const oldValues=[task.task_name,String(Number(task.quantity)),task.sector_id,task.measurement_unit_code,task.component_product_id || null,task.manufacturing_notes || '',task.manufacturing_parent_key || null];
+    const oldValues=[isLegacyQuoteRootName(task)?quoteProductionTaskName(task.manufacturing_snapshot):task.task_name,String(Number(task.quantity)),task.sector_id,task.measurement_unit_code,task.component_product_id || null,task.manufacturing_notes || '',task.manufacturing_parent_key || null];
     const oldDeps=edges.filter(e=>e.task_id===task.id).map(e=>`${e.child_key}:${Number(e.required_quantity)}`).sort();
     const changed=!demand || JSON.stringify(oldValues)!==JSON.stringify(taskValues(demand)) || JSON.stringify(oldDeps)!==JSON.stringify(dependencyValues(demand));
     if(changed && used(task)) throw httpError(409,`A demanda "${task.task_name}" já possui andamento ou histórico de execução. Sua composição, quantidade, setor e dependências foram preservados. Corrija somente tarefas ainda não iniciadas.`);
@@ -48,7 +49,7 @@ export async function syncQuoteProduction(client, order, demands, body, user) {
       const volumes=Number(product?.default_volume_quantity),total=volumes*Number(item.quantity);
       if(volumes>0 && Number.isInteger(total) && Number(product.default_total_weight_kg)>0) await client.query(`INSERT INTO shipment_volumes(sold_item_id,volume_number,total_volumes,weight_kg,description,label_status) SELECT $1,n,$2,$3,$4,'waiting_tasks' FROM generate_series(1,$2::int) n`,[item.id,total,Number(product.default_total_weight_kg)/volumes,item.product_name_snapshot]);
     }
-    const values=[item.id,demand.sector_id,`${demand.name} — ${demand.root_name}`,demand.quantity,demand.unit_code,demand.node_key,demand.parent_key,demand.product_id,JSON.stringify(demand),demand.note];
+    const values=[item.id,demand.sector_id,quoteProductionTaskName(demand),demand.quantity,demand.unit_code,demand.node_key,demand.parent_key,demand.product_id,JSON.stringify(demand),demand.note];
     if(previous) {
       await client.query(`UPDATE internal_tasks SET sold_item_id=$1,sector_id=$2,task_name=$3,quantity=$4,measurement_unit_code=$5,manufacturing_node_key=$6,manufacturing_parent_key=$7,component_product_id=$8,manufacturing_snapshot=$9,manufacturing_notes=$10,updated_at=clock_timestamp() WHERE id=$11`,[...values,previous.id]);
     } else {

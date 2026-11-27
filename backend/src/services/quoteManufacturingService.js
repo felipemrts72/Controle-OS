@@ -1,3 +1,4 @@
+import { quoteProductionTaskName } from './quoteProductionTaskNameService.js';
 import { recoverPlanningUnits } from './quoteManufacturingUnitService.js';
 import { productionDate } from '../utils/productionDate.js';
 import { syncQuoteProduction } from './quoteProductionRevisionService.js';
@@ -240,7 +241,7 @@ export async function issueQuoteManufacturing(quoteId, body, user, existingClien
           const task = (await client.query(`INSERT INTO internal_tasks(sold_item_id,sector_id,task_name,quantity,is_released,
           measurement_unit_code,manufacturing_node_key,manufacturing_parent_key,component_product_id,manufacturing_snapshot,manufacturing_notes)
           VALUES($1,$2,$3,$4,FALSE,$5,$6,$7,$8,$9,$10) RETURNING id`,[sold.id,demand.sector_id,
-          `${demand.name} — ${demand.root_name}`,demand.quantity,demand.unit_code,demand.node_key,demand.parent_key,demand.product_id,JSON.stringify(demand),demand.note])).rows[0];
+          quoteProductionTaskName(demand),demand.quantity,demand.unit_code,demand.node_key,demand.parent_key,demand.product_id,JSON.stringify(demand),demand.note])).rows[0];
           taskIds.set(demand.node_key,task.id);
         }
         for (const demand of demands) {

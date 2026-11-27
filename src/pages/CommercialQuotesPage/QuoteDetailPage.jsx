@@ -12,7 +12,7 @@ import { formatDate, formatMoney, PAYMENT_TYPES, quoteCommercialLabel, QUOTE_STA
 import { downloadAuthenticatedFile, printAuthenticatedPdf, viewAuthenticatedPdf } from '../../utils/downloadAuthenticatedFile.js';
 import './CommercialQuotes.css';
 
-const historyLabels = { manufacturing_plan_edited: 'Planejamento de fabricação revisado', issued_with_manufacturing: 'Ordem de produção gerada', issued_without_manufacturing: 'Conversão sem fabricação', created: 'Orçamento criado', edited: 'Orçamento editado', emitted: 'PDF emitido', sent: 'PDF emitido', reopened: 'Reaberto', approved: 'Aprovado comercialmente', rejected: 'Recusado', cancelled: 'Cancelado', duplicated: 'Duplicado de outro orçamento' };
+const historyLabels = { manufacturing_task_names_corrected: 'Nomes das demandas corrigidos', manufacturing_plan_edited: 'Planejamento de fabricação revisado', issued_with_manufacturing: 'Ordem de produção gerada', issued_without_manufacturing: 'Conversão sem fabricação', created: 'Orçamento criado', edited: 'Orçamento editado', emitted: 'PDF emitido', sent: 'PDF emitido', reopened: 'Reaberto', approved: 'Aprovado comercialmente', rejected: 'Recusado', cancelled: 'Cancelado', duplicated: 'Duplicado de outro orçamento' };
 
 export function QuoteDetailPage({ legacy = false }) {
   const { id } = useParams();
@@ -30,6 +30,7 @@ export function QuoteDetailPage({ legacy = false }) {
   const [saving, setSaving] = useState(false);
   const [pdfAction, setPdfAction] = useState('');
   const [manufacturingAction,setManufacturingAction]=useState(null);
+  const [nameCorrection,setNameCorrection]=useState(null);
   const [planningItems,setPlanningItems]=useState(null);
   const [planningEnabled,setPlanningEnabled]=useState(false);
   const [planningDate,setPlanningDate]=useState(''),[orderUpdatedAt,setOrderUpdatedAt]=useState(null),[confirmedChanges,setConfirmedChanges]=useState(false);
@@ -91,6 +92,20 @@ export function QuoteDetailPage({ legacy = false }) {
     } finally { setPdfAction(''); }
   }
 
+  async function openNameCorrection() {
+    try {setNameCorrection((await api.get('/commercial/quotes/'+id+'/manufacturing')).data);}
+    catch(e){toast.error(e.response?.data?.message || 'Não foi possível conferir a ordem.');}
+  }
+  async function correctNames() {
+    if(saving)return;
+    try {
+      setSaving(true);
+      const {data}=await api.post('/commercial/quotes/'+id+'/manufacturing/correct-names',{confirmed:true,expected_updated_at:nameCorrection.updated_at,expected_order_updated_at:nameCorrection.order_updated_at});
+      toast.success(data.corrected ? data.corrected+' nome(s) corrigido(s). Tarefas e progresso preservados.' : 'Nenhum nome com o padrão antigo para corrigir.');
+      setNameCorrection(null);await load();
+    } catch(e){toast.error(e.response?.data?.message || 'Não foi possível corrigir os nomes.');}
+    finally{setSaving(false);}
+  }
   async function openPlanning() {
     try {
       const items=await Promise.all(quote.items.map(async item=>({
@@ -143,6 +158,7 @@ export function QuoteDetailPage({ legacy = false }) {
       </header>
 
       <div className="commercial-quote-detail__actions">
+        {!legacy && quote.sale?.production_order_id && canEdit && canAccessPermission(user,'orders.edit') && <button className="button" disabled={saving} onClick={openNameCorrection}>Corrigir nomes das demandas</button>}
         {!legacy && canEdit && quote.status==='approved' && (!quote.sale?.production_order_id || canAccessPermission(user,'orders.edit')) && <button className="button" type="button" disabled={saving} onClick={openPlanning}>Revisar planejamento de fabricação</button>}
         {!legacy && quote.status==='approved' && canApprove && canAccessPermission(user,'orders.create') && !quote.sale?.production_order_id && <button className="button button_primary" onClick={()=>setManufacturingAction('issue')}>Gerar ordem de produção</button>}
         {!legacy && quote.sale?.production_order_id && <button className="button" onClick={()=>setManufacturingAction('consult')}>Consultar fabricação vinculada</button>}
@@ -175,6 +191,7 @@ export function QuoteDetailPage({ legacy = false }) {
       {legacy && <section className="panel commercial-quote-detail__section"><h2>Rastreabilidade</h2><dl><div><dt>Origem</dt><dd>ERP Universal</dd></div><div><dt>Número original</dt><dd>#{quote.source_legacy_number}</dd></div>{quote.aliases?.length > 1 && <div><dt>Duplicados integrais descartados</dt><dd>{quote.aliases.filter((item) => !item.is_primary).map((item) => `ERP #${item.source_legacy_number}`).join(', ')}</dd></div>}<div><dt>Total</dt><dd>Reconstruído das linhas pela fórmula ERP_UNIVERSAL_V1</dd></div></dl></section>}
       {!legacy && <section className="panel commercial-quote-detail__section"><h2>Histórico</h2><ol className="commercial-quote-detail__history">{quote.history.map((event) => <li key={event.id}><div><strong>{historyLabels[event.action] || event.action}</strong><span>{event.user_name || 'Sistema'}</span></div><time>{new Date(event.created_at).toLocaleString('pt-BR')}</time></li>)}</ol></section>}
 
+      <ConfirmModal open={Boolean(nameCorrection)} title="Corrigir nomes das demandas" onCancel={()=>{if(!saving)setNameCorrection(null);}} actions={<button className="button button_primary" disabled={saving} onClick={correctNames}>Confirmar correção dos nomes</button>}><p>Corrigir somente os nomes de demandas principais gerados no padrão antigo. Componentes, IDs, quantidades, setores, datas, dependências e progresso serão preservados. A correção será registrada no histórico.</p></ConfirmModal>
       {manufacturingAction && <QuoteManufacturingIssue converting={manufacturingAction==='convert'} onEdit={canEdit ? (['draft','sent'].includes(quote.status) ? ()=>navigate('/comercial/orcamentos/'+id+'/editar') : openPlanning) : undefined} quoteId={id} consultOnly={manufacturingAction==='consult'} onClose={()=>setManufacturingAction(null)} onIssued={load} />}
       <ConfirmModal open={Boolean(action)} title={action?.title || ''} onCancel={() => setAction(null)} actions={<button className={`button ${action?.status === 'sent' || action?.status === 'approved' ? 'button_primary' : 'button_danger'}`} type="button" disabled={saving} onClick={changeStatus}>{saving ? 'Salvando...' : 'Confirmar'}</button>}><p>{action?.message}</p></ConfirmModal>
     </section>

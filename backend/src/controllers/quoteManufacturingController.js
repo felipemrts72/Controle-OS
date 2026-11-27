@@ -1,7 +1,9 @@
+import { correctQuoteProductionNames } from '../services/quoteProductionTaskNameService.js';
 import { query, transaction } from '../database/pool.js';
 import { manufacturingTemplate, manufacturingReview, issueQuoteManufacturing, saveApprovedQuotePlanning } from '../services/quoteManufacturingService.js';
 
 const handler = fn => async (req,res,next) => { try { res.json(await fn(req)); } catch(error) { next(error); } };
+export const correctNames=handler(req=>correctQuoteProductionNames(req.params.id,req.body,req.user));
 export const template=handler(req=>transaction(client=>manufacturingTemplate(client,req.body)));
 export const saveApproved=handler(req=>saveApprovedQuotePlanning(req.params.id,req.body,req.user));
 export const review=handler(req=>transaction(client=>manufacturingReview(client,req.params.id)));

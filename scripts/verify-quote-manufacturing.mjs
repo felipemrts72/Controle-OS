@@ -262,7 +262,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::int n FROM commercial_sales WHERE commercial_quote_id=$1',[created.id])).rows[0].n,1);
   const loadUiTasks=async()=>(await db.query('SELECT t.* FROM internal_tasks t JOIN sold_items si ON si.id=t.sold_item_id WHERE si.internal_order_id=$1',[converted.sale.production_order_id])).rows;
   let uiTasks=await loadUiTasks();assert.equal(uiTasks.length,4);assert.equal(uiTasks.filter(t=>t.is_released).length,2);
-  const parentRow=page.locator('tr').filter({has:page.getByText('Equipamento fictício — Equipamento fictício',{exact:true})});
+  const parentRow=page.locator('tr').filter({has:page.getByText('Equipamento fictício',{exact:true})});
   assert.equal(await parentRow.getByRole('button',{name:'Marcar pronto',exact:true}).isDisabled(),true);
   for(let n=0;n<4;n++) {
     uiTasks=await loadUiTasks();const available=uiTasks.find(t=>t.is_released&&t.status==='pending');assert.ok(available);
