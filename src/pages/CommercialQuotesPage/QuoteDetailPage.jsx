@@ -32,6 +32,7 @@ export function QuoteDetailPage({ legacy = false }) {
   const [manufacturingAction,setManufacturingAction]=useState(null);
   const [planningItems,setPlanningItems]=useState(null);
   const [planningEnabled,setPlanningEnabled]=useState(false);
+  const [planningDate,setPlanningDate]=useState(''),[orderUpdatedAt,setOrderUpdatedAt]=useState(null),[confirmedChanges,setConfirmedChanges]=useState(false);
 
   const load = useCallback(async () => {
     try { setLoading(true); setQuote((await api.get(legacy ? `/commercial/quotes/legacy/${id}` : `/commercial/quotes/${id}`)).data); }
@@ -98,6 +99,8 @@ export function QuoteDetailPage({ legacy = false }) {
           product_id:item.product_id,commercial_product_id:item.commercial_product_id,name:item.product_name_snapshot,unit:item.measurement_unit_snapshot
         })).data),save_tree:false}
       })));
+      const review=(await api.get('/commercial/quotes/'+id+'/manufacturing')).data;
+      setPlanningDate(review.promised_date?.slice(0,10) || '');setOrderUpdatedAt(review.order_updated_at);setConfirmedChanges(false);
       setPlanningEnabled(quote.manufacturing_enabled);setPlanningItems(items);setManufacturingAction(null);
     } catch(e){toast.error(e.response?.data?.message || 'Não foi possível abrir o planejamento.');}
   }
@@ -111,14 +114,14 @@ export function QuoteDetailPage({ legacy = false }) {
     try {
       setSaving(true);
       const {data}=await api.put('/commercial/quotes/'+id+'/manufacturing',{
-        expected_updated_at:quote.updated_at,manufacturing_enabled:planningEnabled,items
+        expected_updated_at:quote.updated_at,expected_order_updated_at:orderUpdatedAt,confirm_production_changes:confirmedChanges,promised_date:planningDate,manufacturing_enabled:planningEnabled,items
       });
       toast.success(data.trees_saved?'Planejamento salvo e árvore atualizada no estoque.':'Planejamento salvo. Valores comerciais preservados.');
       setPlanningItems(null);await load();
     } catch(e){toast.error(e.response?.data?.message || 'Não foi possível salvar o planejamento.');}
     finally{setSaving(false);}
   }
-  if(planningItems) return <QuoteManufacturingPlanner items={planningItems} setItems={setPlanningItems} enabled={planningEnabled} setEnabled={setPlanningEnabled} onClose={()=>setPlanningItems(null)} onSave={savePlanning} saving={saving} approved />;
+  if(planningItems) return <QuoteManufacturingPlanner items={planningItems} setItems={setPlanningItems} promisedDate={planningDate} setPromisedDate={setPlanningDate} linkedOrder={Boolean(quote.sale?.production_order_id)} confirmedChanges={confirmedChanges} setConfirmedChanges={setConfirmedChanges} enabled={planningEnabled} setEnabled={setPlanningEnabled} onClose={()=>setPlanningItems(null)} onSave={savePlanning} saving={saving} approved />;
   if (loading) return <section className="page"><div className="panel">Carregando orçamento...</div></section>;
   if (!quote) return <section className="page"><div className="panel">Orçamento não encontrado.</div></section>;
   const status = legacy ? { label: 'ERP antigo', tone: 'muted' } : QUOTE_STATUS[quote.status] || { label: quote.status, tone: 'neutral' };
@@ -140,7 +143,7 @@ export function QuoteDetailPage({ legacy = false }) {
       </header>
 
       <div className="commercial-quote-detail__actions">
-        {!legacy && canEdit && quote.status==='approved' && !quote.sale?.production_order_id && <button className="button" type="button" disabled={saving} onClick={openPlanning}>Revisar planejamento de fabricação</button>}
+        {!legacy && canEdit && quote.status==='approved' && (!quote.sale?.production_order_id || canAccessPermission(user,'orders.edit')) && <button className="button" type="button" disabled={saving} onClick={openPlanning}>Revisar planejamento de fabricação</button>}
         {!legacy && quote.status==='approved' && canApprove && canAccessPermission(user,'orders.create') && !quote.sale?.production_order_id && <button className="button button_primary" onClick={()=>setManufacturingAction('issue')}>Gerar ordem de produção</button>}
         {!legacy && quote.sale?.production_order_id && <button className="button" onClick={()=>setManufacturingAction('consult')}>Consultar fabricação vinculada</button>}
         {!legacy && canEdit && ['draft', 'sent'].includes(quote.status) && <button className="button commercial-quote-detail__pdf-primary" type="button" disabled={Boolean(pdfAction)} onClick={emitPdf}><Send size={17} /> {pdfAction === 'emit' ? 'Emitindo...' : quote.documents?.length ? 'Emitir nova versão' : 'Emitir orçamento'}</button>}
@@ -156,7 +159,7 @@ export function QuoteDetailPage({ legacy = false }) {
 
       <div className="commercial-quote-detail__grid">
         <section className="panel commercial-quote-detail__section"><h2>Cliente no momento do orçamento</h2><dl><div><dt>Nome/razão social</dt><dd>{quote.customer_snapshot?.name || quote.customer_name_snapshot || 'Cliente não identificado'}</dd></div><div><dt>Nome fantasia</dt><dd>{quote.customer_snapshot?.trade_name || '-'}</dd></div><div><dt>CPF/CNPJ</dt><dd>{quote.customer_snapshot?.tax_id || '-'}</dd></div><div><dt>Contato</dt><dd>{quote.customer_snapshot?.phone || quote.customer_snapshot?.whatsapp || quote.customer_snapshot?.email || '-'}</dd></div><div><dt>Endereço</dt><dd>{[customerAddress.street, customerAddress.number, customerAddress.complement, customerAddress.neighborhood, customerAddress.city, customerAddress.state, customerAddress.zip_code].filter(Boolean).join(', ') || '-'}</dd></div></dl>{quote.customer_id && <Link className="button" to={`/comercial/clientes/${quote.customer_id}`}>Abrir cadastro atual do cliente</Link>}</section>
-        <section className="panel commercial-quote-detail__section"><h2>Condições</h2><dl><div><dt>Data</dt><dd>{formatDate(quote.quote_date)}</dd></div><div><dt>Validade</dt><dd>{formatDate(quote.valid_until)}</dd></div><div><dt>Criado por</dt><dd>{quote.created_by_name || '-'}</dd></div><div><dt>Última atualização</dt><dd>{quote.updated_at ? new Date(quote.updated_at).toLocaleString('pt-BR') : '-'}</dd></div></dl></section>
+        <section className="panel commercial-quote-detail__section"><h2>Condições</h2><p>Data prevista de entrega — uso interno: {formatDate(quote.promised_date)}</p><dl><div><dt>Data</dt><dd>{formatDate(quote.quote_date)}</dd></div><div><dt>Validade</dt><dd>{formatDate(quote.valid_until)}</dd></div><div><dt>Criado por</dt><dd>{quote.created_by_name || '-'}</dd></div><div><dt>Última atualização</dt><dd>{quote.updated_at ? new Date(quote.updated_at).toLocaleString('pt-BR') : '-'}</dd></div></dl></section>
       </div>
 
       <section className="panel commercial-quote-detail__section"><h2>Itens</h2><div className="commercial-quote-detail__items-table"><DataTable columns={itemsColumns} rows={quote.items} emptyText="Nenhum item." /></div><div className="commercial-quote-detail__items-mobile">{quote.items.map((item) => <article key={item.id}><div><strong>{item.product_name_snapshot}</strong><span>{[item.product_code_snapshot, item.item_type === 'manual' ? 'Manual' : null].filter(Boolean).join(' · ')}</span></div>{item.description_snapshot && <p>{item.description_snapshot}</p>}<dl><div><dt>Qtd.</dt><dd>{Number(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</dd></div><div><dt>Unitário</dt><dd>{formatMoney(item.unit_price)}</dd></div><div><dt>Desconto / un.</dt><dd>{formatMoney(item.unit_discount_amount ?? (Number(item.quantity) > 0 ? Number(item.discount_amount) / Number(item.quantity) : 0))}</dd></div><div><dt>Total</dt><dd><strong>{formatMoney(item.subtotal)}</strong></dd></div></dl>{item.sop_minimum_price_snapshot != null && <small className={item.is_outside_sop ? 'commercial-quotes__outside-sop' : 'commercial-quotes__inside-sop'}>{item.is_outside_sop ? 'Fora da SOP' : 'Dentro da SOP'} · ref. {formatMoney(item.reference_price_snapshot)} · mín. {formatMoney(item.sop_minimum_price_snapshot)}</small>}</article>)}</div></section>

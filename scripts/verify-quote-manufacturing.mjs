@@ -30,6 +30,7 @@ try {
  const sectorA=(await db.query("INSERT INTO sectors(name,slug) VALUES('Usinagem QA','usinagem') RETURNING id")).rows[0].id;
  const sectorB=(await db.query("INSERT INTO sectors(name,slug) VALUES('Montagem QA','montagem') RETURNING id")).rows[0].id;
  const sectorC=(await db.query("INSERT INTO sectors(name,slug) VALUES('Pintura QA','pintura') RETURNING id")).rows[0].id;
+ if (!(await db.query("SELECT 1 FROM information_schema.columns WHERE table_name='commercial_quotes' AND column_name='promised_date'")).rowCount) await db.query(fs.readFileSync('database/migrations/20261127_quote_promised_date.sql','utf8'));
  process.env.DATABASE_URL=testUrl.toString();process.env.JWT_SECRET=randomBytes(24).toString('hex');
  const {pool,transaction}=await import('../backend/src/database/pool.js');appPool=pool;
  const {buildAuthUser}=await import('../backend/src/services/permissionService.js');const actor=await buildAuthUser(user);
@@ -43,7 +44,7 @@ try {
  const bought=node(root.key,'Motor comprado fictício',{new_product:{name:'Motor comprado fictício',type:'resale'}});
  const stock=await saveProductTree(null,{request_id:randomUUID(),version:0,nodes:[root,child,grandchild,bought]},actor);
  const template=()=>transaction(client=>manufacturingTemplate(client,{product_id:stock.product_id}));
- const makeBody=(plan,extras={})=>({customer_name:'Cliente exclusivamente fictício',quote_date:'2026-11-25',manufacturing_enabled:true,items:[{product_id:stock.product_id,quantity:'3',unit_price:'100',discount_amount:'0',manufacturing_plan:plan}],payment_methods:[{method_type:'pix',calculation_type:'percentage',percentage:'100',installment_count:1}],...extras});
+ const makeBody=(plan,extras={})=>({customer_name:'Cliente exclusivamente fictício',promised_date:'2031-05-11',quote_date:'2026-11-25',manufacturing_enabled:true,items:[{product_id:stock.product_id,quantity:'3',unit_price:'100',discount_amount:'0',manufacturing_plan:plan}],payment_methods:[{method_type:'pix',calculation_type:'percentage',percentage:'100',installment_count:1}],...extras});
  const review=id=>transaction(client=>manufacturingReview(client,id));
  const approve=async(id)=>{await changeCommercialQuoteStatus(id,'sent',actor);await changeCommercialQuoteStatus(id,'approved',actor,{confirmed:true,manufacture:false,expected_updated_at:(await review(id)).updated_at});};
  const issue=async(id,manufacture=true)=>issueQuoteManufacturing(id,{manufacture,confirmed:true,expected_updated_at:(await review(id)).updated_at},actor);

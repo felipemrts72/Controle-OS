@@ -1,3 +1,4 @@
+import { productionDate } from '../utils/productionDate.js';
 import { query } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
@@ -192,7 +193,7 @@ export async function createSaleForApprovedQuote(client, quote, userId) {
   return sale;
 }
 
-const saleSelect = `SELECT cs.*,cq.status AS quote_status,io.id AS production_order_id,io.status AS production_order_status,
+const saleSelect = `SELECT cs.*,cq.status AS quote_status,io.id AS production_order_id,io.status AS production_order_status,CASE WHEN io.id IS NOT NULL THEN io.promised_date ELSE cq.promised_date END AS promised_date,
   COUNT(csi.id)::int AS item_count,
   COUNT(*) FILTER (WHERE EXISTS(SELECT 1 FROM sold_items produced JOIN internal_tasks task ON task.sold_item_id=produced.id WHERE produced.commercial_sale_item_id=csi.id))::int AS production_item_count
  FROM commercial_sales cs
@@ -207,7 +208,7 @@ export async function listCommercialSales(params = {}, database = { query }) {
     `${saleSelect}
      WHERE ($1='' OR cs.sale_number::text ILIKE '%'||$1||'%' OR cs.commercial_number::text ILIKE '%'||$1||'%'
        OR cs.customer_name_snapshot ILIKE '%'||$1||'%')
-     GROUP BY cs.id,cq.status,io.id
+     GROUP BY cs.id,cq.status,cq.promised_date,io.id
      ORDER BY cs.created_at DESC LIMIT $2`,
     [search, limit],
   );
@@ -217,7 +218,7 @@ export async function listCommercialSales(params = {}, database = { query }) {
 export async function getCommercialSale(id, database = { query }) {
   assertUuid(id);
   const sale = (await database.query(
-    `${saleSelect} WHERE cs.id=$1 GROUP BY cs.id,cq.status,io.id`, [id],
+    `${saleSelect} WHERE cs.id=$1 GROUP BY cs.id,cq.status,cq.promised_date,io.id`, [id],
   )).rows[0];
   if (!sale) throw httpError(404, 'Venda não encontrada.');
   const items = (await database.query(
@@ -228,7 +229,7 @@ export async function getCommercialSale(id, database = { query }) {
   )).rows;
   const tasks=(await database.query('SELECT t.*,s.name AS sector_name FROM internal_tasks t JOIN sold_items si ON si.id=t.sold_item_id JOIN sectors s ON s.id=t.sector_id WHERE si.internal_order_id=$1 ORDER BY t.created_at,t.id',[sale.production_order_id])).rows;
   const plans=(await database.query('SELECT id,product_name_snapshot,manufacturing_plan FROM commercial_quote_items WHERE commercial_quote_id=$1 ORDER BY line_order',[sale.commercial_quote_id])).rows;
-  return { ...sale, items, tasks, manufacturing_plans:plans };
+  return { ...sale, promised_date:productionDate(sale.promised_date),items, tasks, manufacturing_plans:plans };
 }
 
 export async function getSaleByQuoteId(quoteId, database = { query }) {

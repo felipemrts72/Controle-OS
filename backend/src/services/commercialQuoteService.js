@@ -1,3 +1,4 @@
+import { productionDate } from '../utils/productionDate.js';
 import { prepareQuoteManufacturing, issueQuoteManufacturing } from './quoteManufacturingService.js';
 import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { pool, transaction } from '../database/pool.js';
@@ -535,7 +536,7 @@ export async function createCommercialQuote(body, user) {
         calculation.totals.freight_amount, calculation.totals.total],
     );
     const quote = result.rows[0];
-    await client.query('UPDATE commercial_quotes SET manufacturing_enabled=$1 WHERE id=$2', [body.manufacturing_enabled === true, quote.id]);
+    await client.query('UPDATE commercial_quotes SET manufacturing_enabled=$1,promised_date=$3 WHERE id=$2', [body.manufacturing_enabled === true, quote.id,productionDate(body.promised_date)]);
     await insertItems(client, quote.id, calculation.items);
     await insertPaymentMethods(client, quote.id, paymentMethods);
     await insertHistory(client, quote.id, 'created', user.id, null, 'draft', { quote_number: quoteNumber, commercial_number: commercialNumber, outside_sop_items: calculation.items.filter((item) => item.is_outside_sop).length });
@@ -626,7 +627,7 @@ export async function getCommercialQuote(id, database = pool) {
      ORDER BY document_version DESC`, [id],
   );
   const saleResult = await database.query(
-    `SELECT cs.id,cs.sale_number,cs.status,cs.created_at,io.id AS production_order_id,
+    `SELECT cs.id,cs.sale_number,cs.status,cs.created_at,io.id AS production_order_id,io.promised_date,
       COUNT(csi.id)::int AS item_count,
       COUNT(*) FILTER (WHERE EXISTS(SELECT 1 FROM sold_items produced JOIN internal_tasks task ON task.sold_item_id=produced.id WHERE produced.commercial_sale_item_id=csi.id))::int AS production_item_count,
       COUNT(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM sold_items produced JOIN internal_tasks task ON task.sold_item_id=produced.id WHERE produced.commercial_sale_item_id=csi.id))::int AS pending_item_count
@@ -654,6 +655,7 @@ export async function getCommercialQuote(id, database = pool) {
     documents: documentsResult.rows,
     history: historyResult.rows,
     sale: saleResult.rows[0] || null,
+    promised_date:productionDate(saleResult.rows[0]?.production_order_id ? saleResult.rows[0].promised_date : result.rows[0].promised_date),
   };
 }
 
@@ -689,7 +691,7 @@ export async function updateCommercialQuote(id, body, user) {
         calculation.totals.discount_amount, calculation.totals.freight_amount,
         calculation.totals.total, user.id, id],
     );
-    await client.query('UPDATE commercial_quotes SET manufacturing_enabled=$1 WHERE id=$2', [body.manufacturing_enabled === undefined ? current.manufacturing_enabled : body.manufacturing_enabled === true, id]);
+    await client.query('UPDATE commercial_quotes SET manufacturing_enabled=$1,promised_date=$3 WHERE id=$2', [body.manufacturing_enabled === undefined ? current.manufacturing_enabled : body.manufacturing_enabled === true, id,productionDate(body.promised_date===undefined?current.promised_date:body.promised_date)]);
     await client.query('DELETE FROM commercial_quote_items WHERE commercial_quote_id = $1', [id]);
     await client.query('DELETE FROM commercial_quote_payment_methods WHERE commercial_quote_id = $1', [id]);
     await insertItems(client, id, calculation.items);
@@ -790,6 +792,7 @@ export async function changeCommercialQuoteStatus(id, newStatus, user, options =
           : newStatus === 'sent' ? 'sent' : 'reopened';
     let sale = null;
     if (newStatus === 'approved') {
+      if(options.promised_date!==undefined) await client.query('UPDATE commercial_quotes SET promised_date=$1 WHERE id=$2',[productionDate(options.promised_date),id]);
       sale = await createSaleForApprovedQuote(client, updated.rows[0], user.id);
       await issueQuoteManufacturing(id, options, user, client);
     }

@@ -1,3 +1,4 @@
+import { InternalDeliveryDate } from './InternalDeliveryDate.jsx';
 import { useEffect, useRef, useState } from 'react';
 import './QuoteManufacturing.css';
 import { Link } from 'react-router-dom';
@@ -8,13 +9,14 @@ import { ConfirmModal } from '../../components/ConfirmModal/ConfirmModal.jsx';
 export function QuoteManufacturingIssue({ quoteId, onClose, onIssued, consultOnly = false, onEdit, converting = false }) {
   const [review,setReview]=useState(null),[error,setError]=useState(''),[manufacture,setManufacture]=useState(false),[busy,setBusy]=useState(false);
   const pending=useRef(false);
+  const [promisedDate,setPromisedDate]=useState('');
   const canProduce=canAccessPermission(getStoredUser(),'orders.create');
   useEffect(()=>{api.get(`/commercial/quotes/${quoteId}/manufacturing`).then(r=>{
-    setReview(r.data);setManufacture(converting ? r.data.manufacturing_enabled : true);
+    setReview(r.data);setPromisedDate(r.data.promised_date?.slice(0,10) || '');setManufacture(converting ? r.data.manufacturing_enabled : true);
   }).catch(e=>setError(e.response?.data?.message || 'Não foi possível carregar a conferência.'));},[quoteId,converting]);
   async function confirm() {
     if(pending.current)return;pending.current=true;setBusy(true);setError('');
-    const body={manufacture,confirmed:true,expected_updated_at:review.updated_at};
+    const body={promised_date:promisedDate,manufacture,confirmed:true,expected_updated_at:review.updated_at};
     try {
       if(converting) await api.patch(`/commercial/quotes/${quoteId}/status`,{...body,status:'approved'});
       else await api.post(`/commercial/quotes/${quoteId}/manufacturing/issue`,body);
@@ -23,7 +25,7 @@ export function QuoteManufacturingIssue({ quoteId, onClose, onIssued, consultOnl
     finally{pending.current=false;setBusy(false);}
   }
   const finished=review?.production_order_id;
-  const blocked=manufacture && (!canProduce || !review?.demands.length || review?.errors.length>0);
+  const blocked=manufacture && (!promisedDate || !canProduce || !review?.demands.length || review?.errors.length>0);
   return <ConfirmModal open title={consultOnly?'Fabricação vinculada':converting?'Converter em venda':'Gerar ordem de produção'} onCancel={()=>{if(!busy)onClose();}} cancelLabel={finished || consultOnly?'Fechar':'Cancelar'} contentClassName="quote-manufacturing-confirm">
     {error && <p role="alert" style={{whiteSpace:'pre-line',color:'#a32020'}}>{error}</p>}
     {!review && !error && <p>Carregando conferência…</p>}
@@ -31,6 +33,8 @@ export function QuoteManufacturingIssue({ quoteId, onClose, onIssued, consultOnl
       {finished && <Link className="button" to={`/os/${review.production_order_id}`}>Abrir ordem de produção</Link>}
       {!finished && !consultOnly && <>
         <p>{converting?'A confirmação aprova este orçamento e cria a venda.':'A produção será vinculada à venda existente.'} A emissão do PDF é independente desta confirmação.</p>
+        <InternalDeliveryDate value={promisedDate} onChange={setPromisedDate} required={manufacture} disabled={busy} />
+        {manufacture && !promisedDate && <p role="alert">Informe a data prevista de entrega para gerar produção.</p>}
         <label><input type="checkbox" checked={manufacture} disabled={busy || !converting} onChange={e=>setManufacture(e.target.checked)} /> Gerar ordem de produção</label>
         {converting && !manufacture && <p>A venda será confirmada sem fabricação. Você poderá gerar a ordem posteriormente.</p>}
         {manufacture && !canProduce && <p role="alert">Sem permissão para gerar ordens de produção. Solicite a permissão ou converta explicitamente sem fabricação.</p>}

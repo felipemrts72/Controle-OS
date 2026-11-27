@@ -30,6 +30,7 @@ try {
  const sectorA=(await db.query("INSERT INTO sectors(name,slug) VALUES('Usinagem QA','usinagem') RETURNING id")).rows[0].id;
  const sectorB=(await db.query("INSERT INTO sectors(name,slug) VALUES('Montagem QA','montagem') RETURNING id")).rows[0].id;
  const sectorC=(await db.query("INSERT INTO sectors(name,slug) VALUES('Pintura QA','pintura') RETURNING id")).rows[0].id;
+ if (!(await db.query("SELECT 1 FROM information_schema.columns WHERE table_name='commercial_quotes' AND column_name='promised_date'")).rowCount) await db.query(fs.readFileSync('database/migrations/20261127_quote_promised_date.sql','utf8'));
  process.env.DATABASE_URL=testUrl.toString();process.env.JWT_SECRET=randomBytes(24).toString('hex');
  const {pool,transaction}=await import('../backend/src/database/pool.js');appPool=pool;
  const {buildAuthUser}=await import('../backend/src/services/permissionService.js');const actor=await buildAuthUser(user);
@@ -44,7 +45,7 @@ try {
  const children=types.map(type=>node(root.key,'Componente fictício '+type,{new_product:{name:'Componente fictício '+type,type},quantity:'2',sector_id:sectorB}));
  const stock=await saveProductTree(null,{request_id:randomUUID(),version:0,nodes:[root,...children]},actor);
  const plan=await transaction(c=>manufacturingTemplate(c,{product_id:stock.product_id}));
- const body={customer_name:'Cliente fictício seleção manual',quote_date:'2026-11-27',manufacturing_enabled:true,items:[{product_id:stock.product_id,quantity:'1',unit_price:'100',manufacturing_plan:plan}],payment_methods:[{method_type:'pix',calculation_type:'percentage',percentage:'100',installment_count:1}]};
+ const body={customer_name:'Cliente fictício seleção manual',promised_date:'2031-05-11',quote_date:'2026-11-27',manufacturing_enabled:true,items:[{product_id:stock.product_id,quantity:'1',unit_price:'100',manufacturing_plan:plan}],payment_methods:[{method_type:'pix',calculation_type:'percentage',percentage:'100',installment_count:1}]};
  const quote=await createCommercialQuote(body,actor);
  const review=()=>transaction(c=>manufacturingReview(c,quote.id));
  assert.equal((await review()).demands.length,1,'Only manufactured root defaults to selected');
