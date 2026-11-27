@@ -1,4 +1,4 @@
-import { quoteProductionTaskName, isLegacyQuoteRootName } from './quoteProductionTaskNameService.js';
+import { quoteProductionTaskName, isLegacyQuoteTaskName } from './quoteProductionTaskNameService.js';
 import { httpError } from '../utils/httpError.js';
 import { logAudit } from './auditService.js';
 import { refreshSoldItemStatus, refreshInternalOrderStatus } from './statusService.js';
@@ -20,7 +20,7 @@ export async function syncQuoteProduction(client, order, demands, body, user) {
   const used=t=>t.status!=='pending' || Number(t.completed_quantity)>0 || t.completed_by || t.completed_at || t.is_pinned || t.pinned_at || t.has_execution_history;
   for(const task of tasks) {
     const old=task.manufacturing_snapshot, demand=desired.get(identity(old));
-    const oldValues=[isLegacyQuoteRootName(task)?quoteProductionTaskName(task.manufacturing_snapshot):task.task_name,String(Number(task.quantity)),task.sector_id,task.measurement_unit_code,task.component_product_id || null,task.manufacturing_notes || '',task.manufacturing_parent_key || null];
+    const oldValues=[isLegacyQuoteTaskName(task)?quoteProductionTaskName(task.manufacturing_snapshot):task.task_name,String(Number(task.quantity)),task.sector_id,task.measurement_unit_code,task.component_product_id || null,task.manufacturing_notes || '',task.manufacturing_parent_key || null];
     const oldDeps=edges.filter(e=>e.task_id===task.id).map(e=>`${e.child_key}:${Number(e.required_quantity)}`).sort();
     const changed=!demand || JSON.stringify(oldValues)!==JSON.stringify(taskValues(demand)) || JSON.stringify(oldDeps)!==JSON.stringify(dependencyValues(demand));
     if(changed && used(task)) throw httpError(409,`A demanda "${task.task_name}" já possui andamento ou histórico de execução. Sua composição, quantidade, setor e dependências foram preservados. Corrija somente tarefas ainda não iniciadas.`);

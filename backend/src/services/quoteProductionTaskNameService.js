@@ -3,10 +3,10 @@ import { httpError } from '../utils/httpError.js';
 import { hasPermission } from './permissionService.js';
 import { logAudit } from './auditService.js';
 
-export const quoteProductionTaskName=demand=>demand.parent_key ? `${demand.name} — ${demand.root_name}` : demand.name;
-export function isLegacyQuoteRootName(task) {
+export const quoteProductionTaskName=demand=>demand.name;
+export function isLegacyQuoteTaskName(task) {
   const snapshot=task.manufacturing_snapshot;
-  return Boolean(snapshot && !snapshot.parent_key && !task.manufacturing_parent_key && task.manufacturing_node_key===snapshot.node_key
+  return Boolean(snapshot && task.manufacturing_node_key===snapshot.node_key && (task.manufacturing_parent_key || null)===(snapshot.parent_key || null)
     && task.task_name===`${snapshot.name} — ${snapshot.root_name}`);
 }
 
@@ -25,10 +25,19 @@ export async function correctQuoteProductionNames(quoteId, body, user) {
     order=(await client.query('SELECT * FROM internal_orders WHERE id=$1 FOR UPDATE',[order.id])).rows[0];
     if(order.status==='deleted') throw httpError(409,'A ordem foi excluída. Seus registros foram preservados.');
     if(!body.expected_order_updated_at || new Date(body.expected_order_updated_at).getTime()!==new Date(order.updated_at).getTime()) throw httpError(409,'A ordem foi atualizada. Reabra a conferência.');
-    const tasks=(await client.query(`SELECT t.* FROM internal_tasks t JOIN sold_items si ON si.id=t.sold_item_id WHERE si.internal_order_id=$1 AND t.manufacturing_node_key IS NOT NULL ORDER BY t.id FOR UPDATE OF t`,[order.id])).rows;
+    const tasks=(await client.query(`SELECT t.*,qi.id AS quote_item_id,qi.manufacturing_plan AS quote_plan FROM internal_tasks t
+      JOIN sold_items si ON si.id=t.sold_item_id
+      JOIN commercial_sale_items csi ON csi.id=si.commercial_sale_item_id
+      JOIN commercial_quote_items qi ON qi.id=csi.commercial_quote_item_id
+      WHERE si.internal_order_id=$1 AND t.manufacturing_node_key IS NOT NULL AND qi.commercial_quote_id=$2 AND csi.commercial_sale_id=$3 ORDER BY t.id FOR UPDATE OF t`,[order.id,quoteId,order.commercial_sale_id])).rows;
     const changes=[];
-    for(const task of tasks.filter(isLegacyQuoteRootName)) {
-      const name=quoteProductionTaskName(task.manufacturing_snapshot);
+    for(const task of tasks) {
+      const snapshot=task.manufacturing_snapshot;
+      if(!snapshot || task.manufacturing_node_key!==snapshot.node_key || (task.manufacturing_parent_key || null)!==(snapshot.parent_key || null)) continue;
+      const nodes=(Array.isArray(task.quote_plan?.nodes)?task.quote_plan.nodes:[]).filter(node=>node.key===task.manufacturing_node_key);
+      if(nodes.length!==1 || snapshot.item_id!==task.quote_item_id) continue;
+      const node=nodes[0],name=node.new_product?.name || node.name;
+      if(name!==snapshot.name || (node.parent_key || null)!==(snapshot.parent_key || null) || (node.product_id || null)!==(task.component_product_id || null)) continue;
       if(!name || name===task.task_name) continue;
       await client.query('UPDATE internal_tasks SET task_name=$1,updated_at=clock_timestamp() WHERE id=$2',[name,task.id]);
       const change={task_id:task.id,previous_name:task.task_name,task_name:name};changes.push(change);

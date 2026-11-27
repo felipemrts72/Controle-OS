@@ -54,8 +54,8 @@ try {
  const child=node(root.key,'Carcaça QA',{sector_id:sectorB}),sub=node(child.key,'Eixo interno QA',{sector_id:sectorC});
  const composed=await createCommercialQuote(body({enabled:true,nodes:[root,child,sub]}),actor);await convert(composed);let composedTasks=await tasks(composed);
  assert.equal(composedTasks.length,3);assert.equal(composedTasks.find(x=>x.manufacturing_node_key===root.key).task_name,root.new_product.name);
- assert.equal(composedTasks.find(x=>x.manufacturing_node_key===child.key).task_name,'Carcaça QA — '+root.new_product.name);
- assert.equal(composedTasks.find(x=>x.manufacturing_node_key===sub.key).task_name,'Eixo interno QA — '+root.new_product.name);
+ assert.equal(composedTasks.find(x=>x.manufacturing_node_key===child.key).task_name,'Carcaça QA');
+ assert.equal(composedTasks.find(x=>x.manufacturing_node_key===sub.key).task_name,'Eixo interno QA');
  assert.equal(composedTasks.filter(x=>x.is_released).length,1);
  const edgeRows=async q=>(await db.query('SELECT d.* FROM internal_task_dependencies d JOIN internal_tasks t ON t.id=d.task_id JOIN sold_items si ON si.id=t.sold_item_id JOIN internal_orders io ON io.id=si.internal_order_id WHERE io.commercial_quote_id=$1 ORDER BY d.id',[q.id])).rows;
  const composedEdges=await edgeRows(composed);assert.equal(composedEdges.length,2);
@@ -79,11 +79,14 @@ try {
  for(const entry of auditBefore)assert.ok((await db.query('SELECT 1 FROM audit_logs WHERE id=$1',[entry.id])).rowCount);
  assert.equal((await correct(single)).corrected,0);assert.equal((await tasks(single)).length,1);
  assert.deepEqual(await tasks(composed),composedTasks,'Other orders are never touched');
- // Scope repair to the exact old root format; preserve component labels and manually customized names.
+ // Correct every tree-linked level; node identity is authoritative inside the commercial flow.
  const composedRoot=composedTasks.find(x=>x.manufacturing_node_key===root.key);
- await db.query('UPDATE internal_tasks SET task_name=$1 WHERE id=$2',[root.new_product.name+' — '+root.new_product.name,composedRoot.id]);
- const custom=(await createCommercialQuote(body(rootPlan),actor));await convert(custom);const customTask=(await tasks(custom))[0];await db.query("UPDATE internal_tasks SET task_name='Identificação manual preservada' WHERE id=$1",[customTask.id]);assert.equal((await correct(custom)).corrected,0);
- assert.equal(quoteProductionTaskName({name:'Componente distinto',root_name:'Produto final',parent_key:'pai'}),'Componente distinto — Produto final');
+ for(const task of composedTasks)await db.query('UPDATE internal_tasks SET task_name=$1 WHERE id=$2',[task.manufacturing_snapshot.name+' — '+task.manufacturing_snapshot.root_name,task.id]);
+ const subTask=composedTasks.find(x=>x.manufacturing_node_key===sub.key);
+ let completionError;await setTaskStatus({path:'/tasks/'+subTask.id+'/ready',params:{id:subTask.id},user:actor},{json(){}},e=>completionError=e);if(completionError)throw completionError;
+ composedTasks=await tasks(composed);
+ const custom=(await createCommercialQuote(body(rootPlan),actor));await convert(custom);const customTask=(await tasks(custom))[0];await db.query("UPDATE internal_tasks SET task_name='Identificação manual preservada' WHERE id=$1",[customTask.id]);assert.equal((await correct(custom)).corrected,1);assert.equal((await tasks(custom))[0].task_name,root.new_product.name);
+ assert.equal(quoteProductionTaskName({name:'Componente distinto',root_name:'Produto final',parent_key:'pai'}),'Componente distinto');
  const {app}=await import('../backend/src/app.js');const outer=express();
  outer.get('/__qa/login',(_req,res)=>res.type('html').send('<script>localStorage.setItem("token",'+JSON.stringify(jwt.sign({id:user.id},process.env.JWT_SECRET))+');localStorage.setItem("user",'+JSON.stringify(JSON.stringify(actor))+');location.replace("/comercial/orcamentos/'+composed.id+'")</script>'));
  outer.use(app);outer.use(express.static('tmp/quote-manufacturing-build'));outer.get('*',(_req,res)=>res.sendFile('index.html',{root:process.cwd()+'/tmp/quote-manufacturing-build'}));
@@ -91,13 +94,23 @@ try {
  const {chromium}=await import(pathToFileURL('C:/Users/Win 10/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href);browser=await chromium.launch({channel:'msedge',headless:true});
  const page=await browser.newPage({viewport:{width:1365,height:1000}});page.setDefaultTimeout(12000);const errors=[];page.on('pageerror',e=>errors.push(e.message));fs.mkdirSync('tmp/quote-task-names',{recursive:true});
  await page.goto(base+'/__qa/login');await page.getByRole('button',{name:'Corrigir nomes das demandas',exact:true}).click();
- const response=page.waitForResponse(r=>r.url().endsWith('/manufacturing/correct-names')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirmar correção dos nomes',exact:true}).click();assert.equal((await response).status(),200);
+ const response=page.waitForResponse(r=>r.url().endsWith('/manufacturing/correct-names')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirmar correção dos nomes',exact:true}).click();const correctionResponse=await response;assert.equal(correctionResponse.status(),200);assert.equal((await correctionResponse.json()).corrected,3);
  const finalTasks=await tasks(composed);assert.equal(finalTasks.length,3);assert.equal(finalTasks.find(x=>x.id===composedRoot.id).task_name,root.new_product.name);assert.deepEqual(await edgeRows(composed),composedEdges);
- for(const task of composedTasks.filter(x=>x.id!==composedRoot.id))assert.deepEqual(finalTasks.find(x=>x.id===task.id),task);
+ for(const task of composedTasks){const corrected=finalTasks.find(x=>x.id===task.id);assert.equal(corrected.task_name,task.manufacturing_snapshot.name);assert.deepEqual(stableTask(corrected),stableTask(task));}
+ // Finish dependencies after text repair: the original edges release the parent normally.
+ for(const key of [child.key,root.key]){const task=(await tasks(composed)).find(x=>x.manufacturing_node_key===key);assert.equal(task.is_released,true);let error;await setTaskStatus({path:'/tasks/'+task.id+'/ready',params:{id:task.id},user:actor},{json(){}},e=>error=e);if(error)throw error;}
+ assert.ok((await tasks(composed)).every(t=>t.status==='ready'));assert.equal((await correct(composed)).corrected,0);
+ // Unreliable links and manual tasks cannot be renamed by this correction.
+ const unreliable=await createCommercialQuote(body(rootPlan),actor);await convert(unreliable);const untrusted=(await tasks(unreliable))[0];
+ await db.query('UPDATE internal_tasks SET task_name=$1 WHERE id=$2',[untrusted.manufacturing_snapshot.name+' — '+untrusted.manufacturing_snapshot.root_name,untrusted.id]);
+ await db.query(`UPDATE commercial_quote_items SET manufacturing_plan=jsonb_set(manufacturing_plan,'{nodes,0,new_product,name}',to_jsonb('Outro nome sem correspondência'::text)) WHERE commercial_quote_id=$1`,[unreliable.id]);
+ assert.equal((await correct(unreliable)).corrected,0);
+ const manual=(await db.query(`INSERT INTO internal_tasks(sold_item_id,sector_id,task_name,quantity) VALUES($1,$2,'Manual — Produto final',1) RETURNING *`,[original.sold_item_id,sectorA])).rows[0];
+ assert.equal((await correct(single)).corrected,0);assert.deepEqual((await db.query('SELECT * FROM internal_tasks WHERE id=$1',[manual.id])).rows[0],manual);
  const auth={Authorization:'Bearer '+jwt.sign({id:user.id},process.env.JWT_SECRET)};
- const tv=await (await fetch(base+'/api/tv',{headers:auth})).json();for(const task of finalTasks.filter(x=>x.is_released))assert.equal(tv.find(x=>x.task_id===task.id).task_name,task.task_name);
+ const tv=await (await fetch(base+'/api/tv',{headers:auth})).json();for(const task of await tasks(composed))assert.ok(!tv.some(x=>x.task_id===task.id),'Completed tasks stay outside the existing TV queue');
  await page.screenshot({path:'tmp/quote-task-names/corrected.png',fullPage:true});assert.deepEqual(errors,[]);
- console.log('PASS: root-only/composed/root-deselected/control scopes; one name and one task per selected node; targeted pending/completed repair; IDs, dates, progress, snapshots, quantities, sectors, dependency edges and old audit preserved; idempotency, permissions and real UI repair action');
+ console.log('PASS: node-only names at root/component/subcomponent; targeted pending/completed repair with verified tree links; sequential release after correction; manual/unreliable records excluded; IDs, dates, priorities, progress, snapshots, quantities, sectors, dependencies and audit preserved; idempotent repair and real UI action');
 } catch(error) {
  if(browser)for(const c of browser.contexts())for(const p of c.pages()){await p.screenshot({path:'tmp/quote-task-names/failure.png',fullPage:true}).catch(()=>{});console.error((await p.locator('body').innerText()).slice(-2500));}throw error;
 } finally {
