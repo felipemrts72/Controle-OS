@@ -1,3 +1,4 @@
+import { recoverPlanningUnits } from './quoteManufacturingUnitService.js';
 import { productionDate } from '../utils/productionDate.js';
 import { prepareQuoteManufacturing, issueQuoteManufacturing } from './quoteManufacturingService.js';
 import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
@@ -613,6 +614,7 @@ export async function getCommercialQuote(id, database = pool) {
   const itemsResult = await database.query(
     'SELECT * FROM commercial_quote_items WHERE commercial_quote_id = $1 ORDER BY line_order', [id],
   );
+  await recoverPlanningUnits(database,itemsResult.rows);
   const paymentsResult = await database.query(
     'SELECT * FROM commercial_quote_payment_methods WHERE commercial_quote_id = $1 ORDER BY line_order', [id],
   );

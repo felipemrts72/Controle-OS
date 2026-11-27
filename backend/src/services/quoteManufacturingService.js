@@ -1,3 +1,4 @@
+import { recoverPlanningUnits } from './quoteManufacturingUnitService.js';
 import { productionDate } from '../utils/productionDate.js';
 import { syncQuoteProduction } from './quoteProductionRevisionService.js';
 import { randomUUID } from 'node:crypto';
@@ -18,10 +19,16 @@ const title = node => node.new_product?.name || node.name || 'Componente sem nom
 export async function manufacturingTemplate(client, item) {
   let productId = item.product_id || null;
   if (item.commercial_product_id) productId = (await client.query('SELECT operational_product_id FROM commercial_products WHERE id=$1', [id(item.commercial_product_id)])).rows[0]?.operational_product_id || null;
-  if (productId) return { ...(await loadTree(client, id(productId))), enabled: true };
-  return { enabled: true, version: 0, product_id: null, nodes: [{ key: randomUUID(), parent_key: null,
+  if (productId) {
+    const plan={...(await loadTree(client,id(productId))),enabled:true};
+    await recoverPlanningUnits(client,[{...item,manufacturing_plan:plan}]);
+    return plan;
+  }
+  const plan={ enabled: true, version: 0, product_id: null, nodes: [{ key: randomUUID(), parent_key: null,
     product_id: null, new_product: { name: String(item.name || '').slice(0,220), type: 'manufactured' },
     quantity: '1', unit_code: item.unit || '', sector_id: null, note: '' }] };
+  await recoverPlanningUnits(client,[{...item,manufacturing_plan:plan}]);
+  return plan;
 }
 
 // Pode guardar pendências de preenchimento; referências e hierarquia continuam validadas.
@@ -64,6 +71,7 @@ export function normalizeManufacturingPlan(raw) {
 }
 
 export async function prepareQuoteManufacturing(client, items, user) {
+  await recoverPlanningUnits(client,items);
   const updatedTrees = new Set();
   for (const item of items) {
     const raw = item.manufacturing_plan;
@@ -96,7 +104,7 @@ export async function prepareQuoteManufacturing(client, items, user) {
   }
 }
 
-export async function manufacturingReview(client, quoteId, planned = false) {
+export async function manufacturingReview(client, quoteId, planned = false, persistUnits = false) {
   const quote=(await client.query('SELECT id,status,updated_at,promised_date,manufacturing_enabled,manufacturing_choice,manufacturing_issued_at FROM commercial_quotes WHERE id=$1',[id(quoteId)])).rows[0];
   if(!quote) throw httpError(404,'Orçamento não encontrado.');
   quote.promised_date=productionDate(quote.promised_date);
@@ -107,7 +115,9 @@ export async function manufacturingReview(client, quoteId, planned = false) {
       ORDER BY si.created_at,it.created_at,it.id`,[order.id])).rows;
     return {...quote,promised_date:productionDate(order.promised_date),order_updated_at:order.updated_at,demands:snapshots.map(row=>({...row.manufacturing_snapshot,status:row.status,is_released:row.is_released,completed_quantity:row.completed_quantity})),errors:[],production_order_id:order.id};
   }
-  const items=(await client.query('SELECT id,line_order,product_name_snapshot,quantity,manufacturing_plan FROM commercial_quote_items WHERE commercial_quote_id=$1 ORDER BY line_order',[quoteId])).rows;
+  const items=(await client.query('SELECT id,line_order,product_id,commercial_product_id,measurement_unit_snapshot,product_name_snapshot,quantity,manufacturing_plan FROM commercial_quote_items WHERE commercial_quote_id=$1 ORDER BY line_order',[quoteId])).rows;
+  const recovered=await recoverPlanningUnits(client,items);
+  if(persistUnits) for(const item of recovered) await client.query('UPDATE commercial_quote_items SET manufacturing_plan=$1 WHERE id=$2',[JSON.stringify(item.manufacturing_plan),item.id]);
   const sectors=new Map((await client.query('SELECT id,name,is_active FROM sectors')).rows.map(s=>[s.id,s]));
   const units=new Set((await client.query('SELECT code FROM measurement_units WHERE is_active=TRUE')).rows.map(u=>u.code));
   const demands=[], errors=[];
@@ -201,7 +211,7 @@ export async function issueQuoteManufacturing(quoteId, body, user, existingClien
   const execute = async client=>{
     const quote=(await client.query('SELECT * FROM commercial_quotes WHERE id=$1 FOR UPDATE',[id(quoteId)])).rows[0];
     if(!quote || quote.status!=='approved') throw httpError(409,'A geração de produção exige orçamento aprovado pelo cliente.');
-    const review=await manufacturingReview(client,quoteId);
+    const review=await manufacturingReview(client,quoteId,false,true);
     if(review.production_order_id) return review;
     if (!existingClient && (!body.expected_updated_at || new Date(body.expected_updated_at).getTime()!==new Date(quote.updated_at).getTime())) {
       throw httpError(409,'O planejamento foi atualizado. Feche e abra novamente a conferência antes de gerar a ordem.');
