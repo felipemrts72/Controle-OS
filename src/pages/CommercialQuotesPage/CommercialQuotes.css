@@ -516,3 +516,9 @@
 .commercial-quote-detail__sale div { display: grid; gap: 4px; }
 .commercial-quote-detail__sale span { color: var(--color-text-muted); }
 @media (max-width: 600px) { .commercial-quote-detail__sale { align-items: stretch; flex-direction: column; } }
+
+.commercial-quote-detail__convert { order: -1; }
+@media(max-width: 680px) { .commercial-quote-detail__convert { grid-column: 1 / -1; } }
+
+.commercial-quotes__actions-compact { flex-wrap: wrap; }
+.commercial-quotes__actions-compact .commercial-quotes__convert { height: auto; min-height: 36px; padding: 6px 10px; width: auto; white-space: normal; }

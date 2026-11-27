@@ -99,10 +99,10 @@ export async function manufacturingReview(client, quoteId) {
   if(!quote) throw httpError(404,'Orçamento não encontrado.');
   const order=(await client.query('SELECT id FROM internal_orders WHERE commercial_quote_id=$1',[quoteId])).rows[0];
   if (order) {
-    const snapshots=(await client.query(`SELECT it.manufacturing_snapshot FROM internal_tasks it
+    const snapshots=(await client.query(`SELECT it.manufacturing_snapshot,it.status,it.is_released,it.completed_quantity FROM internal_tasks it
       JOIN sold_items si ON si.id=it.sold_item_id WHERE si.internal_order_id=$1 AND it.manufacturing_snapshot IS NOT NULL
       ORDER BY si.created_at,it.created_at,it.id`,[order.id])).rows;
-    return {...quote,demands:snapshots.map(row=>row.manufacturing_snapshot),errors:[],production_order_id:order.id};
+    return {...quote,demands:snapshots.map(row=>({...row.manufacturing_snapshot,status:row.status,is_released:row.is_released,completed_quantity:row.completed_quantity})),errors:[],production_order_id:order.id};
   }
   const items=(await client.query('SELECT id,line_order,product_name_snapshot,quantity,manufacturing_plan FROM commercial_quote_items WHERE commercial_quote_id=$1 ORDER BY line_order',[quoteId])).rows;
   const sectors=new Map((await client.query('SELECT id,name,is_active FROM sectors')).rows.map(s=>[s.id,s]));
@@ -129,6 +129,18 @@ export async function manufacturingReview(client, quoteId) {
         unit_code:node.unit_code,sector_id:node.sector_id,sector_name:sector?.name || 'Setor não definido',note:node.note,path });
     }
   }
+  for (const demand of demands) demand.dependencies=[];
+  for (const item of items) {
+    const byKey=new Map((item.manufacturing_plan?.nodes || []).map(n=>[n.key,n]));
+    const selected=new Map(demands.filter(d=>d.item_id===item.id).map(d=>[d.node_key,d]));
+    for (const demand of selected.values()) {
+      let parent=byKey.get(demand.parent_key);
+      while(parent && !selected.has(parent.key)) parent=byKey.get(parent.parent_key);
+      if (!parent) continue;
+      selected.get(parent.key).dependencies.push({node_key:demand.node_key,quantity:demand.required_quantity});
+      if (Number(demand.quantity)<Number(demand.required_quantity)) errors.push(demand.name+': a quantidade a fabricar deve atender '+demand.required_quantity+' '+demand.unit_code+' necessários ao componente pai. Revise a quantidade ou exclua o componente da fabricação para controlar sua disponibilidade manualmente.');
+    }
+  }
   return { ...quote, demands, errors, production_order_id:order?.id || null };
 }
 
@@ -137,9 +149,9 @@ export async function saveApprovedQuotePlanning(quoteId, body, user) {
   if (!hasPermission(user,'commercial.quotes.edit')) throw httpError(403,'Sem permissão para editar o planejamento.');
   return transaction(async client=>{
     const quote=(await client.query('SELECT * FROM commercial_quotes WHERE id=$1 FOR UPDATE',[id(quoteId)])).rows[0];
-    if (!quote || quote.status!=='approved' || quote.manufacturing_issued_at ||
+    if (!quote || quote.status!=='approved' ||
       (await client.query('SELECT 1 FROM internal_orders WHERE commercial_quote_id=$1',[quoteId])).rowCount) {
-      throw httpError(409,'O planejamento só pode ser corrigido antes da emissão definitiva. As demandas existentes estão preservadas.');
+      throw httpError(409,'O planejamento só pode ser corrigido antes da geração da ordem de produção. As demandas existentes estão preservadas.');
     }
     if (!body.expected_updated_at || new Date(body.expected_updated_at).getTime()!==new Date(quote.updated_at).getTime()) throw httpError(409,'O orçamento foi atualizado. Reabra o planejamento antes de salvar.');
     const items=(await client.query('SELECT * FROM commercial_quote_items WHERE commercial_quote_id=$1 ORDER BY line_order',[quoteId])).rows;
@@ -159,24 +171,21 @@ export async function saveApprovedQuotePlanning(quoteId, body, user) {
   });
 }
 
-export async function issueQuoteManufacturing(quoteId, body, user) {
-  if(!hasPermission(user,'commercial.quotes.approve')) throw httpError(403,'Sem permissão para emitir orçamento aprovado.');
-  if(typeof body?.manufacture!=='boolean' || body.confirmed!==true) fail('Confirme expressamente a emissão com ou sem fabricação.');
+export async function issueQuoteManufacturing(quoteId, body, user, existingClient = null) {
+  if(!hasPermission(user,'commercial.quotes.approve')) throw httpError(403,'Sem permissão para confirmar a fabricação.');
+  if(typeof body?.manufacture!=='boolean' || body.confirmed!==true) fail('Confirme expressamente a conversão com ou sem fabricação.');
   if(body.manufacture && !hasPermission(user,'orders.create')) throw httpError(403,'Sem permissão para gerar demandas de produção.');
-  return transaction(async client=>{
+  const execute = async client=>{
     const quote=(await client.query('SELECT * FROM commercial_quotes WHERE id=$1 FOR UPDATE',[id(quoteId)])).rows[0];
-    if(!quote || quote.status!=='approved') throw httpError(409,'A emissão definitiva exige orçamento aprovado pelo cliente.');
+    if(!quote || quote.status!=='approved') throw httpError(409,'A geração de produção exige orçamento aprovado pelo cliente.');
     const review=await manufacturingReview(client,quoteId);
     if(review.production_order_id) return review;
-    if(quote.manufacturing_issued_at) {
-      if(quote.manufacturing_choice!==body.manufacture) throw httpError(409,'Este orçamento já teve sua emissão definitiva confirmada.');
-      return review;
-    }
-    if (!body.expected_updated_at || new Date(body.expected_updated_at).getTime()!==new Date(quote.updated_at).getTime()) {
-      throw httpError(409,'O planejamento foi atualizado. Feche e abra novamente a conferência antes de emitir.');
+    if (!existingClient && (!body.expected_updated_at || new Date(body.expected_updated_at).getTime()!==new Date(quote.updated_at).getTime())) {
+      throw httpError(409,'O planejamento foi atualizado. Feche e abra novamente a conferência antes de gerar a ordem.');
     }
     if(body.manufacture && (review.errors.length || !review.demands.length)) throw httpError(400,review.errors.join('\n') || 'Nenhuma demanda selecionada para fabricação.');
     const sale=await createSaleForApprovedQuote(client,quote,user.id);
+    if(sale.status!=='confirmed') throw httpError(409,'Somente vendas confirmadas podem gerar produção.');
     if(body.manufacture) {
       const order=(await client.query(`INSERT INTO internal_orders(sale_number,customer_id,customer_name,customer_phone,promised_date,
         delivery_type,destination_city,destination_uf,created_by,commercial_sale_id,commercial_quote_id)
@@ -188,22 +197,37 @@ export async function issueQuoteManufacturing(quoteId, body, user) {
         const demands=review.demands.filter(d=>d.item_id===item.commercial_quote_item_id); if(!demands.length) continue;
         const sold=(await client.query(`INSERT INTO sold_items(internal_order_id,product_id,product_name_snapshot,quantity,commercial_sale_item_id)
           VALUES($1,$2,$3,$4,$5) RETURNING id`,[order.id,demands[0].root_product_id || item.operational_product_id,item.product_name_snapshot,item.quantity,item.id])).rows[0];
-        for(const demand of demands) await client.query(`INSERT INTO internal_tasks(sold_item_id,sector_id,task_name,quantity,is_released,
+        const taskIds = new Map();
+        for(const demand of demands) {
+          const task = (await client.query(`INSERT INTO internal_tasks(sold_item_id,sector_id,task_name,quantity,is_released,
           measurement_unit_code,manufacturing_node_key,manufacturing_parent_key,component_product_id,manufacturing_snapshot,manufacturing_notes)
-          VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8,$9,$10)`,[sold.id,demand.sector_id,
-          `${demand.name} — ${demand.root_name}`,demand.quantity,demand.unit_code,demand.node_key,demand.parent_key,demand.product_id,JSON.stringify(demand),demand.note]);
-        await client.query("UPDATE commercial_sale_items SET production_status='created',production_reason='Fabricação confirmada na emissão definitiva.' WHERE id=$1",[item.id]);
+          VALUES($1,$2,$3,$4,FALSE,$5,$6,$7,$8,$9,$10) RETURNING id`,[sold.id,demand.sector_id,
+          `${demand.name} — ${demand.root_name}`,demand.quantity,demand.unit_code,demand.node_key,demand.parent_key,demand.product_id,JSON.stringify(demand),demand.note])).rows[0];
+          taskIds.set(demand.node_key,task.id);
+        }
+        for (const demand of demands) {
+          for (const dependency of demand.dependencies) await client.query('INSERT INTO internal_task_dependencies(task_id,depends_on_task_id,required_quantity) VALUES($1,$2,$3)',[taskIds.get(demand.node_key),taskIds.get(dependency.node_key),dependency.quantity]);
+        }
+        await client.query('UPDATE internal_tasks t SET is_released=TRUE WHERE sold_item_id=$1 AND NOT EXISTS(SELECT 1 FROM internal_task_dependencies d WHERE d.task_id=t.id)',[sold.id]);
+        await client.query("UPDATE commercial_sale_items SET production_status='created',production_reason='Ordem de produção gerada a partir do planejamento.' WHERE id=$1",[item.id]);
+        const product=(await client.query('SELECT default_volume_quantity,default_total_weight_kg FROM products WHERE id=$1',[demands[0].root_product_id || item.operational_product_id])).rows[0];
+        const volumes=Number(product?.default_volume_quantity),totalVolumes=volumes*Number(item.quantity);
+        if (volumes>0 && Number.isInteger(totalVolumes) && Number(product.default_total_weight_kg)>0) {
+          await client.query(`INSERT INTO shipment_volumes(sold_item_id,volume_number,total_volumes,weight_kg,description,label_status)
+            SELECT $1,n,$2,$3,$4,'waiting_tasks' FROM generate_series(1,$2::int) n`,[sold.id,totalVolumes,Number(product.default_total_weight_kg)/volumes,item.product_name_snapshot]);
+        }
         await refreshSoldItemStatus(client,sold.id);
       }
       await refreshInternalOrderStatus(client,order.id);
       await logAudit(client,{entityType:'internal_order',entityId:order.id,action:'create_from_quote_plan',newValue:{quote_id:quote.id,demands:review.demands},userId:user.id});
     }
     await client.query("UPDATE commercial_sale_items SET production_reason=$1 WHERE commercial_sale_id=$2 AND production_status='not_requested'",[
-      body.manufacture?'Item não selecionado no planejamento de fabricação.':'Emissão definitiva confirmada sem fabricação.',sale.id]);
+      body.manufacture?'Item não selecionado no planejamento de fabricação.':'Conversão confirmada sem fabricação.',sale.id]);
     await client.query('UPDATE commercial_quotes SET manufacturing_choice=$1,manufacturing_issued_at=NOW(),manufacturing_issued_by=$2 WHERE id=$3',[body.manufacture,user.id,quote.id]);
     await client.query(`INSERT INTO commercial_quote_history(commercial_quote_id,action,user_id,details)
       VALUES($1,$2,$3,$4)`,[quote.id,body.manufacture?'issued_with_manufacturing':'issued_without_manufacturing',user.id,{manufacture:body.manufacture}]);
     await logAudit(client,{entityType:'commercial_quote',entityId:quote.id,action:'manufacturing_issue',newValue:{manufacture:body.manufacture},userId:user.id});
     return manufacturingReview(client,quoteId);
-  });
+  };
+  return existingClient ? execute(existingClient) : transaction(execute);
 }

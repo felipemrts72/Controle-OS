@@ -53,6 +53,7 @@ export async function refreshInternalOrderStatus(client, internalOrderId) {
   if (row.volumes > 0 && row.shipped === row.volumes) status = 'shipped';
   else if (row.shipped > 0) status = 'partially_shipped';
   else if (row.volumes > 0 && row.readyish === row.volumes) status = 'ready_for_label';
+  else if (row.total_tasks > 0 && row.ready_tasks === row.total_tasks) status = 'ready_for_label';
   else if (row.ready_tasks > 0 || row.total_tasks > 0) status = 'in_progress';
 
   await client.query('UPDATE internal_orders SET status = $1, updated_at = NOW() WHERE id = $2', [status, internalOrderId]);

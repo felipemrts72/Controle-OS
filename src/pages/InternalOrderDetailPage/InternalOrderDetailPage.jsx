@@ -187,7 +187,9 @@ export function InternalOrderDetailPage() {
       label: 'Liberação',
       render: (row) => {
         const waiting = row.waiting_dependencies || [];
-        if (row.is_released || row.status === 'ready') return 'Liberada';
+        if (row.status === 'ready') return 'Concluído';
+        if (row.is_released) return 'Liberado para fabricação';
+        if (row.manufacturing_node_key) return 'Aguardando componentes: '+waiting.map(d=>d.name).join(', ');
         if (waiting.length === 1) return `Aguardando: ${waiting[0].name}`;
         return `Aguardando ${waiting.length} etapas: ${waiting.map((dependency) => dependency.name).join(', ')}`;
       },
@@ -209,6 +211,8 @@ export function InternalOrderDetailPage() {
           <p className="internal-order-detail-page__subtitle">{order.customer_name} · {order.customer_phone || '-'}</p>
         </div>
         <div className="page__actions">
+          {order.commercial_quote_id && canAccessPermission(user,'commercial.quotes.view') && <Link className="button" to={`/comercial/orcamentos/${order.commercial_quote_id}`}>Orçamento de origem</Link>}
+          {order.commercial_sale_id && canAccessPermission(user,'commercial.sales.view') && <Link className="button" to={`/comercial/vendas/${order.commercial_sale_id}`}>Abrir venda</Link>}
           {canEdit && <Link className="button" to={`/os/${order.id}/editar`}>Editar ordem de produção</Link>}
           <StatusBadge value={order.status} />
         </div>

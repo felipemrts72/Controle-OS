@@ -26,5 +26,9 @@ export function requiredQuantities(nodes, quantity) {
   for (const node of nodes) total(node);
   return totals;
 }
-export const shouldManufacture = (node) => node.manufacture ?? ((node.new_product?.type || node.type) === 'manufactured');
+export const shouldManufacture = (node) => {
+  const type=node.new_product?.type || node.type;
+  if (['resale','material_prima'].includes(type)) return false;
+  return node.manufacture ?? (type === 'manufactured');
+};
 export const manufactureQuantity = (node, required) => node.fabrication_quantity == null ? required : productionDecimal(node.fabrication_quantity);

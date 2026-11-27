@@ -171,7 +171,7 @@ export function ProductTreeEditor({ productId, planning = null, onPlanChange, qu
         {planning && <div className="product-tree__detail">
           <small>Estrutural por unidade: {node.parent_key ? Number(node.quantity).toLocaleString('pt-BR', {maximumFractionDigits:6}) : '1'} {node.unit_code}</small>
           <small>Necessário no orçamento: {required.get(node.key) == null ? 'Revisar quantidades' : Number(required.get(node.key)).toLocaleString('pt-BR', {maximumFractionDigits:6})} {node.unit_code}</small>
-          <label><input type="checkbox" checked={shouldManufacture(node)} onChange={(e) => change(tree.nodes.map(n => n.key === node.key ? {...n, manufacture: e.target.checked} : n))} /> Gerar demanda</label>
+          <label><input type="checkbox" disabled={['resale','material_prima'].includes(node.new_product?.type || node.type)} checked={shouldManufacture(node)} onChange={(e) => change(tree.nodes.map(n => n.key === node.key ? {...n, manufacture: e.target.checked} : n))} /> Gerar demanda</label>
           {shouldManufacture(node) && <label className="field">Quantidade a fabricar<input className="field__input" inputMode="decimal" value={node.fabrication_quantity ?? required.get(node.key) ?? ''} onChange={(e) => change(tree.nodes.map(n => n.key === node.key ? {...n, fabrication_quantity: e.target.value} : n))} /><button type="button" className="button" onClick={() => change(tree.nodes.map(n => n.key === node.key ? {...n, fabrication_quantity:null} : n))}>Usar necessária</button></label>}
         </div>}
         <div className="product-tree__node-actions">

@@ -42,7 +42,7 @@ export const emit = handler(async (req) => {
   return { ...result, quote: concealQuoteSop(result.quote, req.user) };
 });
 export const duplicateLegacy = handler(async (req) => concealQuoteSop(await duplicateLegacyCommercialQuote(req.params.id, req.user), req.user), 201);
-export const updateStatus = handler(async (req) => concealQuoteSop(await changeCommercialQuoteStatus(req.params.id, req.body.status, req.user), req.user));
+export const updateStatus = handler(async (req) => concealQuoteSop(await changeCommercialQuoteStatus(req.params.id, req.body.status, req.user, req.body), req.user));
 export const products = handler((req) => searchCommercialQuoteProducts(req.query.q, req.user));
 export const customers = handler((req) => searchCommercialQuoteCustomers(req.query));
 

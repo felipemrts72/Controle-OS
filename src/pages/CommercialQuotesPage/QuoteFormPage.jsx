@@ -190,6 +190,7 @@ export function QuoteFormPage({ mode }) {
   async function openPlanning() {
     try {
       const next=await Promise.all(items.map(async item=>item.manufacturing_plan?item:{...item,manufacturing_plan:(await api.post('/commercial/quotes/manufacturing/template',{product_id:item.product_id,commercial_product_id:item.commercial_product_id,name:item.name,unit:item.unit})).data}));
+      if (!items.some(item=>item.manufacturing_plan)) setManufacturingEnabled(true);
       setItems(next);setPlanningOpen(true);
     } catch(e) {toast.error(e.response?.data?.message || 'Não foi possível carregar o planejamento.');}
   }

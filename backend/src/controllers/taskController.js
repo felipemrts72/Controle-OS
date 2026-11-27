@@ -8,6 +8,8 @@ export async function setTaskStatus(req, res, next) {
   try {
     const nextStatus = req.path.endsWith('/ready') ? 'ready' : 'pending';
     const task = await transaction(async (client) => {
+      // Serialize sibling completions before reading dependencies, so the last child always releases its parent.
+      await client.query('SELECT si.id FROM sold_items si JOIN internal_tasks t ON t.sold_item_id=si.id WHERE t.id=$1 FOR UPDATE OF si',[req.params.id]);
       const previousResult = await client.query(
         `SELECT it.*
          FROM internal_tasks it
@@ -25,9 +27,16 @@ export async function setTaskStatus(req, res, next) {
         });
       }
 
+      if (previousTask.manufacturing_node_key && nextStatus === 'pending') {
+        const completedParent=await client.query(`WITH RECURSIVE parents(id) AS (
+          SELECT task_id FROM internal_task_dependencies WHERE depends_on_task_id=$1
+          UNION SELECT d.task_id FROM internal_task_dependencies d JOIN parents p ON d.depends_on_task_id=p.id
+        ) SELECT 1 FROM parents p JOIN internal_tasks t ON t.id=p.id WHERE t.status='ready' LIMIT 1`,[req.params.id]);
+        if (completedParent.rowCount) throw httpError(409,'Reabra primeiro os componentes superiores já concluídos.');
+      }
       const result = await client.query(
         `UPDATE internal_tasks
-         SET status = $1, completed_by = $2, completed_at = $3, updated_at = NOW()
+         SET status = $1, completed_by = $2, completed_at = $3, completed_quantity = CASE WHEN $1::varchar='ready' THEN quantity ELSE 0 END, updated_at = NOW()
          WHERE id = $4 RETURNING *`,
         [nextStatus, nextStatus === 'ready' ? req.user.id : null, nextStatus === 'ready' ? new Date() : null, req.params.id],
       );
@@ -40,6 +49,10 @@ export async function setTaskStatus(req, res, next) {
         userId: req.user.id,
       });
       if (nextStatus === 'ready') await releaseDependentTasks(client, req.params.id);
+      if (previousTask.manufacturing_node_key) await client.query(`UPDATE internal_tasks t SET is_released=NOT EXISTS(
+        SELECT 1 FROM internal_task_dependencies d JOIN internal_tasks child ON child.id=d.depends_on_task_id
+        WHERE d.task_id=t.id AND (child.status<>'ready' OR child.completed_quantity<d.required_quantity))
+        WHERE t.sold_item_id=$1 AND t.manufacturing_node_key IS NOT NULL AND t.status='pending'`,[previousTask.sold_item_id]);
       await refreshSoldItemStatus(client, result.rows[0].sold_item_id);
       return result.rows[0];
     });

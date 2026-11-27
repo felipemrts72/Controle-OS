@@ -29,6 +29,7 @@ export function SalesPage() {
   useEffect(() => { load(''); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const columns = [
+    { key: 'open', label: 'Ações', render: row => <Link className="button button_primary" to={`/comercial/vendas/${row.id}`}>Abrir venda</Link> },
     { key: 'sale', label: 'Venda', render: (row) => <Link to={`/comercial/vendas/${row.id}`}><strong>Venda #{row.sale_number}</strong></Link> },
     { key: 'customer', label: 'Cliente', render: (row) => row.customer_name_snapshot },
     { key: 'quote', label: 'Origem', render: (row) => <Link to={`/comercial/orcamentos/${row.commercial_quote_id}`}>Orçamento #{row.commercial_number}</Link> },

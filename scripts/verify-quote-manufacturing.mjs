@@ -22,6 +22,7 @@ try {
  const schema=execFileSync((process.env.PG_BIN||'C:/Program Files/PostgreSQL/18/bin')+'/pg_dump.exe',['-h','127.0.0.1','-p',source.port||'5432','-U',decodeURIComponent(source.username),'-d',decodeURIComponent(source.pathname.slice(1)),'--schema-only','--no-owner','--no-privileges'],{env:{...process.env,PGPASSWORD:decodeURIComponent(source.password)},encoding:'utf8',maxBuffer:32e6}).replace(/^\\.*$/gm,'');
  await db.query(schema);await db.query('SET search_path TO public');
  if (!(await db.query("SELECT 1 FROM information_schema.columns WHERE table_name='commercial_quotes' AND column_name='manufacturing_enabled'")).rowCount) await db.query(fs.readFileSync('database/migrations/20261125_quote_manufacturing.sql','utf8'));
+ if (!(await db.query("SELECT 1 FROM information_schema.columns WHERE table_name='internal_tasks' AND column_name='completed_quantity'")).rowCount) await db.query(fs.readFileSync('database/migrations/20261126_quote_production_dependencies.sql','utf8'));
  await db.query("INSERT INTO product_types(code,name,is_active) VALUES('manufactured','Fabricado',true),('resale','Peça comprada',true),('material_prima','Matéria-prima',true)");
  await db.query("INSERT INTO measurement_units(code,name,symbol,is_active) VALUES('UN','Unidade','un',true),('KG','Quilograma','kg',true)");
  const user=(await db.query("INSERT INTO users(name,username,password_hash,role) VALUES('Administrador fictício','admin','unused','admin') RETURNING *")).rows[0];
@@ -44,7 +45,7 @@ try {
  const template=()=>transaction(client=>manufacturingTemplate(client,{product_id:stock.product_id}));
  const makeBody=(plan,extras={})=>({customer_name:'Cliente exclusivamente fictício',quote_date:'2026-11-25',manufacturing_enabled:true,items:[{product_id:stock.product_id,quantity:'3',unit_price:'100',discount_amount:'0',manufacturing_plan:plan}],payment_methods:[{method_type:'pix',calculation_type:'percentage',percentage:'100',installment_count:1}],...extras});
  const review=id=>transaction(client=>manufacturingReview(client,id));
- const approve=async(id)=>{await changeCommercialQuoteStatus(id,'sent',actor);await changeCommercialQuoteStatus(id,'approved',actor);};
+ const approve=async(id)=>{await changeCommercialQuoteStatus(id,'sent',actor);await changeCommercialQuoteStatus(id,'approved',actor,{confirmed:true,manufacture:false,expected_updated_at:(await review(id)).updated_at});};
  const issue=async(id,manufacture=true)=>issueQuoteManufacturing(id,{manufacture,confirmed:true,expected_updated_at:(await review(id)).updated_at},actor);
  const quoteOnly={id:viewer.id,username:'qa_viewer',permissions:['commercial.quotes.create','commercial.quotes.edit']};
  const isolatedPlan=await template();isolatedPlan.enabled=false;
@@ -61,7 +62,7 @@ try {
  assert.equal(multiplyProduction('0.1','0.2'),'0.02');assert.equal(multiplyProduction('0.000001','0.1'),null);
  assert.throws(()=>normalizeManufacturingPlan({...plan,nodes:[null]}),{status:400});
  assert.throws(()=>normalizeManufacturingPlan({...plan,nodes:[{...plan.nodes[0],parent_key:plan.nodes[0].key}]}),{status:400});
- plan.nodes.find(n=>n.key===child.key).fabrication_quantity='4';
+ plan.nodes.find(n=>n.key===child.key).fabrication_quantity='6';
  plan.nodes.push(node(root.key,'Componente exclusivo do orçamento',{quantity:'0.5',sector_id:sectorB,note:'OBSERVAÇÃO INTERNA EXCLUSIVA'}));
  const productsBefore=await count('products');
  let quote=await createCommercialQuote(makeBody(plan),actor);
@@ -69,7 +70,7 @@ try {
  assert.deepEqual(await getProductTree(stock.product_id,actor),stock);
  quote=await getCommercialQuote(quote.id);assert.equal(quote.items[0].manufacturing_plan.nodes.length,5);
  let r=await review(quote.id);assert.equal(r.errors.length,0);assert.equal(r.demands.length,4);
- assert.deepEqual(r.demands.map(d=>Number(d.quantity)),[3,4,1.5,1.5]);
+ assert.deepEqual(r.demands.map(d=>Number(d.quantity)),[3,6,1.5,1.5]);
  const editBody=makeBody(plan);editBody.items[0].id=quote.items[0].id;delete editBody.items[0].manufacturing_plan;
  quote=await updateCommercialQuote(quote.id,editBody,actor);assert.equal(quote.items[0].manufacturing_plan.nodes.length,5);
  await assert.rejects(updateCommercialQuote(quote.id,{...makeBody(plan),expected_updated_at:'2000-01-01'},actor),{status:409});
@@ -84,12 +85,12 @@ try {
  const emitted=await Promise.all([issue(quote.id),issue(quote.id)]);assert.equal(emitted[0].production_order_id,emitted[1].production_order_id);
  assert.equal(await count('internal_orders'),1);assert.equal(await count('internal_tasks'),4);
  const tasks=(await db.query('SELECT * FROM internal_tasks ORDER BY quantity')).rows;
- assert.ok(tasks.every(t=>t.is_released&&t.manufacturing_snapshot));assert.equal(tasks.filter(t=>t.quantity==='1.500000').length,2);
+ assert.equal(tasks.filter(t=>t.is_released).length,2);assert.ok(tasks.every(t=>t.manufacturing_snapshot));assert.equal(tasks.filter(t=>t.quantity==='1.500000').length,2);
  assert.ok(tasks.some(t=>t.component_product_id===null&&t.manufacturing_notes==='OBSERVAÇÃO INTERNA EXCLUSIVA'));
  await issue(quote.id);await changeCommercialQuoteStatus(quote.id,'approved',actor);assert.equal(await count('internal_tasks'),4);
  await assert.rejects(updateCommercialQuote(quote.id,makeBody(plan),actor),{status:409});
  const plain=await createCommercialQuote(makeBody(null,{manufacturing_enabled:false}),actor);await approve(plain.id);await issue(plain.id,false);await issue(plain.id,false);
- await assert.rejects(issue(plain.id,true),{status:409});assert.equal(await count('internal_tasks'),4);
+ assert.equal((await review(plain.id)).production_order_id,null);assert.equal(await count('internal_tasks'),4);
  const incomplete=await template();incomplete.nodes[0].sector_id=null;incomplete.nodes[1].fabrication_quantity='0';
  const invalid=await createCommercialQuote(makeBody(incomplete),actor);await approve(invalid.id);await assert.rejects(issue(invalid.id),e=>e.status===400&&e.message.includes('Equipamento fictício')&&e.message.includes('Estrutura fictícia'));
  assert.equal(await count('internal_tasks'),4);
@@ -111,6 +112,49 @@ try {
  await db.query("CREATE FUNCTION qa_fail_quote() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'QA quote rollback'; END $$; CREATE TRIGGER qa_quote BEFORE INSERT ON commercial_quotes FOR EACH ROW EXECUTE FUNCTION qa_fail_quote()");
  await assert.rejects(createCommercialQuote(makeBody(rollback,{items:[{name:'Rollback fictício',save_product:false,unit:'UN',quantity:'1',unit_price:'1',manufacturing_plan:rollback}]}),actor),/QA quote rollback/);
  await db.query('DROP TRIGGER qa_quote ON commercial_quotes; DROP FUNCTION qa_fail_quote()');assert.equal(await count('products'),beforeRollback);
+
+ // Conversion uses the existing approval path and rolls the sale back with production.
+ const convert=async(q,manufacture=true,who=actor)=>changeCommercialQuoteStatus(q.id,'approved',who,{confirmed:true,manufacture,expected_updated_at:(await review(q.id)).updated_at});
+ const originalTemplate=async()=>{const p=await template();p.nodes=p.nodes.filter(n=>[root.key,child.key,grandchild.key,bought.key].includes(n.key));return p;};
+ const conversion=await createCommercialQuote(makeBody(await originalTemplate()),actor);
+ const beforeSales=await count('commercial_sales'),beforeOrders=await count('internal_orders'),beforeTasks=await count('internal_tasks');
+ await assert.rejects(convert(conversion,true,{id:viewer.id,permissions:['commercial.quotes.approve']}),{status:403});
+ assert.equal((await getCommercialQuote(conversion.id)).status,'draft');assert.equal(await count('commercial_sales'),beforeSales);
+ await db.query("CREATE FUNCTION qa_fail_conversion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'QA conversion rollback'; END $$; CREATE TRIGGER qa_conversion BEFORE INSERT ON internal_tasks FOR EACH ROW EXECUTE FUNCTION qa_fail_conversion()");
+ await assert.rejects(convert(conversion),/QA conversion rollback/);
+ await db.query('DROP TRIGGER qa_conversion ON internal_tasks; DROP FUNCTION qa_fail_conversion()');
+ assert.equal((await getCommercialQuote(conversion.id)).status,'draft');assert.equal(await count('commercial_sales'),beforeSales);assert.equal(await count('internal_orders'),beforeOrders);assert.equal(await count('internal_tasks'),beforeTasks);
+ const conversions=await Promise.all([convert(conversion),convert(conversion)]);
+ assert.equal(conversions[0].sale.id,conversions[1].sale.id);assert.equal(await count('commercial_sales'),beforeSales+1);assert.equal(await count('internal_orders'),beforeOrders+1);
+ const orderId=conversions[0].sale.production_order_id;
+ const taskRows=async()=> (await db.query('SELECT t.* FROM internal_tasks t JOIN sold_items si ON si.id=t.sold_item_id WHERE si.internal_order_id=$1',[orderId])).rows;
+ const treeTasks=await taskRows();assert.equal(treeTasks.length,3);assert.equal(treeTasks.filter(t=>t.is_released).length,1);
+ const {setTaskStatus}=await import('../backend/src/controllers/taskController.js');
+ const mark=async(task,status='ready')=>{let err;await setTaskStatus({path:'/tasks/'+task.id+'/'+status,params:{id:task.id},user:actor},{json(){}},e=>{err=e;});if(err)throw err;};
+ const leaf=treeTasks.find(t=>t.manufacturing_node_key===grandchild.key),middle=treeTasks.find(t=>t.manufacturing_node_key===child.key),top=treeTasks.find(t=>t.manufacturing_node_key===root.key);
+ await assert.rejects(mark(top),{status:400});
+ await db.query("UPDATE internal_tasks SET status='ready',completed_quantity=quantity/2 WHERE id=$1",[leaf.id]);
+ const {releaseDependentTasks}=await import('../backend/src/services/manufacturingRouteService.js');await transaction(c=>releaseDependentTasks(c,leaf.id));
+ assert.equal((await taskRows()).find(t=>t.id===middle.id).is_released,false);
+ await mark(leaf);await mark(leaf);
+ assert.equal((await taskRows()).find(t=>t.id===middle.id).is_released,true);assert.equal((await taskRows()).find(t=>t.id===top.id).is_released,false);
+ await mark(middle);assert.equal((await taskRows()).find(t=>t.id===top.id).is_released,true);
+ await mark(top);await mark(top);assert.ok((await taskRows()).every(t=>t.status==='ready'&&Number(t.completed_quantity)>=Number(t.quantity)));
+ assert.equal((await db.query('SELECT status FROM internal_orders WHERE id=$1',[orderId])).rows[0].status,'ready_for_label');
+ await assert.rejects(mark(leaf,'pending'),{status:409});assert.equal((await taskRows()).length,3);
+ // Quantities insufficient for the parent produce a specific blocking error, then explicit no-production succeeds.
+ const shortagePlan=await originalTemplate();shortagePlan.nodes.find(n=>n.key===child.key).fabrication_quantity='1';
+ const shortage=await createCommercialQuote(makeBody(shortagePlan),actor);await assert.rejects(convert(shortage),e=>e.status===400&&e.message.includes('quantidade a fabricar'));
+ assert.equal((await getCommercialQuote(shortage.id)).sale,null);await convert(shortage,false);
+ // Excluded intermediate and purchased items never block the selected ancestor.
+ const skipPlan=await originalTemplate();skipPlan.nodes.find(n=>n.key===child.key).manufacture=false;skipPlan.nodes.find(n=>n.key===bought.key).manufacture=true;
+ const skip=await createCommercialQuote(makeBody(skipPlan),actor);const skipReview=await review(skip.id);assert.equal(skipReview.demands.length,2);assert.equal(skipReview.demands.find(d=>d.node_key===root.key).dependencies[0].node_key,grandchild.key);
+ // Existing legacy route dependencies keep their original completion semantics.
+ const legacyOrder=(await db.query("INSERT INTO internal_orders(sale_number,customer_name,delivery_type,created_by) VALUES('QA-LEGACY','Cliente fictício','transportadora',$1) RETURNING id",[user.id])).rows[0];
+ const legacyItem=(await db.query('INSERT INTO sold_items(internal_order_id,product_id,product_name_snapshot,quantity) VALUES($1,$2,$3,1) RETURNING id',[legacyOrder.id,stock.product_id,'Legado fictício'])).rows[0];
+ const legacyTasks=(await db.query("INSERT INTO internal_tasks(sold_item_id,sector_id,task_name,quantity,is_released) VALUES($1,$2,'Legado 1',1,true),($1,$2,'Legado 2',1,false) RETURNING *",[legacyItem.id,sectorA])).rows;
+ await db.query('INSERT INTO internal_task_dependencies(task_id,depends_on_task_id) VALUES($1,$2)',[legacyTasks[1].id,legacyTasks[0].id]);await mark(legacyTasks[0]);
+ assert.equal((await db.query('SELECT is_released FROM internal_tasks WHERE id=$1',[legacyTasks[1].id])).rows[0].is_released,true);await mark(legacyTasks[1]);
  console.log('PASS: isolated transactions, quantities, snapshots, optional stock save, rollback, permissions, incomplete plans, approval/PDF isolation, idempotent emission');
  // HTTP and responsive UI use this same isolated database.
  const {app}=await import('../backend/src/app.js');const outer=express();
@@ -122,7 +166,7 @@ try {
  for(const [token,status] of [[null,401],[jwt.sign({id:viewer.id},process.env.JWT_SECRET),403]]) {const result=await fetch(`${base}/api/commercial/quotes/${quote.id}/manufacturing/issue`,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify({manufacture:true,confirmed:true})});assert.equal(result.status,status);}
  const pdfData=(await db.query('SELECT document_data_snapshot FROM commercial_quote_documents WHERE commercial_quote_id=$1',[quote.id])).rows;
  assert.ok(pdfData.length);assert.ok(!JSON.stringify(pdfData).includes('OBSERVAÇÃO INTERNA EXCLUSIVA'));assert.ok(!JSON.stringify(pdfData).includes('manufacturing_plan'));
- const tv=await (await fetch(base+'/api/tv',{headers:auth})).json();assert.equal(tv.length,4);assert.ok(tv.some(t=>t.sector_slug==='pintura'&&t.measurement_unit_code==='KG'));
+ const tv=await (await fetch(base+'/api/tv',{headers:auth})).json();assert.equal(tv.length,2);assert.ok(tv.some(t=>t.sector_slug==='pintura'&&t.measurement_unit_code==='KG'));
  const bySector=await (await fetch(base+'/api/tv/pintura',{headers:auth})).json();assert.equal(bySector.length,1);
  const done=await fetch(base+'/api/tasks/'+bySector[0].task_id+'/ready',{method:'PATCH',headers:auth});assert.equal(done.status,200);
  assert.equal((await (await fetch(base+'/api/tv/pintura',{headers:auth})).json()).length,0);
@@ -131,7 +175,7 @@ try {
  const candidate=(await db.query("INSERT INTO products(name,type,measurement_unit_code,sector_id,is_active) VALUES('Peça de busca fictícia','manufactured','UN',$1,true) RETURNING id",[sectorA])).rows[0];
  const {chromium}=await import(pathToFileURL('C:/Users/Win 10/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href);browser=await chromium.launch({channel:'msedge',headless:true});fs.mkdirSync('tmp/quote-manufacturing',{recursive:true});
  for(const width of [390,768,1365]) {
-  const context=await browser.newContext({viewport:{width,height:1024}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const context=await browser.newContext({viewport:{width,height:1024}});const page=await context.newPage();page.setDefaultTimeout(12000);const errors=[];console.log('UI viewport '+width);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/__qa/login');await page.getByRole('button',{name:'Lançar processo de fabricação'}).click();
   await page.getByText('Salvar também a árvore no cadastro do produto',{exact:true}).waitFor();
   assert.equal(await page.getByLabel('Salvar também a árvore no cadastro do produto').isChecked(),false);
@@ -175,14 +219,63 @@ try {
     await page.goto(base+'/comercial/orcamentos/'+invalid.id);
     await page.getByRole('button',{name:'Revisar planejamento de fabricação',exact:true}).click();
     const root=page.locator('.product-tree__node').first();await root.getByRole('button',{name:'Editar',exact:true}).click();await page.getByLabel('Setor responsável',{exact:true}).selectOption(sectorA);await page.getByRole('button',{name:'Aplicar ao rascunho',exact:true}).click();
-    await page.locator('.product-tree__node').filter({has:page.locator('strong',{hasText:'Estrutura fictícia'})}).getByLabel('Quantidade a fabricar').fill('4');
+    await page.locator('.product-tree__node').filter({has:page.locator('strong',{hasText:'Estrutura fictícia'})}).getByLabel('Quantidade a fabricar').fill('6');
     await page.getByRole('button',{name:'Salvar planejamento',exact:true}).click();
-    await page.getByRole('button',{name:'Emitir orçamento aprovado',exact:true}).click();await page.getByRole('button',{name:'Emitir com fabricação',exact:true}).click();
+    await page.getByRole('button',{name:'Gerar ordem de produção',exact:true}).click();await page.getByRole('button',{name:'Confirmar e gerar ordem de produção',exact:true}).waitFor();
     await page.screenshot({path:'tmp/quote-manufacturing/emission-390.png',fullPage:true});
-    const emitResponse=page.waitForResponse(r=>r.url().endsWith('/manufacturing/issue')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirmar emissão e gerar fabricação',exact:true}).click();assert.equal((await emitResponse).status(),200);
+    const emitResponse=page.waitForResponse(r=>r.url().endsWith('/manufacturing/issue')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirmar e gerar ordem de produção',exact:true}).click();assert.equal((await emitResponse).status(),200);
     assert.ok((await review(invalid.id)).production_order_id);
   }
 
+
+  // Create, plan, emit PDF, convert and complete fabrication through the real interface.
+  await page.goto(base+'/comercial/orcamentos/novo');
+  await page.getByPlaceholder('Digite um nome ou pesquise um cliente').fill('Cliente fictício UI '+width);
+  await page.getByPlaceholder('Digite código ou nome comercial').fill('Equipamento fictício');
+  await page.getByRole('option').filter({hasText:'Equipamento fictício'}).first().click();
+  await page.getByLabel('Qtd.',{exact:true}).fill('3');
+  await page.getByLabel('Preço unit.',{exact:true}).fill('100');
+  await page.getByLabel(/Definir por/).selectOption('percentage');
+  await page.getByLabel('Valor / %',{exact:true}).fill('100');
+  await page.getByRole('button',{name:'Lançar processo de fabricação',exact:true}).click();
+  assert.equal(await page.getByLabel('Este orçamento deverá gerar fabricação').isChecked(),true);
+  assert.equal(await page.getByLabel('Salvar também a árvore no cadastro do produto').isChecked(),false);
+  const createResponse=page.waitForResponse(r=>r.url().endsWith('/api/commercial/quotes')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Salvar orçamento e planejamento',exact:true}).click();
+  const createdResponse=await createResponse;assert.equal(createdResponse.status(),201);const created=await createdResponse.json();
+  await page.getByRole('button',{name:'Emitir orçamento',exact:true}).waitFor();
+  await page.reload();assert.equal((await getCommercialQuote(created.id)).items[0].manufacturing_plan.nodes.length,5);
+  const pdfResponse=page.waitForResponse(r=>r.url().endsWith('/emit')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Emitir orçamento',exact:true}).click();assert.equal((await pdfResponse).status(),200);
+  assert.equal((await getCommercialQuote(created.id)).sale,null);assert.equal((await review(created.id)).production_order_id,null);
+  await page.goto(base+'/comercial/orcamentos');
+  await page.locator('a[href="/comercial/orcamentos/'+created.id+'?converter=1"]:visible').first().click();
+  await page.getByLabel('Gerar ordem de produção',{exact:true}).waitFor();assert.equal(await page.getByLabel('Gerar ordem de produção',{exact:true}).isChecked(),true);
+  await page.screenshot({path:'tmp/quote-manufacturing/conversion-'+width+'.png',fullPage:true});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  const conversionResponse=page.waitForResponse(r=>r.url().endsWith('/status')&&r.request().method()==='PATCH');
+  await page.getByRole('button',{name:'Confirmar conversão em venda',exact:true}).click();assert.equal((await conversionResponse).status(),200);
+  await page.getByRole('link',{name:'Abrir Venda',exact:true}).click();
+  await page.getByRole('link',{name:'Abrir ordem de produção',exact:true}).click();
+  const converted=await getCommercialQuote(created.id);assert.ok(converted.sale.production_order_id);
+  assert.equal((await db.query('SELECT count(*)::int n FROM commercial_sales WHERE commercial_quote_id=$1',[created.id])).rows[0].n,1);
+  const loadUiTasks=async()=>(await db.query('SELECT t.* FROM internal_tasks t JOIN sold_items si ON si.id=t.sold_item_id WHERE si.internal_order_id=$1',[converted.sale.production_order_id])).rows;
+  let uiTasks=await loadUiTasks();assert.equal(uiTasks.length,4);assert.equal(uiTasks.filter(t=>t.is_released).length,2);
+  const parentRow=page.locator('tr').filter({has:page.getByText('Equipamento fictício — Equipamento fictício',{exact:true})});
+  assert.equal(await parentRow.getByRole('button',{name:'Marcar pronto',exact:true}).isDisabled(),true);
+  for(let n=0;n<4;n++) {
+    uiTasks=await loadUiTasks();const available=uiTasks.find(t=>t.is_released&&t.status==='pending');assert.ok(available);
+    const tvTasks=await (await fetch(base+'/api/tv',{headers:auth})).json();assert.ok(tvTasks.some(t=>t.task_id===available.id));
+    for(const blocked of uiTasks.filter(t=>!t.is_released))assert.ok(!tvTasks.some(t=>t.task_id===blocked.id));
+    const row=page.locator('tr').filter({has:page.getByText(available.task_name,{exact:true})});
+    const readyResponse=page.waitForResponse(r=>r.url().endsWith('/tasks/'+available.id+'/ready')&&r.request().method()==='PATCH');
+    await row.getByRole('button',{name:'Marcar pronto',exact:true}).click();assert.equal((await readyResponse).status(),200);
+    await page.getByRole('button',{name:'Marcar pronto',exact:true}).first().waitFor({state:n===3?'detached':'visible'});
+  }
+  assert.ok((await loadUiTasks()).every(t=>t.status==='ready'));await page.reload();assert.equal((await loadUiTasks()).length,4);
+  await page.screenshot({path:'tmp/quote-manufacturing/order-complete-'+width+'.png',fullPage:true});
+  await page.goto(base+'/comercial/vendas');await page.getByRole('link',{name:'Abrir venda',exact:true}).first().waitFor();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));assert.deepEqual(errors,[]);
   await context.close();
  }
  const manualTaskCount=await count('internal_tasks');await approve(onlyManual.id);const manualIssued=await issue(onlyManual.id);assert.ok(manualIssued.production_order_id);assert.equal(await count('internal_tasks'),manualTaskCount+1);
@@ -193,6 +286,9 @@ try {
  await db.query('UPDATE sectors SET is_active=FALSE WHERE id=$1',[sectorC]);
  const historical=await review(quote.id);assert.equal(historical.errors.length,0);assert.ok(historical.demands.some(d=>d.sector_id===sectorC));
  console.log('PASS: HTTP authorization, saved plan reopening, desktop/tablet/mobile planning and no page overflow');
+} catch(error) {
+ if(browser) for(const c of browser.contexts()) for(const p of c.pages()) if(p.url().startsWith('http')) {console.error('UI failure at '+p.url());await p.screenshot({path:'tmp/quote-manufacturing/failure.png',fullPage:true}).catch(()=>{});console.error((await p.locator('body').innerText()).slice(-4500));}
+ throw error;
 } finally {
  if(browser)await browser.close();if(server)await new Promise(r=>server.close(r));if(appPool)await appPool.end();if(db)await db.end();
  await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1',[databaseName]).catch(()=>{});await admin.query(`DROP DATABASE IF EXISTS ${databaseName}`).catch(()=>{});await admin.end();

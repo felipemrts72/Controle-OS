@@ -2,7 +2,7 @@ import { ProductTreeEditor } from '../../components/ProductTreeEditor/ProductTre
 
 export function QuoteManufacturingPlanner({ items, setItems, enabled, setEnabled, onClose, onSave, saving, approved = false }) {
   function update(index, plan) { setItems(current=>current.map((item,i)=>i===index?{...item,manufacturing_plan:plan}:item)); }
-  return <section className="page"><header className="page__header"><div><h1 className="page__title">Planejamento de fabricação</h1><p>As demandas serão geradas somente na emissão definitiva aprovada.</p></div><button className="button" type="button" onClick={onClose}>Voltar ao orçamento</button></header>
+  return <section className="page"><header className="page__header"><div><h1 className="page__title">Planejamento de fabricação</h1><p>As demandas serão geradas ao converter em venda com fabricação ou ao gerar a ordem de uma venda existente.</p></div><button className="button" type="button" onClick={onClose}>Voltar ao orçamento</button></header>
     <label className="panel"><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)} /> Este orçamento deverá gerar fabricação</label>
     {items.map((item,index)=><section className="panel" key={item._planningKey || index} style={{minWidth:0}}>
       <h2>{index+1}. {item.name} · {item.quantity} {item.unit}</h2>

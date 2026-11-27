@@ -144,7 +144,7 @@ export async function createSaleForApprovedQuote(client, quote, userId) {
   if (existing) return existing;
 
   const quoteItems = await loadQuoteItems(client, quote.id);
-  const decisions = quoteItems.map(() => ({status:'not_requested',reason:'Aguardando confirmação expressa da emissão definitiva.'}));
+  const decisions = quoteItems.map(() => ({status:'not_requested',reason:'Fabricação ainda não gerada.'}));
   const paymentSnapshot = await loadPaymentSnapshot(client, quote.id);
   const sale = (await client.query(
     `INSERT INTO commercial_sales (
@@ -194,7 +194,7 @@ export async function createSaleForApprovedQuote(client, quote, userId) {
 
 const saleSelect = `SELECT cs.*,cq.status AS quote_status,io.id AS production_order_id,io.status AS production_order_status,
   COUNT(csi.id)::int AS item_count,
-  COUNT(*) FILTER (WHERE csi.production_status='created')::int AS production_item_count
+  COUNT(*) FILTER (WHERE EXISTS(SELECT 1 FROM sold_items produced JOIN internal_tasks task ON task.sold_item_id=produced.id WHERE produced.commercial_sale_item_id=csi.id))::int AS production_item_count
  FROM commercial_sales cs
  JOIN commercial_quotes cq ON cq.id=cs.commercial_quote_id
  LEFT JOIN commercial_sale_items csi ON csi.commercial_sale_id=cs.id
@@ -226,7 +226,9 @@ export async function getCommercialSale(id, database = { query }) {
      LEFT JOIN sold_items si ON si.commercial_sale_item_id=csi.id
      WHERE csi.commercial_sale_id=$1 ORDER BY csi.line_order`, [id],
   )).rows;
-  return { ...sale, items };
+  const tasks=(await database.query('SELECT t.*,s.name AS sector_name FROM internal_tasks t JOIN sold_items si ON si.id=t.sold_item_id JOIN sectors s ON s.id=t.sector_id WHERE si.internal_order_id=$1 ORDER BY t.created_at,t.id',[sale.production_order_id])).rows;
+  const plans=(await database.query('SELECT id,product_name_snapshot,manufacturing_plan FROM commercial_quote_items WHERE commercial_quote_id=$1 ORDER BY line_order',[sale.commercial_quote_id])).rows;
+  return { ...sale, items, tasks, manufacturing_plans:plans };
 }
 
 export async function getSaleByQuoteId(quoteId, database = { query }) {

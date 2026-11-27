@@ -176,7 +176,7 @@ export async function releaseDependentTasks(client, completedTaskId) {
        FROM internal_task_dependencies itd
        JOIN internal_tasks dependency ON dependency.id = itd.depends_on_task_id
        WHERE itd.task_id = $1
-         AND dependency.status <> 'ready'`,
+         AND (dependency.status <> 'ready' OR (itd.required_quantity IS NOT NULL AND dependency.completed_quantity < itd.required_quantity))`,
       [dependent.task_id],
     );
 

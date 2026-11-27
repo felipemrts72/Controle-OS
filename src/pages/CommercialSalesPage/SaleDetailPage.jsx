@@ -1,3 +1,4 @@
+import { QuoteManufacturingIssue } from '../CommercialQuotesPage/QuoteManufacturingIssue.jsx';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ClipboardList } from 'lucide-react';
@@ -17,6 +18,7 @@ const productionTone = {
 export function SaleDetailPage() {
   const { id } = useParams();
   const toast = useToast();
+  const [manufacturingAction,setManufacturingAction]=useState(false);
   const [sale, setSale] = useState(null);
   const [loading, setLoading] = useState(true);
   const canViewOrders = canAccessPermission(getStoredUser(), 'orders.view');
@@ -44,9 +46,11 @@ export function SaleDetailPage() {
 
   return (
     <section className="page commercial-sales">
-      <header className="page__header"><div><h1 className="page__title">Venda #{sale.sale_number}</h1><p>Origem: Orçamento #{sale.commercial_number} · {sale.customer_name_snapshot}</p></div><div className="page__actions"><Link className="button" to="/comercial/vendas"><ArrowLeft size={17} /> Vendas</Link><Link className="button" to={`/comercial/orcamentos/${sale.commercial_quote_id}`}>Abrir orçamento</Link>{canViewOrders && sale.production_order_id && <Link className="button button_primary" to={`/os/${sale.production_order_id}`}><ClipboardList size={17} /> Abrir Produção</Link>}</div></header>
+      <header className="page__header"><div><h1 className="page__title">Venda #{sale.sale_number}</h1><p>Origem: Orçamento #{sale.commercial_number} · {sale.customer_name_snapshot}</p></div><div className="page__actions"><Link className="button" to="/comercial/vendas"><ArrowLeft size={17} /> Vendas</Link><Link className="button" to={`/comercial/orcamentos/${sale.commercial_quote_id}`}>Abrir orçamento</Link>{canViewOrders && sale.production_order_id && <Link className="button button_primary" to={`/os/${sale.production_order_id}`}><ClipboardList size={17} /> Abrir ordem de produção</Link>}{!sale.production_order_id && canAccessPermission(getStoredUser(),'orders.create') && canAccessPermission(getStoredUser(),'commercial.quotes.approve') && canAccessPermission(getStoredUser(),'commercial.quotes.view') && <button className="button button_primary" onClick={()=>setManufacturingAction(true)}>Gerar ordem de produção</button>}</div></header>
       <section className="panel commercial-sales__summary"><div><span>Data</span><strong>{formatDate(sale.created_at)}</strong></div><div><span>Status</span><strong>Confirmada</strong></div><div><span>Itens</span><strong>{sale.item_count}</strong></div><div><span>Enviados à Produção</span><strong>{sale.production_item_count}</strong></div><div><span>Total</span><strong>{formatMoney(sale.total)}</strong></div></section>
       {pending.length > 0 && <section className="panel commercial-sales__notice"><strong>{pending.length} item(ns) sem envio à Produção</strong><ul>{pending.map((item) => <li key={item.id}>{item.product_name_snapshot}: {item.production_reason}</li>)}</ul></section>}
+      <section className="panel"><h2>Fabricação</h2>{sale.manufacturing_plans.map(p=><p key={p.id}>{p.product_name_snapshot}: {p.manufacturing_plan?.nodes?.length || 0} componente(s) no planejamento · {p.manufacturing_plan?.enabled?'Incluído':'Não incluído'}</p>)}<p>{sale.production_order_id ? 'Ordem vinculada · '+sale.production_order_status : 'Ordem de produção ainda não gerada'}</p>{sale.tasks.map(t=><p key={t.id}><strong>{t.task_name}</strong> · {t.sector_name} · {Number(t.completed_quantity)}/{Number(t.quantity)} {t.measurement_unit_code} · {t.status==='ready'?'Concluído':t.is_released?'Liberado para fabricação':'Aguardando componentes'}</p>)}<Link className="button" to={`/comercial/orcamentos/${sale.commercial_quote_id}`}>Consultar ou revisar planejamento de fabricação</Link></section>
+      {manufacturingAction && <QuoteManufacturingIssue quoteId={sale.commercial_quote_id} onClose={()=>setManufacturingAction(false)} onEdit={()=>{window.location.href='/comercial/orcamentos/'+sale.commercial_quote_id;}} onIssued={async()=>setSale((await api.get('/commercial/sales/'+id)).data)} />}
       <section className="panel"><h2>Itens da Venda</h2><DataTable columns={columns} rows={sale.items} emptyText="Nenhum item." /></section>
       <div className="commercial-sales__grid"><section className="panel"><h2>Pagamento</h2>{sale.payment_methods_snapshot.length ? sale.payment_methods_snapshot.map((method) => <p key={method.id}><strong>{method.description}</strong><br />{PAYMENT_TYPES.find(([value]) => value === method.method_type)?.[1] || method.method_type} · {formatMoney(method.amount)} · {method.installment_count}x</p>) : <p>Nenhuma condição.</p>}</section><section className="panel commercial-sales__totals"><div><span>Subtotal</span><strong>{formatMoney(sale.subtotal)}</strong></div><div><span>Desconto geral</span><strong>- {formatMoney(sale.discount_amount)}</strong></div><div><span>Frete</span><strong>{formatMoney(sale.freight_amount)}</strong></div><div><span>Total</span><strong>{formatMoney(sale.total)}</strong></div></section></div>
     </section>

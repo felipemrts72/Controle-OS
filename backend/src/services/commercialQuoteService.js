@@ -1,4 +1,4 @@
-import { prepareQuoteManufacturing } from './quoteManufacturingService.js';
+import { prepareQuoteManufacturing, issueQuoteManufacturing } from './quoteManufacturingService.js';
 import { lockQuoteCatalogVersions } from './catalogVersionUsageService.js';
 import { pool, transaction } from '../database/pool.js';
 import { httpError } from '../utils/httpError.js';
@@ -16,7 +16,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const STATUS_VALUES = new Set(['draft', 'sent', 'approved', 'rejected', 'cancelled']);
 const PAYMENT_TYPES = new Set(['cash', 'pix', 'bank_slip', 'bank_transfer', 'debit_card', 'credit_card', 'check', 'other']);
 const STATUS_TRANSITIONS = {
-  draft: new Set(['sent', 'cancelled']),
+  draft: new Set(['sent', 'approved', 'cancelled']),
   sent: new Set(['draft', 'approved', 'rejected', 'cancelled']),
   approved: new Set(),
   rejected: new Set(),
@@ -628,8 +628,8 @@ export async function getCommercialQuote(id, database = pool) {
   const saleResult = await database.query(
     `SELECT cs.id,cs.sale_number,cs.status,cs.created_at,io.id AS production_order_id,
       COUNT(csi.id)::int AS item_count,
-      COUNT(*) FILTER (WHERE csi.production_status='created')::int AS production_item_count,
-      COUNT(*) FILTER (WHERE csi.production_status<>'created')::int AS pending_item_count
+      COUNT(*) FILTER (WHERE EXISTS(SELECT 1 FROM sold_items produced JOIN internal_tasks task ON task.sold_item_id=produced.id WHERE produced.commercial_sale_item_id=csi.id))::int AS production_item_count,
+      COUNT(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM sold_items produced JOIN internal_tasks task ON task.sold_item_id=produced.id WHERE produced.commercial_sale_item_id=csi.id))::int AS pending_item_count
      FROM commercial_sales cs
      LEFT JOIN commercial_sale_items csi ON csi.commercial_sale_id=cs.id
      LEFT JOIN internal_orders io ON io.commercial_sale_id=cs.id
@@ -744,7 +744,7 @@ function requiredPermissionForStatus(status) {
   return 'commercial.quotes.edit';
 }
 
-export async function changeCommercialQuoteStatus(id, newStatus, user) {
+export async function changeCommercialQuoteStatus(id, newStatus, user, options = {}) {
   assertUuid(id);
   if (!STATUS_VALUES.has(newStatus)) throw httpError(400, 'Status inválido.', { field: 'status' });
   const permission = requiredPermissionForStatus(newStatus);
@@ -753,14 +753,21 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
     const result = await client.query('SELECT * FROM commercial_quotes WHERE id = $1 FOR UPDATE', [id]);
     const current = result.rows[0];
     if (!current) throw httpError(404, 'Orçamento não encontrado.');
+    if (newStatus === 'approved' && current.status !== 'approved') {
+      if (typeof options.manufacture !== 'boolean' || options.confirmed !== true) throw httpError(400, 'Confirme a conversão em venda com ou sem fabricação.');
+      if (!options.expected_updated_at || new Date(options.expected_updated_at).getTime() !== new Date(current.updated_at).getTime()) throw httpError(409, 'O orçamento foi atualizado. Reabra a confirmação.');
+    }
     if (current.status === newStatus) {
-      if (newStatus === 'approved') await createSaleForApprovedQuote(client, current, user.id);
+      if (newStatus === 'approved') {
+        await createSaleForApprovedQuote(client, current, user.id);
+        if (options.manufacture === true && !(await client.query('SELECT 1 FROM internal_orders WHERE commercial_quote_id=$1',[id])).rowCount) throw httpError(409,'Venda já confirmada sem produção. Utilize Gerar ordem de produção para recuperar o planejamento.');
+      }
       return getCommercialQuote(id, client);
     }
     if (!STATUS_TRANSITIONS[current.status]?.has(newStatus)) {
       throw httpError(409, `Não é permitido alterar o status de ${current.status} para ${newStatus}.`, { code: 'QUOTE_STATUS_TRANSITION_INVALID' });
     }
-    if (newStatus === 'sent') {
+    if (newStatus === 'sent' || newStatus === 'approved') {
       const paymentTotal = await client.query(
         'SELECT COALESCE(SUM(amount), 0)::numeric AS total FROM commercial_quote_payment_methods WHERE commercial_quote_id = $1', [id],
       );
@@ -782,7 +789,10 @@ export async function changeCommercialQuoteStatus(id, newStatus, user) {
         : newStatus === 'cancelled' ? 'cancelled'
           : newStatus === 'sent' ? 'sent' : 'reopened';
     let sale = null;
-    if (newStatus === 'approved') sale = await createSaleForApprovedQuote(client, updated.rows[0], user.id);
+    if (newStatus === 'approved') {
+      sale = await createSaleForApprovedQuote(client, updated.rows[0], user.id);
+      await issueQuoteManufacturing(id, options, user, client);
+    }
     await insertHistory(client, id, action, user.id, current.status, newStatus, {
       outside_sop_items: outsideSop,
       special_authorization_required_in_future: outsideSop > 0,
