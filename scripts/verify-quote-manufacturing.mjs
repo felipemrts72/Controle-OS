@@ -147,7 +147,7 @@ try {
  const shortage=await createCommercialQuote(makeBody(shortagePlan),actor);await assert.rejects(convert(shortage),e=>e.status===400&&e.message.includes('quantidade a fabricar'));
  assert.equal((await getCommercialQuote(shortage.id)).sale,null);await convert(shortage,false);
  // Excluded intermediate and purchased items never block the selected ancestor.
- const skipPlan=await originalTemplate();skipPlan.nodes.find(n=>n.key===child.key).manufacture=false;skipPlan.nodes.find(n=>n.key===bought.key).manufacture=true;
+ const skipPlan=await originalTemplate();skipPlan.nodes.find(n=>n.key===child.key).manufacture=false;skipPlan.nodes.find(n=>n.key===bought.key).manufacture=false;
  const skip=await createCommercialQuote(makeBody(skipPlan),actor);const skipReview=await review(skip.id);assert.equal(skipReview.demands.length,2);assert.equal(skipReview.demands.find(d=>d.node_key===root.key).dependencies[0].node_key,grandchild.key);
  // Existing legacy route dependencies keep their original completion semantics.
  const legacyOrder=(await db.query("INSERT INTO internal_orders(sale_number,customer_name,delivery_type,created_by) VALUES('QA-LEGACY','Cliente fictício','transportadora',$1) RETURNING id",[user.id])).rows[0];

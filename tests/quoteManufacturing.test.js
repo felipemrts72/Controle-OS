@@ -17,8 +17,15 @@ test('aritmética decimal exata recusa perda de precisão e excesso de capacidad
  assert.equal(multiplyProduction('0,1','0.2'),'0.02');
  for(const [a,b] of [['0.000001','0.1'],['999999999999','2'],['1e3','1'],['-1','2']])assert.equal(multiplyProduction(a,b),null);
 });
-test('comprados e matérias-primas não geram bloqueios produtivos',()=>{
- for(const type of ['resale','material_prima']){assert.equal(shouldManufacture({type}),false);assert.equal(shouldManufacture({type,manufacture:true}),false);}
+test('tipo define somente o padrão; escolha manual tem prioridade para todos os tipos',()=>{
+ for(const type of ['resale','purchased','material_prima','outro']) {
+   assert.equal(shouldManufacture({type}),false);
+   for(const manufacture of [true,false]) {
+     assert.equal(shouldManufacture({type,manufacture}),manufacture);
+     assert.equal(shouldManufacture({new_product:{type},manufacture}),manufacture);
+   }
+ }
+ assert.equal(shouldManufacture({type:'manufactured',manufacture:false}),false);
  assert.equal(shouldManufacture({new_product:{type:'manufactured'}}),true);
 });
 test('aceita planejamento incompleto, sem persistir intenção de atualizar o estoque',()=>{
